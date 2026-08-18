@@ -109,7 +109,13 @@ export async function GET(request: NextRequest, ctx: RouteContext<'/api/pay/[api
     });
   }
 
-  const { reference } = verified.payment;
+  // An allowance carries the reference on-chain, in its event. A direct payer cannot — Soroban
+  // transactions have no memo and a SAC transfer has no free field — so it names the reference
+  // in the request instead, and gets the weaker guarantee described in migration 0002.
+  const reference = verified.payment.reference ?? request.headers.get('x-allowance-reference');
+  if (!reference) {
+    return problem(402, 'no-reference', 'That payment does not say which request it settles.');
+  }
 
   const { data: challenge } = await supabase
     .from('challenges')
@@ -133,15 +139,16 @@ export async function GET(request: NextRequest, ctx: RouteContext<'/api/pay/[api
   }
 
   // Consume atomically. A select-then-update would let two concurrent requests both pass.
-  // Zero rows updated means someone already claimed it.
-  const { data: consumed } = await supabase
+  // Zero rows updated means the challenge was already claimed; a unique-violation error means
+  // this transaction has already paid for a different challenge.
+  const { data: consumed, error: consumeError } = await supabase
     .from('challenges')
     .update({ consumed_tx_hash: txHash, consumed_at: new Date().toISOString() })
     .eq('reference', reference)
     .is('consumed_tx_hash', null)
     .select('reference');
 
-  if (!consumed || consumed.length === 0) {
+  if (consumeError || !consumed || consumed.length === 0) {
     await supabase
       .from('requests')
       .update({ status: 'replayed', tx_hash: txHash })

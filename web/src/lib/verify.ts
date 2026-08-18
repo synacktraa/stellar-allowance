@@ -24,7 +24,8 @@ import { server } from './stellar';
  */
 
 export type VerifiedPayment = {
-  reference: string;
+  /** Present when the payment went through an allowance; null for a direct payer. */
+  reference: string | null;
   amountStroops: bigint;
   recipient: string;
 };
@@ -113,28 +114,39 @@ function findTransfer(
 }
 
 /**
- * Reads the reference out of the transaction.
+ * Reads the reference out of an allowance's `spend_recorded` event.
  *
- * An agent using an allowance passes it into `spend()` *and* sets it as the memo; an agent
- * paying directly has only the memo. Reading the memo covers both, and it is the same field in
- * either case, so there is one code path rather than two.
+ * The obvious place for this was the transaction memo, which does not work: **Soroban
+ * transactions do not support memos at all**. That rules it out for both paths, because paying
+ * a splitter means a SAC transfer, which is itself a Soroban operation.
+ *
+ * So the reference travels the only way it can — as an argument to `spend()`, echoed back in
+ * the contract's event.
+ *
+ * Trusting any contract's event is safe here because it proves nothing on its own. The money
+ * is verified separately against the token contract's own transfer event, so a contract that
+ * emits a reference without paying gets nowhere.
  */
-function readMemo(envelopeXdr: string): string | null {
-  try {
-    const tx = TransactionBuilder.fromXDR(envelopeXdr, env.networkPassphrase());
-    // Fee-bump envelopes wrap the inner transaction.
-    const inner = 'innerTransaction' in tx ? tx.innerTransaction : tx;
-    const memo = inner.memo;
-    if (memo.type === 'text' && typeof memo.value === 'string') {
-      return memo.value;
+function readReference(events: xdr.ContractEvent[]): string | null {
+  for (const event of events) {
+    const body = event.body().v0();
+    const topics = body.topics().map((topic) => {
+      try {
+        return scValToNative(topic);
+      } catch {
+        return null;
+      }
+    });
+
+    if (topics[0] !== 'spend_recorded') continue;
+
+    // Topics are [event name, to, reference].
+    const reference = topics[2];
+    if (typeof reference === 'string' && reference.length > 0) {
+      return reference;
     }
-    if (memo.type === 'text' && memo.value instanceof Buffer) {
-      return memo.value.toString('utf8');
-    }
-    return null;
-  } catch {
-    return null;
   }
+  return null;
 }
 
 export async function verifyPayment(
@@ -150,18 +162,16 @@ export async function verifyPayment(
     return { ok: false, reason: 'not_successful' };
   }
 
-  const reference = readMemo(result.envelopeXdr.toXDR('base64'));
-  if (!reference) {
-    return { ok: false, reason: 'no_reference' };
-  }
+  const events = contractEvents(result.resultMetaXdr);
 
-  const transfer = findTransfer(
-    contractEvents(result.resultMetaXdr),
-    expected.recipient,
-  );
+  const transfer = findTransfer(events, expected.recipient);
   if (!transfer || transfer.amount < expected.minAmountStroops) {
     return { ok: false, reason: 'no_matching_transfer' };
   }
+
+  // Null for a payer with no allowance, which is allowed — the caller then has to supply the
+  // reference itself, and gets a weaker guarantee for it.
+  const reference = readReference(events);
 
   return {
     ok: true,
