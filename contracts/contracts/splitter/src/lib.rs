@@ -7,7 +7,8 @@
 //! developer does not have to trust the platform to forward their share.
 
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, token, Address, Env,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, token,
+    Address, Env,
 };
 
 pub const BPS_DENOMINATOR: i128 = 10_000;
@@ -52,18 +53,20 @@ pub struct Splitter;
 
 #[contractimpl]
 impl Splitter {
-    pub fn init(
+    /// Runs once, at deployment. The split is fixed here and there is no function that can
+    /// change it, which is what makes it something a developer can verify rather than trust.
+    ///
+    /// A constructor rather than an `init` call, so the contract never exists in a state where
+    /// someone else could set the payout addresses first.
+    pub fn __constructor(
         env: Env,
         developer: Address,
         platform: Address,
         token: Address,
         fee_bps: u32,
-    ) -> Result<(), SplitterError> {
-        if env.storage().instance().has(&DataKey::Config) {
-            return Err(SplitterError::AlreadyInitialized);
-        }
+    ) {
         if (fee_bps as i128) > BPS_DENOMINATOR {
-            return Err(SplitterError::FeeTooHigh);
+            panic_with_error!(&env, SplitterError::FeeTooHigh);
         }
 
         env.storage().instance().set(
@@ -75,8 +78,6 @@ impl Splitter {
                 fee_bps,
             },
         );
-
-        Ok(())
     }
 
     /// Pays out the entire balance: developer share first, platform fee second.

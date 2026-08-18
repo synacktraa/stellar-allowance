@@ -41,19 +41,20 @@ fn setup(owner_funds: i128) -> Ctx {
     let token = env.register_stellar_asset_contract_v2(token_admin);
     let token_address = token.address();
 
-    let contract = env.register(Allowance, ());
-    let client = AllowanceClient::new(&env, &contract);
-
-    client.init(
-        &owner,
-        &token_address,
-        &agent,
-        &Rules {
-            max_per_call: 1_000_000,          // 0.1 USDC
-            window_ledgers: 60,
-            window_cap: 5_000_000,            // 0.5 USDC
-            allowlist: vec![&env, seller.clone()],
-        },
+    // Constructor arguments, so the contract is never unowned.
+    let contract = env.register(
+        Allowance,
+        (
+            owner.clone(),
+            token_address.clone(),
+            agent.clone(),
+            Rules {
+                max_per_call: 1_000_000, // 0.1 USDC
+                window_ledgers: 60,
+                window_cap: 5_000_000,   // 0.5 USDC
+                allowlist: vec![&env, seller.clone()],
+            },
+        ),
     );
 
     StellarAssetClient::new(&env, &token_address).mint(&owner, &owner_funds);

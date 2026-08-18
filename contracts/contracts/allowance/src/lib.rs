@@ -105,25 +105,21 @@ pub struct Allowance;
 
 #[contractimpl]
 impl Allowance {
-    pub fn init(
-        env: Env,
-        owner: Address,
-        token: Address,
-        agent: Address,
-        rules: Rules,
-    ) -> Result<(), AllowanceError> {
-        if env.storage().instance().has(&DataKey::Owner) {
-            return Err(AllowanceError::AlreadyInitialized);
-        }
-        owner.require_auth();
-
+    /// Runs once, at deployment, as part of the same transaction.
+    ///
+    /// A separate `init` would have needed the owner's signature to prove they wanted to be
+    /// the owner — which means the owner needs XLM for fees before they can own anything, and
+    /// that is the barrier this product exists to remove. It would also leave a window between
+    /// deploy and init in which anyone could claim ownership of the empty contract.
+    ///
+    /// A constructor closes both: the platform pays, the owner is set atomically, and there is
+    /// no moment where the contract exists unowned.
+    pub fn __constructor(env: Env, owner: Address, token: Address, agent: Address, rules: Rules) {
         env.storage().instance().set(&DataKey::Owner, &owner);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::Agent, &agent);
         env.storage().instance().set(&DataKey::Rules, &rules);
         env.storage().instance().set(&DataKey::Revoked, &false);
-
-        Ok(())
     }
 
     /// Owner moves USDC into the contract. Owner signs; the auth tree covers the nested

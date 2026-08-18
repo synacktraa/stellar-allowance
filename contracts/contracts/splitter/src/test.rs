@@ -27,8 +27,10 @@ fn setup(paid: i128) -> Ctx {
     let token = env.register_stellar_asset_contract_v2(token_admin);
     let token_address = token.address();
 
-    let contract = env.register(Splitter, ());
-    SplitterClient::new(&env, &contract).init(&developer, &platform, &token_address, &1_000);
+    let contract = env.register(
+        Splitter,
+        (developer.clone(), platform.clone(), token_address.clone(), 1_000u32),
+    );
 
     if paid > 0 {
         StellarAssetClient::new(&env, &token_address).mint(&contract, &paid);
@@ -110,24 +112,25 @@ fn flush_with_no_balance_is_refused() {
     assert_eq!(err, SplitterError::NothingToFlush);
 }
 
-/// The split is fixed at creation. If it could be re-initialised, it would be a promise again.
+/// The split is fixed at deployment and there is no function that can change it. That is what
+/// makes it verifiable rather than a promise — a developer reads the contract once.
 #[test]
-fn cannot_be_reinitialised() {
+fn the_split_cannot_be_changed_after_deployment() {
     let ctx = setup(0);
     let client = SplitterClient::new(&ctx.env, &ctx.contract);
-    let attacker = Address::generate(&ctx.env);
 
-    let err = client
-        .try_init(&attacker, &attacker, &ctx.token, &0)
-        .unwrap_err()
-        .unwrap();
+    let config = client.config();
 
-    assert_eq!(err, SplitterError::AlreadyInitialized);
-    assert_eq!(client.config().developer, ctx.developer);
+    assert_eq!(config.developer, ctx.developer);
+    assert_eq!(config.platform, ctx.platform);
+    assert_eq!(config.fee_bps, 1_000);
+    // The generated client exposes exactly the contract's functions. There is no setter here,
+    // and a constructor cannot run twice.
 }
 
 #[test]
-fn fee_above_one_hundred_percent_is_refused() {
+#[should_panic(expected = "Error(Contract, #3)")]
+fn fee_above_one_hundred_percent_is_refused_at_deployment() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -135,13 +138,8 @@ fn fee_above_one_hundred_percent_is_refused() {
     let platform = Address::generate(&env);
     let token = env.register_stellar_asset_contract_v2(Address::generate(&env));
 
-    let contract = env.register(Splitter, ());
-    let client = SplitterClient::new(&env, &contract);
-
-    let err = client
-        .try_init(&developer, &platform, &token.address(), &10_001)
-        .unwrap_err()
-        .unwrap();
-
-    assert_eq!(err, SplitterError::FeeTooHigh);
+    env.register(
+        Splitter,
+        (developer, platform, token.address(), 10_001u32),
+    );
 }
