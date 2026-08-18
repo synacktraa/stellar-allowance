@@ -245,6 +245,16 @@ impl Allowance {
         Ok(())
     }
 
+    /// Replaces the rules. Owner only.
+    ///
+    /// Deliberately leaves the spend window untouched: if a rule change reset it, an agent
+    /// sitting at its cap could be handed a fresh one by any edit.
+    pub fn set_rules(env: Env, rules: Rules) -> Result<(), AllowanceError> {
+        require_owner(&env)?;
+        env.storage().instance().set(&DataKey::Rules, &rules);
+        Ok(())
+    }
+
     /// Immediate, total stop. Moves no money, so it cannot fail for balance reasons —
     /// which is exactly what you want from an emergency brake.
     pub fn revoke(env: Env) -> Result<(), AllowanceError> {

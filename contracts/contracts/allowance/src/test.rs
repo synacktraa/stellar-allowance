@@ -205,6 +205,61 @@ fn owner_can_still_withdraw_after_revoke() {
     assert_eq!(token.balance(&ctx.owner), 10_000_000);
 }
 
+/// The owner can change the rules without redeploying — needed the moment a user wants to
+/// adjust their budget, or add a recipient they did not know about at setup.
+#[test]
+fn owner_can_change_the_rules() {
+    let ctx = funded(20_000_000, 12_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+    let new_seller = Address::generate(&ctx.env);
+
+    // Not on the list yet.
+    assert!(client
+        .try_spend(&new_seller, &1_000_000, &symbol_short!("r1"))
+        .is_err());
+
+    client.set_rules(&Rules {
+        max_per_call: 2_000_000,
+        window_ledgers: 60,
+        window_cap: 5_000_000,
+        allowlist: vec![&ctx.env, new_seller.clone()],
+    });
+
+    client.spend(&new_seller, &2_000_000, &symbol_short!("r2"));
+    assert_eq!(
+        TokenClient::new(&ctx.env, &ctx.token).balance(&new_seller),
+        2_000_000
+    );
+
+    // The old recipient is no longer allowed.
+    let err = client
+        .try_spend(&ctx.seller, &1, &symbol_short!("r3"))
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, AllowanceError::RecipientNotAllowed);
+}
+
+/// Changing the rules must not wipe what has already been spent, or an agent at its cap
+/// could be handed a fresh window by any rule edit.
+#[test]
+fn changing_rules_preserves_spend_history() {
+    let ctx = funded(20_000_000, 12_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    client.spend(&ctx.seller, &1_000_000, &symbol_short!("r1"));
+    assert_eq!(client.spent_in_window(), 1_000_000);
+
+    client.set_rules(&Rules {
+        max_per_call: 1_000_000,
+        window_ledgers: 60,
+        window_cap: 3_000_000,
+        allowlist: vec![&ctx.env, ctx.seller.clone()],
+    });
+
+    assert_eq!(client.spent_in_window(), 1_000_000, "history survives a rule change");
+    assert_eq!(client.remaining(), 2_000_000, "new cap of 3M minus 1M already spent");
+}
+
 /// Test 9 — reads must not write. Calling a view must not consume window state.
 #[test]
 fn views_do_not_mutate_window_state() {
