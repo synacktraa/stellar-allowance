@@ -14,34 +14,37 @@ export default function Home() {
 
       {/* ------------------------------------------------------------- hero */}
       <section className="grid-field border-b border-[color:var(--line)]">
-        <div className="mx-auto max-w-[1180px] px-6 pt-20 pb-10 relative">
-          <p className="label mb-6">[ ON-CHAIN SPENDING LIMITS FOR AI AGENTS ]</p>
+        <div className="mx-auto max-w-[1180px] px-6 pt-16 pb-14 lg:pt-20 grid gap-12 lg:grid-cols-[1.15fr_1fr] lg:items-center">
+          <div>
+            <p className="label mb-6">[ ON-CHAIN SPENDING LIMITS FOR AI AGENTS ]</p>
 
-          <h1 className="display max-w-[16ch]">
-            Agents can spend.
-            <br />
-            Nothing stops them.
-          </h1>
+            <h1 className="display max-w-[16ch]">
+              Agents can spend.
+              <br />
+              Nothing stops them.
+            </h1>
 
-          <p className="mt-7 max-w-[52ch] text-[color:var(--muted)] leading-relaxed">
-            An agent that pays for API calls needs a wallet, and a wallet has no limits. When a
-            request fails, every HTTP library retries — and each retry is now a real payment.
-            Stellar Allowance holds the money in a contract instead, and makes the agent ask.
-          </p>
+            <p className="mt-7 max-w-[52ch] text-[color:var(--muted)] leading-relaxed">
+              An agent that pays for API calls needs a wallet, and a wallet has no limits. When a
+              request fails, every HTTP library retries — and each retry is now a real payment.
+              Stellar Allowance holds the money in a contract instead, and makes the agent ask.
+            </p>
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/user" className="chip chip-accent px-4 py-2.5">
-              Give an agent a budget →
-            </Link>
-            <Link
-              href="/developer"
-              className="chip px-4 py-2.5 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
-            >
-              Charge for my API →
-            </Link>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link href="/user" className="chip chip-accent px-4 py-2.5">
+                Give an agent a budget →
+              </Link>
+              <Link
+                href="/developer"
+                className="chip px-4 py-2.5 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
+              >
+                Charge for my API →
+              </Link>
+            </div>
           </div>
 
-          <div className="mt-10 -mx-2">
+          <div className="lg:max-w-[420px] lg:justify-self-end w-full">
+            <p className="label mb-4">[ 01 · THE PATH A PAYMENT TAKES ]</p>
             <FlowDiagram allowanceId={DEMO_ALLOWANCE} agentAddress={AGENT} />
           </div>
         </div>

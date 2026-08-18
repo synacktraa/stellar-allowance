@@ -1,10 +1,79 @@
 /**
- * The hero.
+ * The mechanism, drawn rather than asserted.
  *
- * The reference annotates a photograph; there is nothing decorative to annotate here, so the
- * mechanism is the subject. Three parties, two hops, and callouts naming what each one can and
- * cannot do — which is the entire argument, drawn rather than asserted.
+ * Three parties, two hops, and a note on each naming what it can and cannot do — which is the
+ * whole argument. It reads top to bottom so it survives a narrow column: the previous version
+ * was a 900-wide SVG whose 10px labels rendered at about 4px on a phone, and whose refusal
+ * caption was anchored at x = -34, outside its own viewBox, so it was clipped on every screen.
+ *
+ * Plain elements rather than SVG, because the captions are sentences and sentences need to
+ * wrap. SVG text does not.
  */
+
+function Node({
+  name,
+  detail,
+  accent,
+}: {
+  name: string;
+  detail: string;
+  accent?: boolean;
+}) {
+  const colour = accent ? 'var(--lavender)' : 'var(--line-bright)';
+  return (
+    <div
+      className="border px-4 py-3 bg-[color:var(--panel)]/60"
+      style={{ borderColor: colour }}
+    >
+      <p
+        className="text-sm font-medium"
+        style={{ color: accent ? 'var(--lavender)' : 'var(--text)' }}
+      >
+        {name}
+      </p>
+      <p className="num text-[11px] text-[color:var(--faint)] break-all mt-0.5">{detail}</p>
+    </div>
+  );
+}
+
+function Note({ tag, children, tone }: { tag: string; children: string; tone: string }) {
+  return (
+    <div className="flex gap-2 pl-4 pt-2">
+      <span
+        className="mt-[5px] h-[7px] w-[7px] shrink-0 border"
+        style={{ borderColor: tone }}
+      />
+      <p className="text-[11px] leading-relaxed text-[color:var(--faint)] min-w-0">
+        <span className="label mr-1.5" style={{ color: tone }}>
+          [ {tag} ]
+        </span>
+        {children}
+      </p>
+    </div>
+  );
+}
+
+/** A labelled hop. The line is the edge; the word on it says what travels. */
+function Hop({ label, accent }: { label: string; accent?: boolean }) {
+  // `--line-bright` is a hairline colour for borders; at 1px on a near-black ground it reads as
+  // nothing at all, so the unpaid hop takes the muted grey instead.
+  const colour = accent ? 'var(--accent)' : 'var(--muted)';
+  return (
+    <div className="flex items-center gap-2 pl-4 h-10" aria-hidden="true">
+      <span className="relative flex flex-col items-center self-stretch">
+        <span className="w-px flex-1" style={{ background: colour }} />
+        <span
+          className="block h-0 w-0 border-x-[3px] border-x-transparent border-t-[5px]"
+          style={{ borderTopColor: colour }}
+        />
+      </span>
+      <span className="label" style={{ color: colour }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export function FlowDiagram({
   allowanceId,
   agentAddress,
@@ -12,139 +81,37 @@ export function FlowDiagram({
   allowanceId?: string;
   agentAddress?: string;
 }) {
-  const short = (value?: string) => (value ? `${value.slice(0, 6)}…${value.slice(-4)}` : "—");
+  const short = (value?: string) => (value ? `${value.slice(0, 6)}…${value.slice(-4)}` : '—');
 
   return (
-    <svg
-      viewBox="0 0 900 400"
-      role="img"
-      aria-label="An agent with no funds asks an allowance contract, which checks three rules before paying the seller"
-      className="w-full h-auto"
-    >
-      <defs>
-        <marker
-          id="tip"
-          viewBox="0 0 10 10"
-          refX="9"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto-start-reverse"
-        >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line-bright)" />
-        </marker>
-        <marker
-          id="tip-accent"
-          viewBox="0 0 10 10"
-          refX="9"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto-start-reverse"
-        >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
-        </marker>
-      </defs>
+    <figure className="m-0">
+      <p className="sr-only">
+        An agent that holds no funds asks an allowance contract to pay. The contract checks a
+        per-call cap, a rolling window and an allowlist, and refuses anything outside them.
+        Payments it does make go to the seller&rsquo;s splitter contract, which divides them
+        ninety-ten.
+      </p>
 
-      {/* crosshairs, as in the reference */}
-      {[120, 340, 560, 780].map((x) =>
-        [70, 330].map((y) => (
-          <g key={`${x}-${y}`} stroke="var(--line)" strokeWidth="1">
-            <line x1={x - 4} y1={y} x2={x + 4} y2={y} />
-            <line x1={x} y1={y - 4} x2={x} y2={y + 4} />
-          </g>
-        )),
-      )}
+      <div aria-hidden="true">
+        <Node name="Agent" detail={short(agentAddress)} />
+        <Note tag="HOLDS_NOTHING" tone="var(--muted)">
+          No USDC trustline. It cannot hold the asset at all.
+        </Note>
 
-      {/* --- agent --- */}
-      <rect x="40" y="170" width="150" height="60" fill="none" stroke="var(--line-bright)" />
-      <text x="56" y="196" fontSize="14" fill="var(--text)" fontFamily="var(--font-sans)">
-        Agent
-      </text>
-      <text x="56" y="215" fontSize="10" fill="var(--faint)" fontFamily="var(--font-mono)">
-        {short(agentAddress)}
-      </text>
+        <Hop label="asks" />
 
-      {/* callout: holds nothing */}
-      <line x1="115" y1="170" x2="115" y2="118" stroke="var(--line-bright)" strokeWidth="1" />
-      <line x1="115" y1="118" x2="196" y2="118" stroke="var(--line-bright)" strokeWidth="1" />
-      <rect x="196" y="98" width="10" height="10" fill="none" stroke="var(--line-bright)" />
-      <text x="216" y="108" fontSize="10" fill="var(--muted)" fontFamily="var(--font-mono)" letterSpacing="1.6">
-        [ HOLDS_NOTHING ]
-      </text>
-      <text x="216" y="124" fontSize="10" fill="var(--faint)" fontFamily="var(--font-sans)">
-        No USDC trustline. It cannot hold the asset at all.
-      </text>
+        <Node name="Allowance" detail={short(allowanceId)} accent />
+        <Note tag="REFUSES" tone="var(--lavender)">
+          Per-call cap, rolling window, allowlist. Break one and the money does not move.
+        </Note>
 
-      {/* agent -> allowance */}
-      <line
-        x1="190"
-        y1="200"
-        x2="352"
-        y2="200"
-        stroke="var(--line-bright)"
-        strokeWidth="1"
-        markerEnd="url(#tip)"
-      />
-      <text x="212" y="192" fontSize="10" fill="var(--muted)" fontFamily="var(--font-mono)" letterSpacing="1.4">
-        asks
-      </text>
+        <Hop label="pays" accent />
 
-      {/* --- allowance --- */}
-      <rect x="360" y="150" width="180" height="100" fill="none" stroke="var(--lavender)" strokeWidth="1" />
-      <text x="378" y="180" fontSize="14" fill="var(--lavender)" fontFamily="var(--font-sans)">
-        Allowance
-      </text>
-      <text x="378" y="199" fontSize="10" fill="var(--faint)" fontFamily="var(--font-mono)">
-        {short(allowanceId)}
-      </text>
-      <text x="378" y="222" fontSize="10" fill="var(--muted)" fontFamily="var(--font-mono)" letterSpacing="0.6">
-        per-call · window · allowlist
-      </text>
-
-      {/* callout: the refusal */}
-      <line x1="450" y1="250" x2="450" y2="300" stroke="var(--lavender)" strokeWidth="1" />
-      <line x1="450" y1="300" x2="366" y2="300" stroke="var(--lavender)" strokeWidth="1" />
-      <rect x="356" y="295" width="10" height="10" fill="none" stroke="var(--lavender)" />
-      <text x="196" y="299" fontSize="10" fill="var(--lavender)" fontFamily="var(--font-mono)" letterSpacing="1.6" textAnchor="end">
-        [ REFUSES ]
-      </text>
-      <text x="196" y="315" fontSize="10" fill="var(--faint)" fontFamily="var(--font-sans)" textAnchor="end">
-        Breaks a rule and the money does not move.
-      </text>
-
-      {/* allowance -> seller */}
-      <line
-        x1="540"
-        y1="200"
-        x2="702"
-        y2="200"
-        stroke="var(--accent)"
-        strokeWidth="1"
-        markerEnd="url(#tip-accent)"
-      />
-      <text x="566" y="192" fontSize="10" fill="var(--accent)" fontFamily="var(--font-mono)" letterSpacing="1.4">
-        pays
-      </text>
-
-      {/* --- seller --- */}
-      <rect x="710" y="170" width="150" height="60" fill="none" stroke="var(--line-bright)" />
-      <text x="726" y="196" fontSize="14" fill="var(--text)" fontFamily="var(--font-sans)">
-        Seller
-      </text>
-      <text x="726" y="215" fontSize="10" fill="var(--faint)" fontFamily="var(--font-mono)">
-        splitter · 90 / 10
-      </text>
-
-      {/* callout: split */}
-      <line x1="785" y1="230" x2="785" y2="300" stroke="var(--line-bright)" strokeWidth="1" />
-      <rect x="780" y="300" width="10" height="10" fill="none" stroke="var(--line-bright)" />
-      <text x="806" y="304" fontSize="10" fill="var(--muted)" fontFamily="var(--font-mono)" letterSpacing="1.6">
-        [ SPLIT ]
-      </text>
-      <text x="806" y="320" fontSize="10" fill="var(--faint)" fontFamily="var(--font-sans)">
-        Fixed at creation.
-      </text>
-    </svg>
+        <Node name="Seller" detail="splitter · 90 / 10" />
+        <Note tag="SPLIT" tone="var(--muted)">
+          Fixed when the contract was created. Nobody can change the share afterwards.
+        </Note>
+      </div>
+    </figure>
   );
 }
