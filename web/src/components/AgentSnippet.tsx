@@ -165,13 +165,12 @@ export function AgentSnippet({ allowanceId }: { allowanceId: string }) {
 
   return (
     <div className="relative">
-      {/* Sits clear of the scrollbar gutter, which the wider "copy file" label overlapped. */}
+      {/* Sits clear of the scrollbar gutter, which a wider label used to overlap. */}
       <button
         type="button"
         aria-label={copied ? 'Copied' : 'Copy the file'}
-        title={copied ? 'Copied' : 'Copy the file'}
-        className="chip absolute right-6 top-3 z-10 cursor-pointer bg-[color:var(--panel-2)] px-2 py-1.5 text-sm leading-none transition-colors hover:border-[color:var(--accent)]"
-        style={copied ? { borderColor: 'var(--held)' } : undefined}
+        className="chip absolute right-6 top-3 z-10 cursor-pointer bg-[color:var(--panel-2)] transition-colors hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+        style={copied ? { borderColor: 'var(--held)', color: 'var(--held)' } : undefined}
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(code);
@@ -182,7 +181,7 @@ export function AgentSnippet({ allowanceId }: { allowanceId: string }) {
           }
         }}
       >
-        {copied ? '✅' : '📋'}
+        {copied ? 'Copied' : 'Copy'}
       </button>
 
       <pre className="num text-[11px] leading-relaxed overflow-x-auto max-h-[420px] overflow-y-auto bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] p-4">
