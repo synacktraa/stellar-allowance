@@ -116,11 +116,21 @@ function Column({
 export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId: string }) {
   const [left, setLeft] = useState<Row[]>([]);
   const [right, setRight] = useState<Row[]>([]);
-  const [phase, setPhase] = useState<'idle' | 'left' | 'right' | 'done'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'preparing' | 'left' | 'right' | 'done'>('idle');
 
   async function run() {
     setLeft([]);
     setRight([]);
+
+    // Put both sides back to their starting position first. This is a public page spending real
+    // testnet USDC, so without it the tenth visitor watches two empty columns refuse everything
+    // for the same reason, which is the opposite of what the demo is for.
+    setPhase('preparing');
+    await fetch('/api/demo/prepare', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiId, allowanceId }),
+    }).catch(() => null);
 
     for (const mode of ['unprotected', 'allowance'] as const) {
       setPhase(mode === 'unprotected' ? 'left' : 'right');
@@ -140,7 +150,7 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
     setPhase('done');
   }
 
-  const busy = phase === 'left' || phase === 'right';
+  const busy = phase === 'preparing' || phase === 'left' || phase === 'right';
 
   return (
     <div>
@@ -153,7 +163,11 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
           {busy ? 'running…' : phase === 'done' ? 'run again' : 'run both'}
         </button>
         <span className="label">
-          {busy ? 'each purchase waits for a ledger — about 7s' : 'takes about 90 seconds'}
+          {phase === 'preparing'
+            ? 'putting both sides back to the same starting position…'
+            : busy
+              ? 'each purchase waits for a ledger — about 7s'
+              : 'takes about 90 seconds'}
         </span>
       </div>
 
