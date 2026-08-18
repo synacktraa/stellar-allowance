@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Keypair } from '@stellar/stellar-sdk';
 import { connect, deposit, revoke, withdraw, type Wallet } from '@/lib/freighter';
+import { SiteHeader } from '@/components/SiteHeader';
 
 /**
  * The user tab.
@@ -32,6 +33,17 @@ type State = {
 const usdc = (stroops?: string) => (stroops ? (Number(stroops) / 1e7).toFixed(2) : '0.00');
 const short = (v: string) => `${v.slice(0, 6)}…${v.slice(-4)}`;
 
+type DirectoryApi = {
+  id: string;
+  name: string;
+  upstream_url: string;
+  price_stroops: string;
+  splitter_contract_id: string;
+};
+
+/** Testnet closes a ledger roughly every five seconds. */
+const LEDGERS_PER_MINUTE = 12;
+
 export default function UserPage() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [agent, setAgent] = useState<{ publicKey: string; secret: string } | null>(null);
@@ -41,6 +53,13 @@ export default function UserPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState('2.00');
+
+  // The rules, before they are carved into a contract.
+  const [maxPerCall, setMaxPerCall] = useState('0.10');
+  const [windowCap, setWindowCap] = useState('0.50');
+  const [windowMinutes, setWindowMinutes] = useState('15');
+  const [directory, setDirectory] = useState<DirectoryApi[]>([]);
+  const [allowed, setAllowed] = useState<string[]>([]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(label);
@@ -66,6 +85,19 @@ export default function UserPage() {
     return () => clearInterval(timer);
   }, [contractId, refresh]);
 
+  useEffect(() => {
+    fetch('/api/directory')
+      .then((r) => r.json())
+      .then((body) => {
+        const apis: DirectoryApi[] = body.apis ?? [];
+        setDirectory(apis);
+        // Nothing is allowed by default. An empty allowlist refuses everything, which is the
+        // right starting point for a spending limit.
+        setAllowed([]);
+      })
+      .catch(() => setDirectory([]));
+  }, []);
+
   async function createAgent() {
     const kp = Keypair.random();
     await fetch(`https://friendbot.stellar.org?addr=${kp.publicKey()}`);
@@ -75,22 +107,27 @@ export default function UserPage() {
 
   async function createAllowance() {
     if (!wallet || !agent) return;
+    if (allowed.length === 0) {
+      throw new Error('Choose at least one API the agent is allowed to pay.');
+    }
     const response = await fetch('/api/allowances', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         owner: wallet.address,
         agent: agent.publicKey,
-        max_per_call: '1000000',
-        window_ledgers: 180,
-        window_cap: '5000000',
-        allowlist: [process.env.NEXT_PUBLIC_DEMO_SPLITTER],
+        max_per_call: String(Math.round(Number(maxPerCall) * 1e7)),
+        window_cap: String(Math.round(Number(windowCap) * 1e7)),
+        window_ledgers: Math.max(1, Math.round(Number(windowMinutes) * LEDGERS_PER_MINUTE)),
+        allowlist: allowed,
       }),
     });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? 'Could not create the allowance.');
     setContractId(body.contract_id);
   }
+
+  const callsPerWindow = Math.floor(Number(windowCap) / Math.max(Number(maxPerCall), 1e-7));
 
   const step = (n: number, done: boolean, title: string, children: React.ReactNode) => (
     <div className="panel p-6 pt-9">
@@ -106,12 +143,9 @@ export default function UserPage() {
 
   return (
     <main className="relative z-10">
-      <header className="border-b border-[color:var(--line)]">
-        <div className="mx-auto max-w-[900px] px-6 h-14 flex items-center justify-between">
-          <a href="/" className="font-mono text-sm tracking-tight">STELLAR//ALLOWANCE</a>
-          <span className="chip">{wallet ? short(wallet.address) : 'not connected'}</span>
-        </div>
-      </header>
+      <SiteHeader
+        right={<span className="chip">{wallet ? short(wallet.address) : 'not connected'}</span>}
+      />
 
       <div className="mx-auto max-w-[900px] px-6 py-12 space-y-4">
         <div className="mb-8">
@@ -194,22 +228,105 @@ export default function UserPage() {
         ))}
 
         {/* 3 — allowance */}
-        {agent && step(3, Boolean(contractId), 'Create the allowance', (
+        {agent && step(3, Boolean(contractId), 'Set the rules', (
           <>
-            <p className="text-sm text-[color:var(--muted)] mb-4 max-w-[52ch]">
-              0.10 USDC per call, 0.50 per rolling window, and one approved recipient. You can
-              change all three later without redeploying.
-            </p>
             {contractId ? (
               <p className="num text-sm break-all">{contractId}</p>
             ) : (
-              <button
-                className="chip chip-accent px-4 py-2.5 cursor-pointer"
-                disabled={busy !== null}
-                onClick={() => run('allowance', createAllowance)}
-              >
-                {busy === 'allowance' ? 'deploying…' : 'create allowance'}
-              </button>
+              <>
+                <p className="text-sm text-[color:var(--muted)] mb-5 max-w-[52ch]">
+                  These are enforced by the network, not by your agent&rsquo;s code. Break one and
+                  the money does not move. All three can be changed later without redeploying.
+                </p>
+
+                <div className="grid gap-4 sm:grid-cols-3 mb-5">
+                  <label className="block">
+                    <span className="label block mb-1.5">most per call</span>
+                    <input
+                      value={maxPerCall}
+                      onChange={(e) => setMaxPerCall(e.target.value)}
+                      className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="label block mb-1.5">most per window</span>
+                    <input
+                      value={windowCap}
+                      onChange={(e) => setWindowCap(e.target.value)}
+                      className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="label block mb-1.5">window (minutes)</span>
+                    <input
+                      value={windowMinutes}
+                      onChange={(e) => setWindowMinutes(e.target.value)}
+                      className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+
+                <p className="label mb-6">
+                  = at most {callsPerWindow} calls in any {windowMinutes} minutes, rolling
+                </p>
+
+                <p className="label block mb-2">which APIs may be paid</p>
+                {directory.length === 0 ? (
+                  <p className="text-sm text-[color:var(--muted)] mb-5">
+                    No APIs registered yet.{' '}
+                    <a href="/developer" className="text-[color:var(--accent)] underline">
+                      Add one first
+                    </a>
+                    .
+                  </p>
+                ) : (
+                  <div className="space-y-px bg-[color:var(--line)] mb-3">
+                    {directory.map((api) => {
+                      const on = allowed.includes(api.splitter_contract_id);
+                      return (
+                        <button
+                          key={api.id}
+                          onClick={() =>
+                            setAllowed((list) =>
+                              on
+                                ? list.filter((a) => a !== api.splitter_contract_id)
+                                : [...list, api.splitter_contract_id],
+                            )
+                          }
+                          className="w-full text-left bg-[color:var(--ground)] px-3 py-3 flex items-center justify-between gap-4 cursor-pointer"
+                        >
+                          <span className="min-w-0">
+                            <span
+                              className="text-sm block"
+                              style={{ color: on ? 'var(--accent)' : undefined }}
+                            >
+                              {on ? '✓ ' : '  '}
+                              {api.name}
+                            </span>
+                            <span className="num text-xs text-[color:var(--faint)] break-all">
+                              {api.upstream_url}
+                            </span>
+                          </span>
+                          <span className="num text-xs whitespace-nowrap">
+                            {usdc(api.price_stroops)} / call
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="label mb-5">
+                  anything not on this list is refused, however small the amount
+                </p>
+
+                <button
+                  className="chip chip-accent px-4 py-2.5 cursor-pointer disabled:opacity-40"
+                  disabled={busy !== null || allowed.length === 0}
+                  onClick={() => run('allowance', createAllowance)}
+                >
+                  {busy === 'allowance' ? 'deploying…' : 'create allowance'}
+                </button>
+              </>
             )}
           </>
         ))}
