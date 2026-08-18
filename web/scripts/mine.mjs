@@ -113,18 +113,36 @@ for (let n = 1; n <= attempts; n += 1) {
 
   prepared.sign(agent);
   const sent = await server.sendTransaction(prepared);
+
+  // Only PENDING and DUPLICATE mean the network took it. TRY_AGAIN_LATER is neither an error
+  // nor an acceptance — treating it as success is how a script ends up polling forever for a
+  // transaction that was never queued.
   if (sent.status === 'ERROR') {
     console.log(`${n}. rejected before inclusion`);
     continue;
   }
+  if (sent.status === 'TRY_AGAIN_LATER') {
+    console.log(`${n}. network asked us to retry — skipping this one`);
+    continue;
+  }
 
+  // A submitted transaction is not a guaranteed one. It can be dropped before any ledger
+  // includes it, and then it stays NOT_FOUND forever — so this needs a deadline, or the
+  // script waits for something that is never coming.
   let result = await server.getTransaction(sent.hash);
+  const deadline = Date.now() + 45_000;
   while (result.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
+    if (Date.now() > deadline) break;
     await new Promise((r) => setTimeout(r, 1000));
     result = await server.getTransaction(sent.hash);
   }
+
+  if (result.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
+    console.log(`${n}. gave up waiting — never included (${sent.hash.slice(0, 12)}…)`);
+    continue;
+  }
   if (result.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
-    console.log(`${n}. reverted on chain`);
+    console.log(`${n}. reverted on chain (${sent.hash.slice(0, 12)}…)`);
     continue;
   }
 

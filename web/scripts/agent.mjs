@@ -45,11 +45,21 @@ const agent = Keypair.fromSecret(
 
 async function settle(tx) {
   const sent = await rpcServer.sendTransaction(tx);
+  // Only PENDING and DUPLICATE mean the network took it.
   if (sent.status === 'ERROR') {
     return { ok: false, reason: 'rejected before inclusion' };
   }
+  if (sent.status === 'TRY_AGAIN_LATER') {
+    return { ok: false, reason: 'network asked us to retry' };
+  }
+  // A transaction can be dropped before any ledger includes it, in which case this stays
+  // NOT_FOUND forever. Without a deadline the script waits for something never coming.
   let result = await rpcServer.getTransaction(sent.hash);
+  const deadline = Date.now() + 45_000;
   while (result.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
+    if (Date.now() > deadline) {
+      return { ok: false, reason: 'never included in a ledger' };
+    }
     await new Promise((r) => setTimeout(r, 1000));
     result = await rpcServer.getTransaction(sent.hash);
   }
@@ -140,15 +150,21 @@ async function payViaAllowance({ amount, recipient, reference }) {
   return settle(prepared);
 }
 
+const seconds = (ms) => (ms / 1000).toFixed(1);
+
 async function buyOnce(n) {
+  const started = Date.now();
+
   const first = await fetch(url);
+  const quoted = Date.now();
+
   if (first.status === 200) {
     console.log(`${n}. free - no payment required`);
-    return true;
+    return { ok: true };
   }
   if (first.status !== 402) {
     console.log(`${n}. unexpected ${first.status}`);
-    return false;
+    return { ok: false };
   }
 
   const { amount, recipient, reference } = await first.json();
@@ -156,10 +172,11 @@ async function buyOnce(n) {
     mode === 'allowance'
       ? await payViaAllowance({ amount, recipient, reference })
       : await payDirectly({ amount, recipient });
+  const settled = Date.now();
 
   if (!paid.ok) {
-    console.log(`${n}. REFUSED - ${paid.reason}`);
-    return false;
+    console.log(`${n}. REFUSED - ${paid.reason}  (${seconds(settled - started)}s)`);
+    return { ok: false, total: settled - started };
   }
 
   const headers = { 'x-payment-tx': paid.hash };
@@ -167,19 +184,33 @@ async function buyOnce(n) {
 
   const second = await fetch(url, { headers });
   const body = await second.text();
-  const preview = body.replace(/\s+/g, ' ').slice(0, 56);
+  const done = Date.now();
+
+  const preview = body.replace(/\s+/g, ' ').slice(0, 40);
   console.log(
-    `${n}. paid ${(Number(amount) / 1e7).toFixed(2)} USDC -> ${second.status} ${preview}`,
+    `${n}. ${(Number(amount) / 1e7).toFixed(2)} USDC -> ${second.status} ${preview}` +
+      `\n   quote ${seconds(quoted - started)}s | pay ${seconds(settled - quoted)}s | ` +
+      `deliver ${seconds(done - settled)}s | total ${seconds(done - started)}s`,
   );
-  return second.ok;
+  return { ok: second.ok, total: done - started };
 }
 
 console.log(`mode:  ${mode}${mode === 'allowance' ? ` (${allowanceId.slice(0, 8)}...)` : ''}`);
 console.log(`agent: ${agent.publicKey().slice(0, 8)}...\n`);
 
 let bought = 0;
+const timings = [];
 for (let i = 1; i <= times; i += 1) {
-  if (await buyOnce(i)) bought += 1;
+  const result = await buyOnce(i);
+  if (result.ok) bought += 1;
+  if (result.total) timings.push(result.total);
 }
 
 console.log(`\n${bought}/${times} delivered`);
+if (timings.length > 0) {
+  const mean = timings.reduce((a, b) => a + b, 0) / timings.length;
+  console.log(
+    `per call: ${seconds(Math.min(...timings))}s min, ${seconds(mean)}s mean, ` +
+      `${seconds(Math.max(...timings))}s max`,
+  );
+}
