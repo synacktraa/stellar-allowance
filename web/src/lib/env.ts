@@ -28,5 +28,10 @@ export const env = {
 
   demoAgentSecret: () => required('DEMO_AGENT_SECRET'),
 
+  // Both wasm binaries are uploaded once; every API and every user gets a cheap instance
+  // created from the same hash rather than a fresh upload.
+  splitterWasmHash: () => required('SPLITTER_WASM_HASH'),
+  allowanceWasmHash: () => required('ALLOWANCE_WASM_HASH'),
+
   platformFeeBps: () => Number(process.env.PLATFORM_FEE_BPS ?? '1000'),
 } as const;
