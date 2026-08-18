@@ -5,6 +5,7 @@ import { Keypair } from '@stellar/stellar-sdk';
 import { connect, deposit, revoke, setRules, withdraw, type Wallet } from '@/lib/freighter';
 import { SiteHeader } from '@/components/SiteHeader';
 import { Step } from '@/components/Step';
+import { Copyable } from '@/components/Copyable';
 
 /**
  * The user tab.
@@ -284,7 +285,7 @@ export default function UserPage() {
             <div className="space-y-3">
               <div>
                 <p className="label mb-1">public key</p>
-                <p className="num text-sm break-all">{agentAddress}</p>
+                <Copyable value={agentAddress} label="agent public key" />
               </div>
               {agent && secretShown ? (
                 <div className="panel p-4 border-[color:var(--accent-dim)]">
@@ -321,7 +322,7 @@ export default function UserPage() {
           summary="A cap per purchase, a cap per rolling window, and the list of APIs that may be paid. Enforced by the network, not by your agent's code."
         >
           {contractId ? (
-            <p className="num text-sm break-all">{contractId}</p>
+            <Copyable value={contractId} label="allowance contract id" />
           ) : (
             <>
               <p className="text-sm text-[color:var(--muted)] mb-5 max-w-[52ch]">
@@ -544,6 +545,51 @@ export default function UserPage() {
           >
             {busy === 'rules' ? 'signing…' : 'update rules'}
           </button>
+        </Step>
+
+        {/* 6 — what the agent actually does with any of this */}
+        <Step
+          n={6}
+          state={contractId ? 'todo' : 'locked'}
+          title="Point your agent at it"
+          summary="Three calls: get quoted a price, ask the contract to pay it, come back with the payment."
+        >
+          <p className="text-sm text-[color:var(--muted)] mb-5 max-w-[54ch]">
+            Your agent holds only its own key. It never sees a balance and cannot move money —
+            it asks, and the contract answers. The allowance is found from the agent&rsquo;s key,
+            so there is no contract id to hard-code.
+          </p>
+
+          <pre className="num text-xs leading-relaxed overflow-x-auto bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] p-4 mb-4">
+{`// 1 — ask, and be refused with a price
+const quote = await fetch(PAID_URL);            // 402
+const { amount, recipient, reference } = await quote.json();
+
+// 2 — ask the contract to pay it. It refuses if this
+//     breaks the per-call cap, the window, or the allowlist.
+const tx = new TransactionBuilder(account, { fee, networkPassphrase })
+  .addOperation(new Contract(ALLOWANCE).call(
+    'spend',
+    nativeToScVal(recipient, { type: 'address' }),
+    nativeToScVal(BigInt(amount), { type: 'i128' }),
+    nativeToScVal(reference, { type: 'symbol' }),
+  ))
+  .setTimeout(60).build();
+
+// 3 — come back and point at the payment
+await fetch(PAID_URL, { headers: { 'x-payment-tx': hash } });`}
+          </pre>
+
+          <p className="label mb-2">this allowance</p>
+          <div className="mb-5">
+            <Copyable value={contractId} label="allowance contract id" />
+          </div>
+
+          <p className="text-sm text-[color:var(--muted)] max-w-[54ch]">
+            A runnable version is <span className="num">scripts/mine.mjs</span> in the repository:
+            it looks the allowance up from the agent key, buys until a rule stops it, and prints
+            the rule that did.
+          </p>
         </Step>
       </div>
     </main>
