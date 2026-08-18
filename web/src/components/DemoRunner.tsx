@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * The two runs, side by side.
@@ -32,7 +32,7 @@ function usdc(stroops?: string) {
 }
 
 function Column({
-  title, tag, rows, running, done, tone, verdict, holds, startedWith,
+  title, tag, rows, running, done, tone, verdict, holds, startedWith, rules,
 }: {
   title: string;
   tag: string;
@@ -46,6 +46,8 @@ function Column({
   holds: string;
   /** The balance before the run. Null until prepare has reported it. */
   startedWith: number | null;
+  /** What is enforced against this side. Empty for the wallet, which is the point. */
+  rules: string[];
 }) {
   const delivered = rows.filter((r) => r.delivered).length;
   const last = rows[rows.length - 1];
@@ -60,7 +62,23 @@ function Column({
       <span className="panel-tag">{tag}</span>
 
       <h3 className="text-base font-medium mb-1">{title}</h3>
-      <p className="label mb-4">{ATTEMPTS} attempts · 0.10 USDC each</p>
+      <p className="label mb-3">{ATTEMPTS} attempts · 0.10 USDC each</p>
+
+      {/* The rules in force, stated before the run rather than inferred from the refusals.
+          One column has none, and that emptiness is the thing being demonstrated. */}
+      <div className="flex flex-wrap gap-1.5 mb-4 min-h-[22px]">
+        {rules.length === 0 ? (
+          <span className="chip" style={{ borderColor: 'var(--drained)', color: 'var(--drained)' }}>
+            no limits
+          </span>
+        ) : (
+          rules.map((rule) => (
+            <span key={rule} className="chip" style={{ borderColor: 'var(--lavender)', color: 'var(--lavender)' }}>
+              {rule}
+            </span>
+          ))
+        )}
+      </div>
 
       <div className="space-y-1.5 num text-xs">
         {rows.map((row) => (
@@ -138,6 +156,25 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
   const [right, setRight] = useState<Row[]>([]);
   const [phase, setPhase] = useState<'idle' | 'preparing' | 'running' | 'done'>('idle');
   const [start, setStart] = useState<{ left: number; right: number } | null>(null);
+  const [rules, setRules] = useState<string[]>([]);
+
+  // Read the live rules off the contract rather than hard-coding them here. A demo that states
+  // limits the chain is not actually enforcing would be the one lie this page cannot afford.
+  useEffect(() => {
+    fetch(`/api/allowances/${allowanceId}`)
+      .then((r) => r.json())
+      .then((body) => {
+        if (!body?.rules) return;
+        const usdcOf = (v: string) => (Number(v) / 1e7).toFixed(2);
+        const minutes = Math.round(body.rules.window_ledgers / 12);
+        setRules([
+          `max ${usdcOf(body.rules.max_per_call)} per call`,
+          `max ${usdcOf(body.rules.window_cap)} per ${minutes} min`,
+          `${body.rules.allowlist.length} allowed recipient${body.rules.allowlist.length === 1 ? '' : 's'}`,
+        ]);
+      })
+      .catch(() => setRules([]));
+  }, [allowanceId]);
 
   async function run() {
     setLeft([]);
@@ -222,9 +259,10 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
           running={phase === 'running' && left.length < ATTEMPTS}
           done={left.length === ATTEMPTS}
           tone="drained"
-          verdict="Stopped because there was nothing left."
+          verdict="Nothing refused it. Seven retries, seven payments — and it would have paid for the eighth."
           holds="in its own wallet"
           startedWith={start?.left ?? null}
+          rules={[]}
         />
         <Column
           title="The agent has an allowance"
@@ -233,9 +271,10 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
           running={phase === 'running' && right.length < ATTEMPTS}
           done={right.length === ATTEMPTS}
           tone="held"
-          verdict="Stopped by the rule, with money still in the contract."
+          verdict="Refused the sixth, with money still in the contract. The rule stopped it, not the balance."
           holds="in the contract"
           startedWith={start?.right ?? null}
+          rules={rules}
         />
       </div>
     </div>

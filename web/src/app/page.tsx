@@ -102,9 +102,11 @@ export default function Home() {
           <h2 className="text-2xl font-medium tracking-tight mb-2">
             The same agent, run twice
           </h2>
-          <p className="text-[color:var(--muted)] max-w-[58ch] mb-8 leading-relaxed">
-            Same script, same API, same seven attempts against the same failing service. The only
-            thing that changes is where the money sits. Both runs pay real testnet USDC.
+          <p className="text-[color:var(--muted)] max-w-[62ch] mb-8 leading-relaxed">
+            Same script, same API, same seven attempts against the same failing service — and
+            crucially, the same 1.20 USDC to spend. The only thing that differs is where that
+            money sits. One agent holds it; the other can only ask a contract for it. Both runs
+            pay real testnet USDC, side by side.
           </p>
 
           {DEMO_API_ID && DEMO_ALLOWANCE ? (

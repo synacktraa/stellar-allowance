@@ -24,13 +24,23 @@ import { arg, invoke, platformKeypair, read } from '@/lib/stellar';
 
 export const maxDuration = 60;
 
-/** What each side needs to tell its half of the story. */
-const WALLET_TARGET = 5_000_000n; // 0.5 USDC — five purchases, then genuinely empty
-const ALLOWANCE_TARGET = 12_000_000n; // 1.2 USDC — always more than the window cap allows
-// Top up below 1.0 rather than 0.7. At the old floor a run could start at exactly 0.7 and end
-// at 0.2, which still tells the story but faintly: the point is that the rule stopped it while
-// there was plainly money left, and 1.2 → 0.7 says that where 0.7 → 0.2 mumbles it.
-const ALLOWANCE_FLOOR = 10_000_000n;
+/**
+ * Both sides start with the same money. This is the whole basis of the comparison.
+ *
+ * An earlier version gave the unprotected agent 0.5 and the allowance 1.2, so the unprotected
+ * one ran out after five purchases — but it ran out because it had been handed less, not
+ * because anything stopped it. That is a confounded experiment presented as a controlled one,
+ * and it made both columns read 5/7, which is the opposite of a contrast.
+ *
+ * At 1.2 each, seven attempts of 0.1 cost 0.7 and the unprotected agent pays every one of them:
+ * nothing is positioned to refuse. The allowance pays five and refuses the rest against its 0.5
+ * window cap, with 0.7 still in the contract. Same money in, same script, same API — 7/7
+ * against 5/7, and the only difference is where the money sits.
+ */
+const START = 12_000_000n; // 1.2 USDC on both sides
+const WALLET_TARGET = START;
+const ALLOWANCE_TARGET = START;
+const ALLOWANCE_FLOOR = 10_000_000n; // refill before a run could end short of its cap
 
 async function usdcBalance(address: string): Promise<bigint> {
   const balance = await read(env.usdcSac(), 'balance', [arg.address(address)]);
@@ -72,8 +82,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2 — the unprotected agent starts with exactly its allotment and no more, so that running
-    //     out lands as the consequence of having no limit rather than of being underfunded.
+    // 2 — set to the target exactly, in either direction. Both columns must begin level, or the
+    //     comparison measures the funding rather than the rule.
     const held = await usdcBalance(walletAgent);
     if (held !== WALLET_TARGET) {
       if (held < WALLET_TARGET) {
@@ -88,9 +98,8 @@ export async function POST(request: NextRequest) {
           platform,
         );
       } else {
-        // Above target it would not drain within seven attempts, and the column would end with
-        // money left — which is the other column's ending. Moving money *out* of the agent is
-        // the agent's own transfer, so it has to be signed by the agent and not by us.
+        // Moving money *out* of the agent is the agent's own transfer, so it has to be signed
+        // by the agent and not by us.
         const agentSecret = process.env.WALLET_AGENT_SECRET;
         if (agentSecret) {
           await invoke(
