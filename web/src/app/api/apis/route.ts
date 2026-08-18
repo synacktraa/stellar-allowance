@@ -1,10 +1,10 @@
-import type { NextRequest } from 'next/server';
+﻿import type { NextRequest } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { StrKey } from '@stellar/stellar-sdk';
 import { db } from '@/lib/supabase';
 import { deployInstance } from '@/lib/deploy';
 import { env } from '@/lib/env';
-import { arg, invoke, platformKeypair } from '@/lib/stellar';
+import { arg } from '@/lib/stellar';
 
 /**
  * Registering an API.
@@ -14,13 +14,12 @@ import { arg, invoke, platformKeypair } from '@/lib/stellar';
  * platform address would make every API resolve to the same recipient, and the allowlist could
  * not tell them apart.
  *
- * The row is inserted as `pending` and only flipped to `active` once the splitter exists and is
- * initialised. The gateway refuses anything that is not active with a splitter, so a deploy that
- * fails halfway leaves an API that is invisible rather than one that takes payments nobody can
- * collect.
+ * The row is inserted as `pending` and only flipped to `active` once the splitter exists. The
+ * gateway refuses anything that is not active with a splitter, so a deploy that fails halfway
+ * leaves an API that is invisible rather than one taking payments nobody can collect.
  */
 
-// Deploy and init are two transactions, each waiting on a ledger to close.
+// One transaction, but it still waits for a ledger to close.
 export const maxDuration = 60;
 
 type RegisterBody = {
@@ -91,19 +90,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const splitter = await deployInstance(env.splitterWasmHash());
-
-    await invoke(
-      splitter,
-      'init',
-      [
-        arg.address(payout),
-        arg.address(env.platformAddress()),
-        arg.address(env.usdcSac()),
-        arg.u32(env.platformFeeBps()),
-      ],
-      platformKeypair(),
-    );
+    // Deployed and configured in one transaction, so the splitter never exists in a state
+    // where someone else could set the payout addresses.
+    const splitter = await deployInstance(env.splitterWasmHash(), [
+      arg.address(payout),
+      arg.address(env.platformAddress()),
+      arg.address(env.usdcSac()),
+      arg.u32(env.platformFeeBps()),
+    ]);
 
     await supabase
       .from('apis')

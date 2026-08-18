@@ -1,20 +1,35 @@
-import { Address, Operation, TransactionBuilder, rpc, scValToNative } from '@stellar/stellar-sdk';
+import {
+  Address,
+  Operation,
+  TransactionBuilder,
+  rpc,
+  scValToNative,
+  xdr,
+} from '@stellar/stellar-sdk';
 import { randomBytes } from 'node:crypto';
 import { env } from './env';
 import { platformKeypair, server } from './stellar';
 
 /**
- * Creates a new contract instance from an already-uploaded wasm.
+ * Creates a new contract instance from an already-uploaded wasm, running its constructor in
+ * the same transaction.
  *
  * Uploading the binary and creating an instance are separate steps on Stellar. The CLI does
  * both at once, which is why deploying feels like one action — but the upload only has to
  * happen once per binary. Every API's splitter and every user's allowance is an instance
  * pointing at the same hash, which is what makes per-API and per-user contracts affordable.
  *
- * The platform pays. Making the developer or the user fund a deploy would mean acquiring XLM
- * before they can do anything, which is the barrier this product exists to remove.
+ * The constructor arguments matter more than they look. A separate `init` call would leave the
+ * contract briefly unowned and unconfigured, and would need a signature from whoever it
+ * belongs to — which means that person needs XLM before they can own anything. Passing them
+ * here makes deployment atomic and keeps the user out of it entirely.
+ *
+ * The platform pays.
  */
-export async function deployInstance(wasmHash: string): Promise<string> {
+export async function deployInstance(
+  wasmHash: string,
+  constructorArgs: xdr.ScVal[] = [],
+): Promise<string> {
   const rpcServer = server();
   const signer = platformKeypair();
   const account = await rpcServer.getAccount(signer.publicKey());
@@ -27,6 +42,7 @@ export async function deployInstance(wasmHash: string): Promise<string> {
       Operation.createCustomContract({
         address: Address.fromString(signer.publicKey()),
         wasmHash: Buffer.from(wasmHash, 'hex'),
+        constructorArgs,
         // A fresh salt each time, so two APIs registered with identical settings still get
         // distinct contracts. Without it the derived address would collide.
         salt: randomBytes(32),
