@@ -45,8 +45,12 @@ function Column({
   const last = rows[rows.length - 1];
   const toneColor = tone === 'drained' ? 'var(--drained)' : 'var(--held)';
 
+  // One slot per attempt, always. Rendering only the rows that have arrived left both panels as
+  // empty boxes until someone pressed the button, which reads as broken rather than as ready.
+  const pending = ATTEMPTS - rows.length - (running ? 1 : 0);
+
   return (
-    <div className="panel p-5 pt-8 min-h-[320px]">
+    <div className="panel p-5 pt-8">
       <span className="panel-tag">{tag}</span>
 
       <h3 className="text-base font-medium mb-1">{title}</h3>
@@ -66,28 +70,45 @@ function Column({
             )}
           </div>
         ))}
+
         {running && (
           <div className="flex gap-3 items-baseline text-[color:var(--faint)]">
             <span className="w-4">{String(rows.length + 1).padStart(2, '0')}</span>
-            <span>waiting for a ledger…</span>
+            <span className="animate-pulse">waiting for a ledger…</span>
           </div>
         )}
+
+        {Array.from({ length: Math.max(0, pending) }, (_, i) => (
+          <div
+            key={`ghost-${i}`}
+            className="flex gap-3 items-baseline text-[color:var(--line-bright)]"
+            aria-hidden="true"
+          >
+            <span className="w-4">
+              {String(ATTEMPTS - pending + i + 1).padStart(2, '0')}
+            </span>
+            <span>········</span>
+          </div>
+        ))}
       </div>
 
-      {done && (
-        <div className="mt-5 pt-4 border-t border-[color:var(--line)] flex items-baseline justify-between">
-          <div>
-            <p className="label">delivered</p>
-            <p className="num text-lg">{delivered}/{ATTEMPTS}</p>
-          </div>
-          <div className="text-right">
-            <p className="label">{last?.remainingLabel ?? 'left'}</p>
-            <p className="num text-lg" style={{ color: toneColor }}>
-              {Number(last?.remaining ?? 0).toFixed(2)} USDC
-            </p>
-          </div>
+      <div className="mt-5 pt-4 border-t border-[color:var(--line)] flex items-baseline justify-between">
+        <div>
+          <p className="label">delivered</p>
+          <p className="num text-lg" style={{ color: done ? undefined : 'var(--line-bright)' }}>
+            {done ? `${delivered}/${ATTEMPTS}` : `—/${ATTEMPTS}`}
+          </p>
         </div>
-      )}
+        <div className="text-right">
+          <p className="label">{last?.remainingLabel ?? 'left at the end'}</p>
+          <p
+            className="num text-lg"
+            style={{ color: done ? toneColor : 'var(--line-bright)' }}
+          >
+            {done ? `${Number(last?.remaining ?? 0).toFixed(2)} USDC` : '—'}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
