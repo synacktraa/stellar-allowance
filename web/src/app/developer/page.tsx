@@ -113,12 +113,17 @@ export default function DeveloperPage() {
 
       <div className="mx-auto max-w-[900px] px-6 py-12 space-y-4">
         <div className="mb-8">
-          <p className="label mb-4">[ FOR API OWNERS ]</p>
+          <p className="label mb-4">[ FOR API OWNERS · NO CODE CHANGES ]</p>
           <h1 className="display max-w-[15ch]">Charge per call.</h1>
-          <p className="mt-6 max-w-[54ch] text-[color:var(--muted)] leading-relaxed">
-            Point us at an API you already run and set a price. You get a new URL to share.
-            Nothing about your API changes — no SDK, no code, no redeploy. Every paid call sends
-            you 90%, and the split is fixed in a contract you can read.
+          <p className="mt-6 max-w-[54ch] text-[color:var(--text)] leading-relaxed">
+            Point us at an API you already run and set a price. You get a new URL to share, and
+            nothing about your API changes — no SDK, no code, no redeploy.
+          </p>
+          <p className="mt-4 max-w-[54ch] text-[color:var(--muted)] leading-relaxed">
+            Every paid call sends you 90%, into a payment contract deployed for this API alone.
+            The share is written in when the contract is created and cannot be changed afterwards,
+            by us or by anyone. You do not have to trust us to forward it: collecting is
+            permissionless, and the money can only ever reach your address and ours.
           </p>
         </div>
 
