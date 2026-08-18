@@ -19,7 +19,9 @@ type Row = {
   status?: number;
   body?: string;
   txHash?: string;
-  walletBalance?: string;
+  /** USDC left, in the place that holds it: the agent's wallet, or the contract. */
+  remaining?: string;
+  remainingLabel?: string;
 };
 
 const ATTEMPTS = 7;
@@ -79,9 +81,9 @@ function Column({
             <p className="num text-lg">{delivered}/{ATTEMPTS}</p>
           </div>
           <div className="text-right">
-            <p className="label">wallet after</p>
+            <p className="label">{last?.remainingLabel ?? 'left'}</p>
             <p className="num text-lg" style={{ color: toneColor }}>
-              {usdc(last?.walletBalance ? String(Math.round(Number(last.walletBalance) * 1e7)) : '0')} USDC
+              {Number(last?.remaining ?? 0).toFixed(2)} USDC
             </p>
           </div>
         </div>

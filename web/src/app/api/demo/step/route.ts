@@ -9,7 +9,7 @@ import {
   rpc,
 } from '@stellar/stellar-sdk';
 import { env } from '@/lib/env';
-import { server } from '@/lib/stellar';
+import { read, server } from '@/lib/stellar';
 
 /**
  * One purchase, either way.
@@ -129,7 +129,19 @@ export async function POST(request: NextRequest) {
     };
   }
 
-  const walletBalance = await usdcBalance(payer.publicKey());
+  /**
+   * What is left, and where.
+   *
+   * These are different accounts on purpose. An unprotected agent holds its own USDC, so its
+   * wallet is the thing that drains. An agent with an allowance holds nothing at all — its
+   * wallet is zero before the first call and zero after the last — so reporting it would show
+   * both columns ending at 0.00 and hide the entire point. The money that survives is in the
+   * contract.
+   */
+  const remaining =
+    mode === 'allowance'
+      ? String(Number(((await readBalance(allowanceId!)) ?? 0n)) / 1e7)
+      : await usdcBalance(payer.publicKey());
 
   if (!paid.ok) {
     return Response.json({
@@ -137,7 +149,8 @@ export async function POST(request: NextRequest) {
       refused: true,
       reason: paid.reason,
       amount,
-      walletBalance,
+      remaining,
+      remainingLabel: mode === 'allowance' ? 'allowance after' : 'wallet after',
     });
   }
 
@@ -155,8 +168,21 @@ export async function POST(request: NextRequest) {
     txHash: paid.hash,
     status: delivery.status,
     body: body.replace(/\s+/g, ' ').slice(0, 90),
-    walletBalance: await usdcBalance(payer.publicKey()),
+    remaining:
+      mode === 'allowance'
+        ? String(Number((await readBalance(allowanceId!)) ?? 0n) / 1e7)
+        : await usdcBalance(payer.publicKey()),
+    remainingLabel: mode === 'allowance' ? 'allowance after' : 'wallet after',
   });
+}
+
+async function readBalance(contractId: string): Promise<bigint | null> {
+  try {
+    const value = await read(contractId, 'balance');
+    return BigInt(value as string | number | bigint);
+  } catch {
+    return null;
+  }
 }
 
 function required(name: string): string {
