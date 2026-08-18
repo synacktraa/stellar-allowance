@@ -1,0 +1,27 @@
+# Rust build output — 1.6 GB and fully reproducible from source
+target/
+**/target/
+
+# Soroban writes these on every test run; regenerated, not reviewed
+test_snapshots/
+
+# Environment-specific: contract ids and rule sets differ per deployment
+.contract-id
+rules.json
+
+# Secrets
+.env
+.env.local
+.env*.local
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.vercel/
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
