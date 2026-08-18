@@ -24,7 +24,10 @@ const siteUrl =
     : "http://localhost:3000");
 
 const description =
-  "Set three limits — most per purchase, most per rolling window, and who may be paid. Your AI agent has to ask before every purchase, and the contract answers. Break a rule and the money does not move.";
+  "A spending limit for AI agents, enforced on-chain rather than promised in code.";
+
+/** The social title from the content spec. The tab keeps the short name. */
+const socialTitle = "Stellar Allowance — Spending limits for AI agents";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -35,7 +38,7 @@ export const metadata: Metadata = {
   description,
   applicationName: "Stellar Allowance",
   openGraph: {
-    title: "Stellar Allowance",
+    title: socialTitle,
     description,
     url: siteUrl,
     siteName: "Stellar Allowance",
@@ -43,7 +46,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Stellar Allowance",
+    title: socialTitle,
     description,
   },
   robots: { index: true, follow: true },

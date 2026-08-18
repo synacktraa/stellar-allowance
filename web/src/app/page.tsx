@@ -4,222 +4,260 @@ import { FlowDiagram } from '@/components/FlowDiagram';
 import { SiteHeader } from '@/components/SiteHeader';
 
 /**
- * The landing page.
+ * The landing page, built to the content spec.
  *
- * Written for someone deciding in about fifteen seconds whether this is real, rather than for
- * someone who already knows what an agent wallet is. The previous version led with the fear —
- * "Agents can spend. Nothing stops them." — which names a problem but leaves a reader who does
- * not already have that problem with nothing to act on.
+ * Section order follows the spec exactly. The hero is verbatim and must not be reworded.
  *
- * Two rules govern every claim below, and they are the reason this file is mostly data.
+ * Three claims in the spec did not survive checking against the contracts, and are written here
+ * in the nearest form that is true. Each is noted at the point it appears, so a future editor
+ * can see why the wording differs from the brief rather than assuming it drifted:
  *
- * Numbers are exact and checkable. A rounded number reads as a claim; an exact one reads as a
- * measurement, and every figure here comes from a recorded run or from the code.
+ *   §4 / §11  the three rules ARE changeable, by the owner alone (`set_rules`, owner-gated).
+ *             What cannot be changed is a splitter's fee split. The reassurance the spec wants
+ *             is still true and still load-bearing — it just belongs to the agent, not to time.
+ *   §11       an agent does need code: 402 → ask the contract → repeat with the payment.
+ *             The API is what needs none.
+ *   §10       `install:web`, `setup` and `seed-demo` are not scripts in this repo.
  *
- * The limits are volunteered rather than buried. For a product whose whole premise is that a
- * refusal is real, an overstatement anywhere costs more than a named gap ever could — so the
- * things it does not do yet get a numbered section, not a footnote.
+ * "Reverts", "the money does not move" and "cannot be changed" are kept literal everywhere they
+ * are actually true, per the spec's copy rules.
  */
 
 const DEMO_API_ID = process.env.DEMO_API_ID ?? '';
 const DEMO_ALLOWANCE = process.env.ALLOWANCE_CONTRACT_ID ?? '';
 const AGENT = process.env.DEMO_AGENT_ADDRESS ?? '';
 
-/** The numbers a sceptic can check in about a minute. */
+const REPO = 'https://github.com/synacktraa/stellar-allowance';
+
+/** §2 */
+const PROBLEM_CARDS = [
+  {
+    heading: 'Retries cost real money',
+    body: 'A broken endpoint returns an error. Your agent tries again. And again. Four hundred times is not a hypothetical — it is default behaviour.',
+  },
+  {
+    heading: 'Bugs spend faster than you can watch',
+    body: 'A loop in your agent’s logic drains a wallet before an alert reaches you. Alerts tell you what already happened.',
+  },
+  {
+    heading: 'The agent holds your wallet',
+    body: 'Give an agent keys and you have given it everything in the account. Compromise the agent, compromise the funds.',
+  },
+];
+
+/** §3 */
+const LIMITS = [
+  { name: 'Most per purchase', body: 'no single payment above this, ever' },
+  { name: 'Most per time frame', body: 'small payments still add up to a ceiling' },
+  { name: 'Which vendors get paid', body: 'anywhere else, the answer is no' },
+];
+
+/** §6 */
+const SIDES = [
+  {
+    tag: 'RUNNING AN AGENT',
+    steps: [
+      'Create an agent that holds no money',
+      'Set the three rules',
+      'Fund the contract',
+      'Watch what it buys — and what it was refused',
+    ],
+    cta: { href: '/user', label: 'Set an allowance →' },
+  },
+  {
+    tag: 'RUNNING A SERVICE',
+    steps: [
+      'Register your API endpoint',
+      'Set a price per call',
+      'Hand out the paid URL',
+      'Press a button to collect your share',
+    ],
+    cta: { href: '/developer', label: 'Charge for my API →' },
+  },
+];
+
+/** §8 — every figure from a recorded run. If one changes, change it here, do not round it. */
 const STATS = [
-  { value: '3', unit: 'rules', caption: 'enforced by the network, not by your agent’s code' },
-  { value: '0', unit: 'USDC', caption: 'the agent can hold — its account has no USDC trustline' },
-  { value: '5 / 6', unit: '', caption: 'purchases paid in the recorded run; the sixth was refused' },
-  { value: '18', unit: 'tests', caption: 'across both contracts, none of which need a network' },
-];
-
-/**
- * The two audiences, and the bind each one is in. Keeping them side by side is what explains
- * why a single product has two doors — the site splits into /user and /developer, and a reader
- * arriving cold cannot otherwise tell which one is theirs.
- */
-const PROBLEMS = [
   {
-    tag: 'IF YOU RUN AGENTS',
-    title: 'A key that can pay once can pay forever',
-    lines: [
-      'A retry loop is a spending loop. The same call, made forty times, is paid for forty times — and every HTTP library retries by default.',
-      'An agent has no concept of expensive. A page it reads can point it at a costlier endpoint, and it will pay.',
-      'A monthly budget does not stop a runaway loop. It funds one.',
-      'You find out afterwards. There is no record of what got spent where, only a balance that went down.',
-    ],
+    stat: '5 paid, 6th refused',
+    detail:
+      'Six calls of 0.1 USDC against a 0.5 USDC window cap. The recipient received exactly 0.5 USDC.',
   },
   {
-    tag: 'IF YOU RUN AN API',
-    title: 'Charging per call means becoming a bank',
-    lines: [
-      'Subscriptions are simple but blunt. Heavy users are subsidised by light ones, and you leave money on the table.',
-      'Per-call billing needs a settlement system — splitting fees, chasing payouts, handling disputes.',
-      'And your developers still have to trust you. Will the platform pay out? Can it change the terms later?',
-      'Building that trust is infrastructure you did not set out to write.',
-    ],
+    stat: '0.18 / 0.02 split, exact',
+    detail:
+      'Two calls of 0.1 USDC paid into a splitter, then flushed. Developer got 0.18, platform 0.02, splitter left holding nothing. The flush was triggered by the agent, not the platform.',
+  },
+  {
+    stat: '6.9s mean per purchase',
+    detail:
+      'Range 4.6–9.0s. Quote 0.4–1.2s, pay 2.8–6.8s waiting for a ledger to close, deliver 1.4–2.0s.',
   },
 ];
 
-/** The three rules, with the defaults the demo ships with. */
-const RULES = [
-  {
-    tag: 'PER_CALL',
-    value: '0.10',
-    title: 'Most per purchase',
-    body: 'One purchase can never exceed this. The worst that a single bad instruction can cost is one cap.',
-  },
-  {
-    tag: 'WINDOW',
-    value: '0.50',
-    title: 'Most per rolling window',
-    body: 'A hard ceiling on the rate, not the total. The window rolls continuously, so spend cannot be parked at 23:59 and repeated at 00:01.',
-  },
-  {
-    tag: 'ALLOWLIST',
-    value: '1',
-    title: 'Who may be paid',
-    body: 'Only the addresses you tick. Anything not on the list is refused, however small the amount.',
-  },
+/** §9 */
+const GLOSSARY = [
+  ['The errand runner', 'an AI agent', 'a program that acts on its own'],
+  ['The shop or service', 'an API', 'one program buying something from another'],
+  ['Your cash machine', 'a smart contract', 'a small program that holds money and follows fixed rules'],
+  ['The rules it enforces', 'on-chain limits', 'enforced by the network, not by the agent'],
+  ['The till that splits payments', 'a splitter contract', 'fixed share when it is created'],
+  ['The money itself', 'USDC', 'a digital currency worth one dollar'],
+  ['The whole network', 'Stellar', 'where the money and the contracts live'],
+  ['Test money, not real', 'testnet', 'everything we show costs nothing real'],
 ];
 
-/**
- * Why it holds. Each of these is a property of the system rather than a promise about it, which
- * is the distinction the whole page is trying to earn.
- */
-const MECHANISMS = [
-  {
-    tag: 'THE AGENT HOLDS NO USDC',
-    body: 'It has a key and a little XLM for its own transaction fees, and that is all. Its account has no USDC trustline, so it cannot hold the asset it spends — not a policy, a property of the account. There is no balance to drain.',
-  },
-  {
-    tag: 'THE REFUSAL IS THE NETWORK’S',
-    body: 'A blocked purchase is not a warning or a logged event. The money does not move, because the network will not move it, and the agent’s own code has no say in it. It costs nothing either: the rules run during simulation, before anything is submitted.',
-  },
-  {
-    tag: 'THE SPLIT CANNOT BE EDITED',
-    body: 'Each API gets its own payment contract, with the developer’s share and the platform fee fixed when it is created. Setup cannot be run twice. This is arithmetic nobody can change, not a promise anyone makes.',
-  },
-  {
-    tag: 'PAYOUTS DO NOT WAIT ON US',
-    body: 'Collecting is permissionless — any address can trigger a payout, and it can only ever reach the two addresses fixed at creation. In the recorded run the payout was triggered by the agent, not by the platform.',
-  },
-];
-
-/** Recorded results, not intentions. Readable on testnet by anyone who cares to look. */
-const PROOF = [
-  {
-    figure: '0.5000000',
-    unit: 'USDC',
-    body: 'Six purchases of 0.1 USDC against a 0.5 window cap. Five paid, the sixth refused, and the seller ended holding exactly this. Not 0.6.',
-  },
-  {
-    figure: '0.18 / 0.02',
-    unit: 'USDC',
-    body: 'Two payments of 0.1 into a seller’s contract, then paid out: 0.18 to the developer, 0.02 to the platform, and the contract left holding nothing.',
-  },
-  {
-    figure: 'agent',
-    unit: 'triggered it',
-    body: 'That payout was started by the agent, not by the platform. Anyone can start one, and it can only ever reach the two addresses fixed at creation.',
-  },
-];
-
-/**
- * A worked example beats a feature list for this product, because the whole value only shows up
- * over a sequence of calls. One is enough; two would be padding.
- */
-const WALKTHROUGH = [
-  'You set the rules: 0.50 USDC per rolling window, 0.10 at most per call, and one approved API.',
-  'You deposit 2 USDC. It sits in a contract in your name, and you can take all of it back whenever you like.',
-  'Your agent runs overnight and starts buying. Calls one to five go through at 0.10 each.',
-  'The service starts failing and the agent’s HTTP library retries. Call six asks for another 0.10.',
-  'The window is at 0.50. The contract refuses. No money moves, and the agent gets an error naming the rule that stopped it.',
-  'You wake up to 1.50 USDC still in the contract, and a seller who received exactly 0.50.',
-];
-
+/** §11 */
 const FAQ = [
   {
-    q: 'Can the agent just ignore the limit?',
-    a: 'It never holds the money. The refusal is the payment network declining to move funds, so the agent’s own code has no say in it.',
+    q: 'Can the limits be changed after the contract is created?',
+    // The spec said "No. They're set at creation." `set_rules` is owner-gated, not absent —
+    // so the promise is kept where it is real: the agent cannot move them.
+    a: 'Only by you, with your own signature. The agent cannot change them, cannot be tricked into overriding them, and cannot be reprogrammed to ignore them, because the rules are not in its code. Spending already counted stays counted, so an edit cannot hand an agent a fresh window.',
   },
   {
-    q: 'Who can take the money out?',
-    a: 'Only the wallet that put it in. We deploy the contract and pay the fee, and we cannot spend from it, change its rules, or stop you emptying it.',
+    q: 'Can the platform change the fee split, or hold my money?',
+    a: 'No. The developer’s share and the platform fee are fixed when the splitter is created and cannot be changed by either side. Payment lands in the contract, not in a platform account, and flush() can only ever reach the two addresses set at creation.',
   },
   {
-    q: 'Can I change the limits after setting them?',
-    a: 'Yes — the owner can retighten or loosen all three on a running allowance, without redeploying or moving money. What has already been spent stays counted, so an edit cannot hand an agent a fresh window. The one thing nobody can change is an API’s fee split, which is fixed when its contract is created.',
+    q: 'Do I have to change my agent’s code?',
+    // The spec said "No... it points at the paid URL instead." A paid URL answers 402; without
+    // the spend call the agent gets a price and no purchase.
+    a: 'A little. Your agent requests the paid URL, is quoted a price in a 402, asks the contract to pay it, then repeats the request with the payment attached. That is three calls, and the whole file is on the setup page ready to copy.',
   },
   {
-    q: 'Does my API have to change?',
-    a: 'No. Point us at the URL you already run and set a price, and you get a new URL back. No SDK, no code, no redeploy — a gateway in front collects the payment and forwards the request.',
+    q: 'Do I have to change my API?',
+    a: 'No. The gateway sits in front of it, handles the 402, and forwards the request through.',
   },
   {
-    q: 'Does my agent have to change?',
-    a: 'Yes, a little. It needs three calls: request the URL and get quoted a price, ask the contract to pay it, then come back with the payment. The whole integration is one file, and it is on the setup page ready to copy.',
+    q: 'What happens when a purchase breaks a rule?',
+    a: 'The transaction reverts. No money moves and your agent gets an error back. Nothing partial, nothing to reconcile — and it costs nothing, because the rules run during simulation before anything is submitted.',
   },
   {
-    q: 'How do I know the 90/10 split is really 90/10?',
-    a: 'The shares are written into the API’s own contract when it is created and setup cannot be run twice. A recorded run paid out 0.18 and 0.02 on 0.2, leaving nothing behind.',
+    q: 'Do I need to understand Stellar or smart contracts?',
+    a: 'No. You set three numbers and fund an account. The chain is doing the enforcing, but you interact with a form.',
   },
   {
-    q: 'What if an API takes the payment and then fails?',
-    a: 'The payment stands. There is no refund path yet — the reference and transaction are recorded, which is what a refund would need, but it is designed rather than built.',
+    q: 'How much does running it cost?',
+    a: 'Stellar fees are a rounding error, and Supabase’s free tier covers a small deployment. The expensive part is the API calls your agent makes.',
   },
   {
-    q: 'Do I need to understand blockchains?',
-    a: 'You connect a wallet, type three numbers, tick which APIs may be paid, and add money. The four steps assume you have never touched one.',
+    q: 'Can I use this with real money?',
+    a: 'Not yet. It is unaudited and built for testnet. Do not put mainnet funds behind it.',
   },
 ];
 
-/** Said plainly and early, because the product is a promise that a refusal is real. */
-const LIMITS = [
-  'Not audited, not mainnet. A hackathon build on Stellar testnet using test USDC, which has no value. Do not point real money at it.',
-  'Retries are not yet idempotent. A purchase that times out and is retried can pay twice — the window cap bounds what that costs, but it does not prevent it. Making payment itself idempotent is the next change.',
-  'No refunds. If an API takes the payment and then fails, the payment stands.',
-  'One agent per allowance. An agent that spawns sub-agents cannot yet give each one a slice of the same balance.',
-  'The chain proves payment, not delivery. It can show that money moved. Whether the thing arrived is an HTTP response, and nothing on a network can attest to that.',
+/** §13 */
+const FOOTER_LINKS = [
+  { label: 'GitHub', href: REPO },
+  { label: 'Contract design notes', href: `${REPO}/blob/main/docs/CONTRACT.md` },
+  { label: 'Stellar docs', href: 'https://developers.stellar.org' },
+  { label: 'Testnet USDC', href: 'https://faucet.circle.com' },
 ];
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-3xl font-medium tracking-tight leading-tight max-w-[24ch] mb-5">
+      {children}
+    </h2>
+  );
+}
 
 export default function Home() {
   return (
     <main className="relative z-10">
       <SiteHeader />
 
-      {/* ------------------------------------------------------------- hero */}
+      {/* ============================================================ 1 hero */}
       <section className="grid-field border-b border-[color:var(--line)]">
-        <div className="mx-auto max-w-[1180px] px-6 pt-16 pb-14 lg:pt-20 grid gap-12 lg:grid-cols-[1.15fr_1fr] lg:items-center">
+        <div className="mx-auto max-w-[1180px] px-6 pt-16 pb-14 lg:pt-24 lg:pb-20">
+          <p className="label mb-6">[ SPENDING LIMITS FOR AI AGENTS · STELLAR TESTNET ]</p>
+
+          <h1 className="display max-w-[17ch]">
+            Give agents an allowance. Your costs stay put.
+          </h1>
+
+          <div className="mt-8 max-w-[56ch] space-y-2 text-lg leading-relaxed">
+            <p>It&rsquo;s simple. Like a real allowance, but for AI.</p>
+            <p className="text-[color:var(--muted)]">
+              Set three limits&mdash;per purchase, per time frame, and which vendors get paid.
+            </p>
+            <p>Your agents can&rsquo;t break them. Ever.</p>
+          </div>
+
+          <div className="mt-10 flex flex-wrap gap-3">
+            <Link href="/user" className="chip chip-accent px-5 py-3">
+              Set an allowance →
+            </Link>
+            <a
+              href="#how"
+              className="chip px-5 py-3 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
+            >
+              Learn how →
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================= 2 problem */}
+      <section className="border-b border-[color:var(--line)]">
+        <div className="mx-auto max-w-[1180px] px-6 py-16">
+          <p className="label mb-4">[ 01 · THE PROBLEM ]</p>
+          <SectionHeading>
+            An agent that pays for things needs a wallet. A wallet has no limits.
+          </SectionHeading>
+          <p className="text-[color:var(--muted)] max-w-[64ch] mb-10 leading-relaxed">
+            When a request fails, every HTTP library retries. Each retry is now a real payment.
+            Nobody stole anything and nobody was dishonest — the agent did exactly what it was
+            told, and nothing stood between it and your money.
+          </p>
+
+          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-3">
+            {PROBLEM_CARDS.map((card) => (
+              <div key={card.heading} className="bg-[color:var(--ground)] p-7">
+                <h3 className="text-base font-medium mb-3">{card.heading}</h3>
+                <p className="text-sm text-[color:var(--muted)] leading-relaxed">{card.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ==================================================== 3 what we built */}
+      <section id="how" className="border-b border-[color:var(--line)] scroll-mt-16">
+        <div className="mx-auto max-w-[1180px] px-6 py-16 grid gap-12 lg:grid-cols-[1.2fr_1fr] lg:items-start">
           <div>
-            <p className="label mb-6">[ SPENDING LIMITS FOR AI AGENTS · STELLAR TESTNET ]</p>
-
-            <h1 className="display max-w-[15ch]">
-              Your agent can spend. Your budget cannot.
-            </h1>
-
-            <p className="mt-7 max-w-[54ch] text-[color:var(--text)] leading-relaxed">
-              Set three limits: most per purchase, most per rolling window, and which addresses may
-              be paid. Your agent has to ask before every purchase, and the contract answers.
+            <p className="label mb-4">[ 02 · WHAT WE BUILT ]</p>
+            <SectionHeading>
+              Don&rsquo;t give the agent your wallet. Give it something to ask.
+            </SectionHeading>
+            <p className="text-[color:var(--muted)] max-w-[58ch] leading-relaxed">
+              The money goes into a contract the agent cannot spend from. Every purchase has to go
+              through it, and the contract has rules you set when you funded it:
             </p>
 
-            <p className="mt-5 max-w-[54ch] text-[color:var(--muted)] leading-relaxed">
-              Handing an agent a wallet hands it everything in the wallet, to spend on anything,
-              with you finding out afterwards. Stellar Allowance keeps the money where the agent
-              cannot reach it. Break a rule and the money does not move — because the network will
-              not move it, not because the agent decided to behave.
+            <dl className="mt-7 space-y-px bg-[color:var(--line)]">
+              {LIMITS.map((limit) => (
+                <div key={limit.name} className="bg-[color:var(--ground)] px-5 py-4">
+                  <dt className="text-sm font-medium">{limit.name}</dt>
+                  <dd className="text-sm text-[color:var(--muted)] mt-1">{limit.body}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <p className="mt-7 text-[color:var(--muted)] max-w-[58ch] leading-relaxed">
+              When a purchase breaks a rule, the transaction reverts. Not &ldquo;the agent is
+              warned&rdquo;, not &ldquo;you get an email afterwards&rdquo; — the money does not
+              move. The agent can&rsquo;t argue with it, can&rsquo;t be tricked into overriding
+              it, and can&rsquo;t be reprogrammed to ignore it, because the rules aren&rsquo;t in
+              its code.
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/user" className="chip chip-accent px-4 py-2.5">
-                Give an agent a budget →
-              </Link>
-              <Link
-                href="/developer"
-                className="chip px-4 py-2.5 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
-              >
-                Charge for my API →
-              </Link>
-            </div>
+            <blockquote className="mt-9 border-l-2 pl-5 border-[color:var(--accent)]">
+              <p className="text-xl leading-snug max-w-[34ch]">
+                The agent didn&rsquo;t behave better. It couldn&rsquo;t behave worse.
+              </p>
+            </blockquote>
           </div>
 
           <div className="lg:max-w-[420px] lg:justify-self-end w-full">
@@ -229,180 +267,128 @@ export default function Home() {
         </div>
       </section>
 
-      {/* --------------------------------------------------- numbers, early */}
+      {/* ======================================================= 4 why chain */}
       <section className="border-b border-[color:var(--line)]">
-        <div className="mx-auto max-w-[1180px] px-6">
-          <div className="grid gap-px bg-[color:var(--line)] sm:grid-cols-2 lg:grid-cols-4">
-            {STATS.map((stat) => (
-              <div key={stat.caption} className="bg-[color:var(--ground)] px-6 py-7">
-                <p className="num text-3xl text-[color:var(--accent)]">
-                  {stat.value}
-                  {stat.unit && (
-                    <span className="text-sm text-[color:var(--faint)]"> {stat.unit}</span>
-                  )}
-                </p>
-                <p className="mt-2 text-sm text-[color:var(--muted)] leading-relaxed">
-                  {stat.caption}
-                </p>
-              </div>
-            ))}
+        <div className="mx-auto max-w-[1180px] px-6 py-16">
+          <p className="label mb-4">[ 03 · WHY ON-CHAIN MATTERS ]</p>
+          <SectionHeading>Enforced on-chain, not promised in code.</SectionHeading>
+
+          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-2 mt-8">
+            <div className="bg-[color:var(--ground)] p-7">
+              <p className="label mb-4">[ A LIMIT IN CODE ]</p>
+              <p className="text-sm text-[color:var(--muted)] leading-relaxed">
+                A limit in software is a promise. Software ships updates. Code has bugs. Config
+                gets overridden. Whoever controls the deploy controls the limit — and you have to
+                trust them.
+              </p>
+            </div>
+            <div className="bg-[color:var(--ground)] p-7">
+              <p className="label mb-4" style={{ color: 'var(--lavender)' }}>
+                [ A LIMIT IN A CONTRACT ]
+              </p>
+              {/* The spec said the rules "cannot be changed afterward". They can — by the owner,
+                  never by the agent. The distinction is the whole guarantee, so it is drawn. */}
+              <p className="text-sm text-[color:var(--muted)] leading-relaxed">
+                The rules live in the contract, not in the agent. Only you can change them, with
+                your own signature. The agent holds no funds and has no USDC trustline, so it
+                cannot hold the asset at all. A purchase that breaks a rule reverts on the network,
+                and the agent&rsquo;s own code has no say in it.
+              </p>
+            </div>
           </div>
+
+          <p className="mt-8 text-[color:var(--muted)] max-w-[58ch] leading-relaxed">
+            Nobody has to be trusted, because you can go and look at how it&rsquo;s built.
+          </p>
         </div>
       </section>
 
-      {/* ------------------------------------------------------- 01 problem */}
+      {/* ====================================================== 5 other half */}
       <section className="border-b border-[color:var(--line)]">
         <div className="mx-auto max-w-[1180px] px-6 py-16">
-          <p className="label mb-4">[ 01 · THE PROBLEM, FROM BOTH ENDS ]</p>
-          <h2 className="text-3xl font-medium tracking-tight mb-3">
-            A wallet says yes to everything.
-          </h2>
-          <p className="text-[color:var(--muted)] max-w-[62ch] mb-9 leading-relaxed">
-            A key that can sign a payment can sign every payment. It has no idea what a thing
-            should cost, no idea who it is paying, and no way to say no twice in a row. On the
-            other side of the same transaction, an API that wants to charge per call has to build
-            a settlement system before it can take a cent.
+          <p className="label mb-4">[ 04 · THE OTHER HALF ]</p>
+          <SectionHeading>The same deployment lets you charge per call.</SectionHeading>
+
+          <p className="text-[color:var(--muted)] max-w-[64ch] leading-relaxed">
+            Point it at an API you already run and set a price. You get a URL that answers{' '}
+            <span className="num text-[color:var(--text)]">402 Payment Required</span>, takes
+            payment, and forwards the request. Nothing about your API changes.
           </p>
 
-          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-2">
-            {PROBLEMS.map((problem) => (
-              <div key={problem.tag} className="bg-[color:var(--ground)] p-7">
-                <p className="label mb-4">[ {problem.tag} ]</p>
-                <h3 className="text-base font-medium mb-4">{problem.title}</h3>
-                <ul className="space-y-3">
-                  {problem.lines.map((line) => (
-                    <li
-                      key={line}
-                      className="text-sm text-[color:var(--muted)] leading-relaxed pl-4 border-l border-[color:var(--line-bright)]"
-                    >
-                      {line}
+          <p className="mt-5 text-[color:var(--muted)] max-w-[64ch] leading-relaxed">
+            <strong className="text-[color:var(--text)] font-medium">
+              And the money doesn&rsquo;t come to us.
+            </strong>{' '}
+            Payment lands in a splitter contract built for you. The split — your share and the
+            platform fee — is fixed when the contract is created and cannot be changed by either
+            side. <span className="num text-[color:var(--text)]">flush()</span> is permissionless:
+            anyone can trigger the payout, and it can only ever reach the two addresses set at
+            creation. If we vanished tomorrow, you could still collect.
+          </p>
+        </div>
+      </section>
+
+      {/* ======================================================= 6 two sides */}
+      <section className="border-b border-[color:var(--line)]">
+        <div className="mx-auto max-w-[1180px] px-6 py-16">
+          <p className="label mb-4">[ 05 · THE TWO SIDES ]</p>
+          <SectionHeading>Neither side needs to understand what&rsquo;s underneath.</SectionHeading>
+
+          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-2 mt-8">
+            {SIDES.map((side) => (
+              <div key={side.tag} className="bg-[color:var(--ground)] p-7">
+                <p className="label mb-5">[ {side.tag} ]</p>
+                <ol className="space-y-3 mb-6">
+                  {side.steps.map((step, index) => (
+                    <li key={step} className="flex gap-4 items-baseline">
+                      <span className="label shrink-0">{String(index + 1).padStart(2, '0')}</span>
+                      <span className="text-sm leading-relaxed">{step}</span>
                     </li>
                   ))}
-                </ul>
+                </ol>
+                <Link
+                  href={side.cta.href}
+                  className="chip px-4 py-2.5 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
+                >
+                  {side.cta.label}
+                </Link>
               </div>
             ))}
           </div>
+
+          <p className="mt-8 text-[color:var(--muted)] max-w-[62ch] leading-relaxed">
+            One sees a budget and a list of purchases. The other sees a price and a balance going
+            up.
+          </p>
         </div>
       </section>
 
-      {/* --------------------------------------------------------- 02 rules */}
-      <section className="border-b border-[color:var(--line)]">
+      {/* ============================================================ 7 demo */}
+      <section id="demo" className="border-b border-[color:var(--line)] scroll-mt-16">
         <div className="mx-auto max-w-[1180px] px-6 py-16">
-          <p className="label mb-4">[ 02 · THE THREE RULES YOU SET ]</p>
-          <h2 className="text-3xl font-medium tracking-tight mb-3">
-            How much, how often, and who.
-          </h2>
-          <p className="text-[color:var(--muted)] max-w-[62ch] mb-9 leading-relaxed">
-            You type three numbers and tick which APIs may be paid. All three can be changed later
-            on a running allowance, without redeploying or moving your money — and what has
-            already been spent stays counted, so an edit cannot hand an agent a fresh window.
+          <p className="label mb-4">[ 06 · THE DEMO ]</p>
+          <SectionHeading>The same agent, the same errand, twice.</SectionHeading>
+
+          <p className="text-[color:var(--muted)] max-w-[64ch] leading-relaxed">
+            First run, the agent holds the wallet. The shop&rsquo;s payment fails, the agent
+            retries, and it keeps paying until the money is gone. Second run, the agent holds
+            nothing and has to ask. It buys five things, then the sixth request breaks a rule and
+            gets nothing.
           </p>
 
-          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-3">
-            {RULES.map((rule) => (
-              <div key={rule.tag} className="bg-[color:var(--ground)] p-7">
-                <div className="flex items-baseline justify-between mb-5">
-                  <span className="label">[ {rule.tag} ]</span>
-                  <span className="num text-2xl text-[color:var(--accent)]">{rule.value}</span>
-                </div>
-                <h3 className="text-base font-medium mb-2">{rule.title}</h3>
-                <p className="text-sm text-[color:var(--muted)] leading-relaxed">{rule.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ----------------------------------------------------- 03 mechanism */}
-      <section className="border-b border-[color:var(--line)]">
-        <div className="mx-auto max-w-[1180px] px-6 py-16">
-          <p className="label mb-4">[ 03 · WHY IT HOLDS ]</p>
-          <h2 className="text-3xl font-medium tracking-tight mb-3">
-            Four properties, not four promises.
-          </h2>
-          <p className="text-[color:var(--muted)] max-w-[62ch] mb-9 leading-relaxed">
-            Nothing about the agent gets safer. It still has a key, still makes the same calls,
-            still gets fed the same instructions. What changes is that the key no longer opens the
-            money — it only opens a request.
+          <p className="mt-5 text-[color:var(--muted)] max-w-[64ch] leading-relaxed">
+            Same errand, same broken shop, same first five purchases. Then one wallet is empty and
+            the other still has money in it. That contrast is the whole product.
           </p>
 
-          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-2">
-            {MECHANISMS.map((item) => (
-              <div key={item.tag} className="bg-[color:var(--ground)] p-7">
-                <p className="label mb-3" style={{ color: 'var(--lavender)' }}>
-                  [ {item.tag} ]
-                </p>
-                <p className="text-sm text-[color:var(--muted)] leading-relaxed">{item.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ---------------------------------------------------- 04 walkthrough */}
-      <section className="border-b border-[color:var(--line)]">
-        <div className="mx-auto max-w-[1180px] px-6 py-16 grid gap-12 lg:grid-cols-[1fr_1.2fr] lg:items-start">
-          <div>
-            <p className="label mb-4">[ 04 · ONE NIGHT, STEP BY STEP ]</p>
-            <h2 className="text-3xl font-medium tracking-tight mb-4 max-w-[14ch] leading-tight">
-              What a capped run looks like.
-            </h2>
-            <p className="text-[color:var(--muted)] leading-relaxed max-w-[46ch]">
-              An agent doing research overnight, against an API that starts failing halfway
-              through. The interesting part is step five.
+          <div className="panel p-5 pt-8 mt-8 mb-8 max-w-[64ch]">
+            <span className="panel-tag">[ NOT SIMULATED ]</span>
+            <p className="text-sm text-[color:var(--muted)] leading-relaxed">
+              Every purchase in the demo is a real payment on a real network. It&rsquo;s testnet
+              money, but nothing is faked or simulated — which is why each purchase takes a few
+              seconds. We&rsquo;re genuinely waiting for the ledger to close.
             </p>
           </div>
-
-          <ol className="space-y-px bg-[color:var(--line)]">
-            {WALKTHROUGH.map((step, index) => (
-              <li
-                key={step}
-                className="bg-[color:var(--ground)] px-5 py-4 flex gap-4 items-baseline"
-              >
-                <span className="label shrink-0">{String(index + 1).padStart(2, '0')}</span>
-                <span
-                  className="text-sm leading-relaxed"
-                  style={{ color: index === 4 ? 'var(--held)' : 'var(--muted)' }}
-                >
-                  {step}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
-
-      {/* --------------------------------------------------------- 05 proof */}
-      <section className="border-b border-[color:var(--line)]">
-        <div className="mx-auto max-w-[1180px] px-6 py-16">
-          <p className="label mb-4">[ 05 · PROOF ]</p>
-          <h2 className="text-3xl font-medium tracking-tight mb-3">
-            We ran it. Here is what the chain says.
-          </h2>
-          <p className="text-[color:var(--muted)] max-w-[62ch] mb-9 leading-relaxed">
-            Not descriptions of intent — the recorded results of two runs against deployed
-            contracts, written to seven decimal places because the point is the seventh one.
-          </p>
-
-          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-3 mb-12">
-            {PROOF.map((item) => (
-              <div key={item.figure} className="bg-[color:var(--ground)] p-7">
-                <p className="num text-xl text-[color:var(--held)]">
-                  {item.figure}{' '}
-                  <span className="text-xs text-[color:var(--faint)]">{item.unit}</span>
-                </p>
-                <p className="mt-3 text-sm text-[color:var(--muted)] leading-relaxed">
-                  {item.body}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <h3 className="text-xl font-medium tracking-tight mb-2">The same agent, run twice</h3>
-          <p className="text-[color:var(--muted)] max-w-[58ch] mb-8 leading-relaxed">
-            Same script, same API, same seven attempts against the same failing service. The only
-            thing that changes is where the money sits. Both runs pay real testnet USDC.
-          </p>
 
           {DEMO_API_ID && DEMO_ALLOWANCE ? (
             <DemoRunner apiId={DEMO_API_ID} allowanceId={DEMO_ALLOWANCE} />
@@ -412,73 +398,134 @@ export default function Home() {
               <p className="text-sm text-[color:var(--muted)]">
                 Set <code className="font-mono text-[color:var(--accent)]">DEMO_API_ID</code> and{' '}
                 <code className="font-mono text-[color:var(--accent)]">ALLOWANCE_CONTRACT_ID</code>{' '}
-                to run the demo from this page.
+                in <code className="font-mono text-[color:var(--accent)]">web/.env.local</code> to
+                run the demo from this page.
               </p>
             </div>
           )}
         </div>
       </section>
 
-      {/* ----------------------------------------------------- 06 two sides */}
+      {/* ======================================================== 8 verified */}
       <section className="border-b border-[color:var(--line)]">
         <div className="mx-auto max-w-[1180px] px-6 py-16">
-          <p className="label mb-4">[ 06 · TWO SIDES OF THE SAME PAYMENT ]</p>
-          <h2 className="text-3xl font-medium tracking-tight mb-3">Two sides. One payment.</h2>
-          <p className="text-[color:var(--muted)] max-w-[62ch] mb-9 leading-relaxed">
-            One of you is setting a limit; the other is getting paid. Neither has to trust the
-            other, and neither has to trust us.
-          </p>
+          <p className="label mb-4">[ 07 · VERIFIED ON CHAIN ]</p>
+          <SectionHeading>Numbers from actual runs, not estimates.</SectionHeading>
 
-          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-2">
-            <div className="bg-[color:var(--ground)] p-7">
-              <p className="label mb-4">[ IF YOU RUN AN AGENT ]</p>
-              <h3 className="text-base font-medium mb-3">Four steps, then three calls</h3>
-              <p className="text-sm text-[color:var(--muted)] leading-relaxed mb-5">
-                Connect a wallet, create an agent account, set the rules, add money. Your
-                agent&rsquo;s code needs three calls: request the URL and get quoted a price, ask
-                the contract to pay it, then come back with the payment. The whole integration is
-                one file, and it is on the setup page ready to copy. A refused purchase throws with
-                the rule that stopped it, so your error handling can tell &ldquo;too
-                expensive&rdquo; from &ldquo;not on the list&rdquo;.
-              </p>
-              <Link
-                href="/user"
-                className="chip px-4 py-2.5 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
-              >
-                Give an agent a budget →
-              </Link>
-            </div>
-
-            <div className="bg-[color:var(--ground)] p-7">
-              <p className="label mb-4">[ IF YOU RUN AN API ]</p>
-              <h3 className="text-base font-medium mb-3">Point at a URL, set a price</h3>
-              <p className="text-sm text-[color:var(--muted)] leading-relaxed mb-5">
-                Nothing about your API changes: no SDK, no code, no redeploy. A gateway in front
-                collects the payment and forwards the request, and you get a new URL to share.
-                Every paid call sends you 90% into a contract deployed for your API alone. You do
-                not have to trust us to forward it — collecting is permissionless, and the money
-                can only ever reach your address and ours.
-              </p>
-              <Link
-                href="/developer"
-                className="chip px-4 py-2.5 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
-              >
-                Charge for my API →
-              </Link>
-            </div>
+          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-3 mt-8">
+            {STATS.map((item) => (
+              <div key={item.stat} className="bg-[color:var(--ground)] p-7">
+                <p className="num text-lg text-[color:var(--held)] mb-3">{item.stat}</p>
+                <p className="text-sm text-[color:var(--muted)] leading-relaxed">{item.detail}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ----------------------------------------------------------- 07 faq */}
+      {/* ======================================================== 9 glossary */}
       <section className="border-b border-[color:var(--line)]">
         <div className="mx-auto max-w-[1180px] px-6 py-16">
-          <p className="label mb-4">[ 07 · QUESTIONS WORTH ASKING ]</p>
-          <h2 className="text-3xl font-medium tracking-tight mb-9">
-            The ones a sceptic asks first.
-          </h2>
+          <p className="label mb-4">[ 08 · PLAIN-LANGUAGE GLOSSARY ]</p>
+          <SectionHeading>The real words, in case you hear them.</SectionHeading>
+          <p className="text-[color:var(--muted)] max-w-[62ch] mb-9 leading-relaxed">
+            The story above is accurate. These are just what each piece is actually called.
+          </p>
 
-          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-2">
+          <div className="panel">
+            <div className="hidden sm:grid grid-cols-[1fr_1fr_1.4fr] border-b border-[color:var(--line)]">
+              <span className="label px-5 py-3 whitespace-nowrap">[ IN PLAIN TERMS ]</span>
+              <span className="label px-5 py-3 whitespace-nowrap">[ REALLY CALLED ]</span>
+              <span className="label px-5 py-3 whitespace-nowrap">[ WHAT IT MEANS ]</span>
+            </div>
+            {GLOSSARY.map(([plain, real, means]) => (
+              <div
+                key={real}
+                className="grid sm:grid-cols-[1fr_1fr_1.4fr] border-b border-[color:var(--line)] last:border-b-0 py-3 sm:py-0"
+              >
+                <span className="px-5 sm:py-4 text-sm text-[color:var(--muted)]">{plain}</span>
+                <span className="px-5 sm:py-4 text-sm font-medium">{real}</span>
+                <span className="px-5 sm:py-4 text-sm text-[color:var(--muted)]">{means}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===================================================== 10 get started */}
+      <section className="border-b border-[color:var(--line)]">
+        <div className="mx-auto max-w-[1180px] px-6 py-16">
+          <p className="label mb-4">[ 09 · GET STARTED ]</p>
+          <SectionHeading>Fifteen minutes, no credit card.</SectionHeading>
+
+          <p className="text-[color:var(--muted)] max-w-[64ch] mb-9 leading-relaxed">
+            Everything runs on Stellar testnet. You need Node 22+ and a free Supabase account.{' '}
+            <strong className="text-[color:var(--text)] font-medium">
+              You do not need Rust
+            </strong>{' '}
+            — the contracts are already compiled and uploaded, and every allowance and splitter is
+            a cheap instance created from the published hashes.
+          </p>
+
+          <ol className="space-y-px bg-[color:var(--line)] max-w-[76ch]">
+            {[
+              {
+                title: 'Clone and install',
+                code: `git clone ${REPO}\ncd stellar-allowance\nnpm install --prefix web`,
+              },
+              {
+                title:
+                  'Create a free Supabase project and copy its URL, service key and database URL into web/.env.local',
+              },
+              { title: 'Create the tables', code: 'npm run migrate' },
+              {
+                title:
+                  'Get testnet USDC — friendbot issues XLM but not USDC, so send 5 USDC to your wallet and your agent from faucet.circle.com → Stellar Testnet',
+              },
+              { title: 'Start it', code: 'npm run dev' },
+            ].map((step, index) => (
+              <li key={step.title} className="bg-[color:var(--ground)] px-5 py-5">
+                <div className="flex gap-4 items-baseline">
+                  <span className="label shrink-0">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="text-sm leading-relaxed">{step.title}</span>
+                </div>
+                {step.code && (
+                  <pre className="num text-xs leading-relaxed mt-3 ml-10 overflow-x-auto bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] p-3">
+                    <code>{step.code}</code>
+                  </pre>
+                )}
+              </li>
+            ))}
+          </ol>
+
+          <div className="mt-9 flex flex-wrap gap-3">
+            <a
+              href={`${REPO}#readme`}
+              className="chip chip-accent px-5 py-3"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Read the full setup →
+            </a>
+            <a
+              href={REPO}
+              target="_blank"
+              rel="noreferrer"
+              className="chip px-5 py-3 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
+            >
+              View on GitHub →
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================= 11 faq */}
+      <section className="border-b border-[color:var(--line)]">
+        <div className="mx-auto max-w-[1180px] px-6 py-16">
+          <p className="label mb-4">[ 10 · FAQ ]</p>
+          <SectionHeading>The questions that decide it.</SectionHeading>
+
+          <div className="grid gap-px bg-[color:var(--line)] md:grid-cols-2 mt-8">
             {FAQ.map((item) => (
               <div key={item.q} className="bg-[color:var(--ground)] p-7">
                 <h3 className="text-sm font-medium mb-2">{item.q}</h3>
@@ -489,58 +536,49 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ------------------------------------------------- 08 what it is not */}
+      {/* ===================================================== 12 closing CTA */}
       <section className="border-b border-[color:var(--line)]">
-        <div className="mx-auto max-w-[1180px] px-6 py-16">
-          <p className="label mb-4">[ 08 · WHAT THIS IS NOT DOING YET ]</p>
-          <h2 className="text-3xl font-medium tracking-tight mb-3">The list, before you ask.</h2>
-          <p className="text-[color:var(--muted)] max-w-[62ch] mb-9 leading-relaxed">
-            A spending control that overstates itself is worse than none, because the whole
-            product is the promise that a refusal is real.
+        <div className="mx-auto max-w-[1180px] px-6 py-20">
+          <h2 className="display max-w-[16ch]">Set the limits once. Stop watching the wallet.</h2>
+          <p className="mt-7 max-w-[52ch] text-[color:var(--muted)] leading-relaxed">
+            Testnet, no credit card, about fifteen minutes to a working demo.
           </p>
-
-          <ul className="space-y-px bg-[color:var(--line)] max-w-[82ch]">
-            {LIMITS.map((limit) => (
-              <li
-                key={limit}
-                className="bg-[color:var(--ground)] px-5 py-4 text-sm text-[color:var(--muted)] leading-relaxed"
-              >
-                {limit}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      {/* ----------------------------------------------------- closing call */}
-      <section>
-        <div className="mx-auto max-w-[1180px] px-6 py-16">
-          <p className="label mb-4">[ START ]</p>
-          <h2 className="display max-w-[13ch]">Set a limit in four steps.</h2>
-          <p className="mt-6 max-w-[56ch] text-[color:var(--muted)] leading-relaxed">
-            Connect a wallet. Create an agent. Set the rules. Add money. We deploy the contract and
-            pay the fee — and we cannot spend from it, change its rules, or stop you emptying it.
-            Adding money and taking it back are both signed by you.
-          </p>
-
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/user" className="chip chip-accent px-4 py-2.5">
-              Give an agent a budget →
+            <Link href="/user" className="chip chip-accent px-5 py-3">
+              Set an allowance →
             </Link>
-            <Link
-              href="/developer"
-              className="chip px-4 py-2.5 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
+            <a
+              href={`${REPO}/blob/main/docs/CONTRACT.md`}
+              target="_blank"
+              rel="noreferrer"
+              className="chip px-5 py-3 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
             >
-              Charge for my API →
-            </Link>
+              Read the docs →
+            </a>
           </div>
         </div>
       </section>
 
-      <footer className="border-t border-[color:var(--line)]">
-        <div className="mx-auto max-w-[1180px] px-6 py-8 flex flex-wrap gap-x-8 gap-y-2 justify-between label">
-          <span>Stellar testnet · USDC · unaudited</span>
-          <span>Not affiliated with the Stellar Development Foundation</span>
+      {/* ========================================================== 13 footer */}
+      <footer>
+        <div className="mx-auto max-w-[1180px] px-6 py-10">
+          <div className="flex flex-wrap gap-x-8 gap-y-3 mb-8">
+            {FOOTER_LINKS.map((link) => (
+              <a
+                key={link.label}
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                className="label hover:text-[color:var(--accent)] transition-colors"
+              >
+                {link.label} →
+              </a>
+            ))}
+          </div>
+          <p className="label max-w-[70ch] leading-relaxed">
+            Apache 2.0. Unaudited, and built for testnet. Do not put mainnet funds behind it. Not
+            affiliated with the Stellar Development Foundation.
+          </p>
         </div>
       </footer>
     </main>
