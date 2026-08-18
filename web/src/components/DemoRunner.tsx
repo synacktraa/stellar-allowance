@@ -32,7 +32,7 @@ function usdc(stroops?: string) {
 }
 
 function Column({
-  title, tag, rows, running, done, tone, verdict,
+  title, tag, rows, running, done, tone, verdict, holds, startedWith,
 }: {
   title: string;
   tag: string;
@@ -42,6 +42,10 @@ function Column({
   tone: 'drained' | 'held';
   /** Why this column stopped. Both deliver 5 of 7 — the reason is the entire difference. */
   verdict: string;
+  /** Where this side's money sits: a wallet it controls, or a contract it does not. */
+  holds: string;
+  /** The balance before the run. Null until prepare has reported it. */
+  startedWith: number | null;
 }) {
   const delivered = rows.filter((r) => r.delivered).length;
   const last = rows[rows.length - 1];
@@ -102,12 +106,17 @@ function Column({
           </p>
         </div>
         <div className="text-right">
-          <p className="label">{last?.remainingLabel ?? 'left at the end'}</p>
-          <p
-            className="num text-2xl"
-            style={{ color: done ? toneColor : 'var(--line-bright)' }}
-          >
-            {done ? `${Number(last?.remaining ?? 0).toFixed(2)}` : '—'}
+          <p className="label">{holds}</p>
+          {/* A closing balance on its own is unreadable — 0.00 and 0.60 only mean something
+              against what each side started with. Both spent the same 0.50. */}
+          <p className="num text-2xl">
+            <span className="text-[color:var(--faint)]">
+              {startedWith === null ? '—' : startedWith.toFixed(2)}
+            </span>
+            <span className="text-[color:var(--faint)] text-base"> → </span>
+            <span style={{ color: done ? toneColor : 'var(--line-bright)' }}>
+              {done ? Number(last?.remaining ?? 0).toFixed(2) : '—'}
+            </span>
             <span className="text-sm text-[color:var(--faint)]"> USDC</span>
           </p>
         </div>
@@ -128,6 +137,7 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
   const [left, setLeft] = useState<Row[]>([]);
   const [right, setRight] = useState<Row[]>([]);
   const [phase, setPhase] = useState<'idle' | 'preparing' | 'running' | 'done'>('idle');
+  const [start, setStart] = useState<{ left: number; right: number } | null>(null);
 
   async function run() {
     setLeft([]);
@@ -137,11 +147,24 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
     // testnet USDC, so without it the tenth visitor watches two empty columns refuse everything
     // for the same reason, which is the opposite of what the demo is for.
     setPhase('preparing');
-    await fetch('/api/demo/prepare', {
+    setStart(null);
+    const prepared = await fetch('/api/demo/prepare', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ apiId, allowanceId }),
-    }).catch(() => null);
+    })
+      .then((r) => r.json())
+      .catch(() => null);
+
+    // Where each side began. Without it the closing figures are unreadable: 0.00 and 0.60 say
+    // nothing until you know they started at 0.50 and 1.10 — that the same half a dollar left
+    // both, and only one of them had anything behind it.
+    if (prepared?.start) {
+      setStart({
+        left: Number(prepared.start.wallet) / 1e7,
+        right: Number(prepared.start.allowance) / 1e7,
+      });
+    }
 
     setPhase('running');
 
@@ -200,6 +223,8 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
           done={left.length === ATTEMPTS}
           tone="drained"
           verdict="Stopped because there was nothing left."
+          holds="in its own wallet"
+          startedWith={start?.left ?? null}
         />
         <Column
           title="The agent has an allowance"
@@ -209,6 +234,8 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
           done={right.length === ATTEMPTS}
           tone="held"
           verdict="Stopped by the rule, with money still in the contract."
+          holds="in the contract"
+          startedWith={start?.right ?? null}
         />
       </div>
     </div>

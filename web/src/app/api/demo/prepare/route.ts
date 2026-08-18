@@ -27,7 +27,10 @@ export const maxDuration = 60;
 /** What each side needs to tell its half of the story. */
 const WALLET_TARGET = 5_000_000n; // 0.5 USDC — five purchases, then genuinely empty
 const ALLOWANCE_TARGET = 12_000_000n; // 1.2 USDC — always more than the window cap allows
-const ALLOWANCE_FLOOR = 7_000_000n; // top up before it can no longer outlast a run
+// Top up below 1.0 rather than 0.7. At the old floor a run could start at exactly 0.7 and end
+// at 0.2, which still tells the story but faintly: the point is that the rule stopped it while
+// there was plainly money left, and 1.2 → 0.7 says that where 0.7 → 0.2 mumbles it.
+const ALLOWANCE_FLOOR = 10_000_000n;
 
 async function usdcBalance(address: string): Promise<bigint> {
   const balance = await read(env.usdcSac(), 'balance', [arg.address(address)]);
@@ -122,13 +125,33 @@ export async function POST(request: NextRequest) {
       done.push(`allowance topped up to ${Number(ALLOWANCE_TARGET) / 1e7} USDC`);
     }
 
-    return Response.json({ ready: true, done });
+    // The starting position, read after the resets rather than assumed from the targets — a
+    // top-up that failed would otherwise be reported as a figure that was never true. The page
+    // needs these: an ending balance means nothing without the one it started from.
+    return Response.json({
+      ready: true,
+      done,
+      start: {
+        wallet: (await usdcBalance(walletAgent)).toString(),
+        allowance: (await usdcBalance(allowanceId)).toString(),
+      },
+    });
   } catch (cause) {
     // A run against a slightly-off starting position still demonstrates the mechanism, so this
     // reports what it managed and lets the demo proceed rather than blocking on it.
+    let start = null;
+    try {
+      start = {
+        wallet: (await usdcBalance(walletAgent)).toString(),
+        allowance: (await usdcBalance(allowanceId)).toString(),
+      };
+    } catch {
+      // Reporting the failure below matters more than reporting the balances.
+    }
     return Response.json({
       ready: false,
       done,
+      start,
       error: cause instanceof Error ? cause.message : String(cause),
     });
   }
