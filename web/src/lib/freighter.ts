@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Address,
   Contract,
   TransactionBuilder,
   nativeToScVal,
@@ -116,4 +117,40 @@ export function withdraw(address: string, contractId: string, stroops: bigint) {
 
 export function revoke(address: string, contractId: string) {
   return ownerCall(address, contractId, 'revoke', []);
+}
+
+/**
+ * Replaces the rules on a live allowance.
+ *
+ * The spend window is deliberately not reset by this. If it were, an agent sitting at its cap
+ * could be handed a fresh one by any edit — including an edit that lowers the cap.
+ */
+export function setRules(
+  address: string,
+  contractId: string,
+  rules: {
+    maxPerCall: bigint;
+    windowLedgers: number;
+    windowCap: bigint;
+    allowlist: string[];
+  },
+) {
+  return ownerCall(address, contractId, 'set_rules', [
+    nativeToScVal(
+      {
+        max_per_call: rules.maxPerCall,
+        window_ledgers: rules.windowLedgers,
+        window_cap: rules.windowCap,
+        allowlist: rules.allowlist.map((a) => Address.fromString(a)),
+      },
+      {
+        type: {
+          max_per_call: ['symbol', 'i128'],
+          window_ledgers: ['symbol', 'u32'],
+          window_cap: ['symbol', 'i128'],
+          allowlist: ['symbol', null],
+        },
+      },
+    ),
+  ]);
 }

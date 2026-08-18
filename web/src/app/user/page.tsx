@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Keypair } from '@stellar/stellar-sdk';
-import { connect, deposit, revoke, withdraw, type Wallet } from '@/lib/freighter';
+import { connect, deposit, revoke, setRules, withdraw, type Wallet } from '@/lib/freighter';
 import { SiteHeader } from '@/components/SiteHeader';
 
 /**
@@ -421,6 +421,75 @@ export default function UserPage() {
             <p className="label mt-5">
               adding money and taking it back are signed by you — we cannot do either
             </p>
+          </div>
+        )}
+
+        {/* 5 — change the rules on a live allowance */}
+        {contractId && state && (
+          <div className="panel p-6 pt-9">
+            <span className="panel-tag">[ 05 · CHANGE THE RULES ]</span>
+
+            <p className="text-sm text-[color:var(--muted)] mb-5 max-w-[54ch]">
+              These take effect on the next purchase, without redeploying or moving your money.
+              What has already been spent stays counted — otherwise an agent at its cap could be
+              handed a fresh window by any edit.
+            </p>
+
+            <div className="grid gap-4 sm:grid-cols-3 mb-4">
+              <label className="block">
+                <span className="label block mb-1.5">most per call</span>
+                <input
+                  value={maxPerCall}
+                  onChange={(e) => setMaxPerCall(e.target.value)}
+                  className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="label block mb-1.5">most per window</span>
+                <input
+                  value={windowCap}
+                  onChange={(e) => setWindowCap(e.target.value)}
+                  className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="label block mb-1.5">window (minutes)</span>
+                <input
+                  value={windowMinutes}
+                  onChange={(e) => setWindowMinutes(e.target.value)}
+                  className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+
+            <p className="label mb-5">
+              currently {usdc(state.rules.max_per_call)} per call ·{' '}
+              {usdc(state.rules.window_cap)} per{' '}
+              {(state.rules.window_ledgers / LEDGERS_PER_MINUTE).toFixed(0)} min
+              {Number(windowMinutes) * LEDGERS_PER_MINUTE < 120 && (
+                <span style={{ color: 'var(--accent)' }}>
+                  {' '}· under 10 minutes and spends expire faster than an agent can make them
+                </span>
+              )}
+            </p>
+
+            <button
+              className="chip chip-accent px-4 py-2.5 cursor-pointer"
+              disabled={busy !== null}
+              onClick={() =>
+                run('rules', async () => {
+                  await setRules(wallet!.address, contractId, {
+                    maxPerCall: BigInt(Math.round(Number(maxPerCall) * 1e7)),
+                    windowCap: BigInt(Math.round(Number(windowCap) * 1e7)),
+                    windowLedgers: Math.max(1, Math.round(Number(windowMinutes) * LEDGERS_PER_MINUTE)),
+                    allowlist: allowed.length > 0 ? allowed : state.rules.allowlist,
+                  });
+                  await refresh(contractId);
+                })
+              }
+            >
+              {busy === 'rules' ? 'signing…' : 'update rules'}
+            </button>
           </div>
         )}
       </div>
