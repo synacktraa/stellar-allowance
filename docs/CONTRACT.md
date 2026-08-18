@@ -422,7 +422,60 @@ splitter   0      nothing left behind
 
 ---
 
-## 9. Things worth remembering
+## 9. Not built yet
+
+Three things the contracts could do and currently don't, in order of cost.
+
+### Refuse a duplicate reference — ~20 minutes
+
+`spend` accepts any `reference`, including one already used. The gateway does track consumed
+references, but that protects the *gateway* from delivering twice; it does nothing for the buyer.
+
+The failure: the agent submits `spend`, its RPC call times out, and it does not know whether the
+payment landed. It retries. Money moves twice, the gateway delivers once, and neither side's error
+handling sees a problem.
+
+Storing used references in the contract makes payment itself idempotent. One persistent key, one
+check, two tests.
+
+### Sub-budgets for delegated agents — ~2 hours
+
+One agent address today. An agent that spawns sub-agents has no way to give each a slice: either
+they share one key and one limit, or they get separate allowances and separate deposits.
+
+Shape: several agent addresses, each with its own per-call and window caps, all drawing on one
+balance and all counting toward a shared parent window. Nothing in this space does this.
+
+### Rollback — the interesting one, and not simply a feature
+
+The agent pays, the gateway forwards, the upstream returns a 500. The buyer paid for nothing.
+
+Whether a refund is even possible depends entirely on timing:
+
+| | Refundable? |
+|---|---|
+| Payment sitting in the splitter, not yet flushed | yes — nobody owns it yet |
+| Already flushed to the developer | no — it is theirs, and USDC on testnet is not clawback-enabled |
+
+So a refund path requires **delaying settlement**: the splitter holds funds for N ledgers before
+`flush()` will release them. That is a real trade, and it should be stated as one —
+
+> Instant payout or refunds. Not both.
+
+Even with the delay, the hard part remains. The chain can prove a payment happened; nothing on
+chain can prove *delivery*, because delivery is an HTTP response. Any refund rule needs someone to
+attest that the thing was not delivered.
+
+The least-bad design found so far: the gateway signs a delivery receipt on success, and if no
+receipt exists when the settlement window closes, the payer can reclaim. It still trusts the
+gateway to sign honestly, but the incentive points the right way — a gateway that withholds
+receipts blocks its own fee too, and a gateway that is simply down refunds everyone, which is the
+correct outcome anyway.
+
+This is the same shape as the constraint that produced the custom settlement leg: the system models
+money precisely and delivery not at all.
+
+## 10. Things worth remembering
 
 | | |
 |---|---|
