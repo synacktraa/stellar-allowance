@@ -84,14 +84,22 @@ body::before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* The faint crosshair grid from the reference. */
+/*
+ * The faint crosshair grid from the reference.
+ *
+ * `isolation` and the z-indices are load-bearing, not decoration. An absolutely positioned
+ * ::before paints after its parent's in-flow, non-positioned children, so without them the grid
+ * drew *over* the headline and body copy — hairlines crossing the type at 96px intervals.
+ */
 .grid-field {
   position: relative;
+  isolation: isolate;
 }
 .grid-field::before {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: 0;
   pointer-events: none;
   background-image:
     linear-gradient(to right, var(--line) 1px, transparent 1px),
@@ -99,6 +107,55 @@ body::before {
   background-size: 96px 96px;
   opacity: 0.5;
   mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 20%, transparent 75%);
+}
+.grid-field > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* --- the flow, in motion ---------------------------------------------- */
+
+/*
+ * A payment is a sequence, and a still diagram makes the reader supply the sequence themselves.
+ * The cycle runs agent → allowance → seller on a shared 6s clock: each node lights as the
+ * request reaches it, and a mark travels each hop in the gap between.
+ */
+@keyframes flow-travel {
+  0% { transform: translateY(-100%); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+
+@keyframes flow-wake {
+  0%, 100% { border-color: var(--line-bright); }
+  50% { border-color: var(--accent); }
+}
+
+@keyframes flow-wake-accent {
+  0%, 100% { border-color: var(--lavender); }
+  50% { border-color: var(--accent); }
+}
+
+.flow-hop-mark {
+  animation: flow-travel 6s linear infinite;
+}
+.flow-node {
+  animation: flow-wake 6s ease-in-out infinite;
+}
+.flow-node-accent {
+  animation: flow-wake-accent 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-hop-mark {
+    animation: none;
+    opacity: 1;
+  }
+  .flow-node,
+  .flow-node-accent {
+    animation: none;
+  }
 }
 
 /* --- typography ------------------------------------------------------- */
