@@ -66,8 +66,9 @@ function Note({ tag, children, tone }: { tag: string; children: string; tone: st
  */
 function Hop({ label, accent, delay }: { label: string; accent?: boolean; delay: string }) {
   // `--line-bright` is a hairline colour for borders; at 1px on a near-black ground it reads as
-  // nothing at all, so the unpaid hop takes the muted grey instead.
-  const colour = accent ? 'var(--accent)' : 'var(--muted)';
+  // nothing at all, so the unpaid hop takes the muted grey instead. The paid hop is green
+  // rather than the accent yellow, which stays reserved for money and for calls to action.
+  const colour = accent ? 'var(--held)' : 'var(--muted)';
   return (
     <div className="flex items-center gap-2 pl-4 h-10" aria-hidden="true">
       <span className="relative flex flex-col items-center self-stretch overflow-hidden">

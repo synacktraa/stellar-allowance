@@ -127,14 +127,19 @@ body::before {
   100% { transform: translateY(100%); opacity: 0; }
 }
 
+/*
+ * Green, not the accent yellow. Yellow is reserved for money and for the one action a reader
+ * should take; spending it on an ambient loop dilutes it everywhere else on the page. Green is
+ * already the held state, which is what this flow ends in.
+ */
 @keyframes flow-wake {
   0%, 100% { border-color: var(--line-bright); }
-  50% { border-color: var(--accent); }
+  50% { border-color: var(--held); }
 }
 
 @keyframes flow-wake-accent {
   0%, 100% { border-color: var(--lavender); }
-  50% { border-color: var(--accent); }
+  50% { border-color: var(--held); }
 }
 
 .flow-hop-mark {
