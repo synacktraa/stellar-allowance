@@ -55,19 +55,28 @@ type Existing = {
  *
  * A contract id identifies it to the network and to nobody else. What makes one recognisable is
  * what it can buy and what is in it.
+ *
+ * Two names before the overflow count, then a six-character tail of the contract id. The tail
+ * is not decoration: names and balances collide easily — two allowances over the same three
+ * APIs holding the same amount would otherwise render as the same line, which is the problem
+ * this function exists to solve. Everything is in the detail card once one is selected; this
+ * only has to be readable and distinct, in that order.
  */
 function describe(row: Existing): string {
+  const shown = row.can_pay.slice(0, 2).join(' + ');
+  const rest = row.can_pay.length - 2;
+
   const buys =
     row.can_pay.length === 0
       ? 'nothing allowlisted'
-      : row.can_pay.length <= 2
-        ? row.can_pay.join(' + ')
-        : `${row.can_pay[0]} + ${row.can_pay.length - 1} more`;
+      : rest > 0
+        ? `${shown} + ${rest} more`
+        : shown;
 
   const held = row.balance === null ? '—' : `${usdc(row.balance)} USDC`;
   const state = row.revoked ? ' · revoked' : '';
 
-  return `${buys} · ${held}${state}`;
+  return `${buys} · ${held}${state} · ${row.contract_id.slice(0, 6)}`;
 }
 
 const usdc = (stroops?: string) => (stroops ? (Number(stroops) / 1e7).toFixed(2) : '0.00');
@@ -347,11 +356,37 @@ export default function UserPage() {
 
               {reopened && (
                 <div className="mt-4 panel p-4">
+                  {/* The complete allowlist, one chip each. The dropdown truncates to stay
+                      readable; this is where the full answer to "what can it pay" lives. */}
+                  <p className="label mb-2">
+                    can pay {reopened.can_pay.length > 0 && `· ${reopened.can_pay.length}`}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {reopened.can_pay.length > 0 ? (
+                      reopened.can_pay.map((name, i) => (
+                        <span
+                          key={`${name}-${i}`}
+                          className="chip"
+                          style={{ borderColor: 'var(--lavender)', color: 'var(--lavender)' }}
+                        >
+                          {name}
+                        </span>
+                      ))
+                    ) : (
+                      <span
+                        className="chip"
+                        style={{ borderColor: 'var(--drained)', color: 'var(--drained)' }}
+                      >
+                        nothing allowlisted — every payment refused
+                      </span>
+                    )}
+                  </div>
+
                   <div className="flex flex-wrap gap-6 mb-3">
                     <div>
-                      <p className="label mb-1">can pay</p>
-                      <p className="text-sm">
-                        {reopened.can_pay.length > 0 ? reopened.can_pay.join(', ') : '—'}
+                      <p className="label mb-1">balance</p>
+                      <p className="num text-sm text-[color:var(--accent)]">
+                        {usdc(reopened.balance ?? '0')} USDC
                       </p>
                     </div>
                     {reopened.rules && (
@@ -364,6 +399,10 @@ export default function UserPage() {
                         </p>
                       </div>
                     )}
+                    <div>
+                      <p className="label mb-1">agent</p>
+                      <p className="num text-sm">{short(reopened.agent_address)}</p>
+                    </div>
                   </div>
                   <p className="label mb-1">contract</p>
                   <Copyable value={reopened.contract_id} label="allowance contract id" />
