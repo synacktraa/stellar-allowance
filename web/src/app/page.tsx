@@ -1,5 +1,7 @@
+import Link from 'next/link';
 import { DemoRunner } from '@/components/DemoRunner';
 import { FlowDiagram } from '@/components/FlowDiagram';
+import { SiteHeader } from '@/components/SiteHeader';
 
 const DEMO_API_ID = process.env.DEMO_API_ID ?? '';
 const DEMO_ALLOWANCE = process.env.ALLOWANCE_CONTRACT_ID ?? '';
@@ -8,20 +10,7 @@ const AGENT = process.env.DEMO_AGENT_ADDRESS ?? '';
 export default function Home() {
   return (
     <main className="relative z-10">
-      {/* ---------------------------------------------------------- top bar */}
-      <header className="border-b border-[color:var(--line)]">
-        <div className="mx-auto max-w-[1180px] px-6 h-14 flex items-center justify-between">
-          <div className="flex items-baseline gap-3">
-            <span className="font-mono text-sm tracking-tight">STELLAR//ALLOWANCE</span>
-          </div>
-          <nav className="hidden md:flex gap-8 label">
-            <span>01. Problem</span>
-            <span>02. Mechanism</span>
-            <span>03. Proof</span>
-          </nav>
-          <span className="chip">stellar:testnet</span>
-        </div>
-      </header>
+      <SiteHeader />
 
       {/* ------------------------------------------------------------- hero */}
       <section className="grid-field border-b border-[color:var(--line)]">
@@ -39,6 +28,18 @@ export default function Home() {
             request fails, every HTTP library retries — and each retry is now a real payment.
             Stellar Allowance holds the money in a contract instead, and makes the agent ask.
           </p>
+
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="/user" className="chip chip-accent px-4 py-2.5">
+              Give an agent a budget →
+            </Link>
+            <Link
+              href="/developer"
+              className="chip px-4 py-2.5 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
+            >
+              Charge for my API →
+            </Link>
+          </div>
 
           <div className="mt-10 -mx-2">
             <FlowDiagram allowanceId={DEMO_ALLOWANCE} agentAddress={AGENT} />
