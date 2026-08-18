@@ -7,6 +7,7 @@ test_snapshots/
 
 # Environment-specific: contract ids and rule sets differ per deployment
 .contract-id
+.splitter-id
 rules.json
 
 # Secrets
