@@ -12,10 +12,46 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+/**
+ * A submission is shared as a link, so the link has to carry the argument. Vercel exposes the
+ * production domain at build time; falling back to localhost keeps `metadataBase` valid in
+ * development, where absolute URLs are still required for Open Graph tags.
+ */
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
+
+const description =
+  "An AI agent that pays for API calls needs a wallet, and a wallet has no limits. Stellar Allowance holds the money in a contract instead, and makes the agent ask.";
+
 export const metadata: Metadata = {
-  title: "Stellar Allowance",
-  description:
-    "An AI agent that pays for API calls needs a wallet, and a wallet has no limits. Stellar Allowance holds the money in a contract and makes the agent ask.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Stellar Allowance",
+    template: "%s · Stellar Allowance",
+  },
+  description,
+  applicationName: "Stellar Allowance",
+  openGraph: {
+    title: "Stellar Allowance",
+    description,
+    url: siteUrl,
+    siteName: "Stellar Allowance",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Stellar Allowance",
+    description,
+  },
+  robots: { index: true, follow: true },
+};
+
+export const viewport = {
+  themeColor: "#060607",
+  colorScheme: "dark" as const,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
