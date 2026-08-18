@@ -7,19 +7,40 @@ The owner sets three rules — most per purchase, most per rolling window, and w
 paid — and deposits against them. The agent holds no funds. A request that breaks a rule reverts,
 so no money moves; the agent's own code has no say in it.
 
+## Two contracts
+
+**Allowance** — holds the owner's funds and enforces the three rules. One per agent owner.
+
+**Splitter** — one per registered API. The gateway's 402 names the splitter as recipient, so
+payment lands in a contract rather than a platform account. The developer's share and the platform
+fee are fixed when it is created and `init` cannot be called twice, so the developer does not have
+to trust anyone to forward their money. `flush()` is permissionless: the funds can only reach the
+two addresses set at creation, so the developer can collect without waiting on the platform.
+
 ## Status
 
-The contract is live on Stellar testnet at
-`CDVPL2TCXOGP7NHDD3XYAOKXFKFKAF6RZHBCOU6ACU4UIXIZTSWLH5AH`.
+Both are live on Stellar testnet.
 
-Verified on-chain: six calls of 0.1 USDC against a 0.5 USDC window cap. Five paid, the sixth
-refused, and the recipient received exactly 0.5 USDC. The agent's account holds no USDC trustline
-and cannot hold the asset at all.
+| | |
+|---|---|
+| Allowance | `CBOI5QMTUQK5AREMRIIKSUQ4P7XUPG7NKXTJDB3OFOXB6PVOMFC6JXYZ` |
+| Splitter | `CCM5PU7RVHWKUZJWNJ4UC2T23EYJB4JXENZC5V2AEKSSPNUY42HLLS7B` |
+
+Verified on-chain, in two runs.
+
+Limits: six calls of 0.1 USDC against a 0.5 USDC window cap. Five paid, the sixth refused, and the
+recipient received exactly 0.5 USDC. The agent's account holds no USDC trustline and cannot hold
+the asset at all.
+
+Split: two calls of 0.1 USDC paid into a splitter, then flushed. The developer received 0.18 and
+the platform 0.02, and the splitter was left holding nothing. The flush was triggered by the agent,
+not the platform, which is what permissionless means in practice.
 
 ## Layout
 
 ```
-contracts/contracts/allowance/   the contract and its tests
+contracts/contracts/allowance/   spending rules, one per agent owner
+contracts/contracts/splitter/    fee split, one per registered API
 docs/CONTRACT.md                 design decisions, auth model, deploy sequence
 ```
 
