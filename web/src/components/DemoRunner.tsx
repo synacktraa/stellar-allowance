@@ -32,7 +32,7 @@ function usdc(stroops?: string) {
 }
 
 function Column({
-  title, tag, rows, running, done, tone,
+  title, tag, rows, running, done, tone, verdict,
 }: {
   title: string;
   tag: string;
@@ -40,6 +40,8 @@ function Column({
   running: boolean;
   done: boolean;
   tone: 'drained' | 'held';
+  /** Why this column stopped. Both deliver 5 of 7 — the reason is the entire difference. */
+  verdict: string;
 }) {
   const delivered = rows.filter((r) => r.delivered).length;
   const last = rows[rows.length - 1];
@@ -102,13 +104,22 @@ function Column({
         <div className="text-right">
           <p className="label">{last?.remainingLabel ?? 'left at the end'}</p>
           <p
-            className="num text-lg"
+            className="num text-2xl"
             style={{ color: done ? toneColor : 'var(--line-bright)' }}
           >
-            {done ? `${Number(last?.remaining ?? 0).toFixed(2)} USDC` : '—'}
+            {done ? `${Number(last?.remaining ?? 0).toFixed(2)}` : '—'}
+            <span className="text-sm text-[color:var(--faint)]"> USDC</span>
           </p>
         </div>
       </div>
+
+      {/* Both columns deliver five of seven. Printing only the counts makes them look
+          identical, so the sentence that distinguishes them has to be on screen too. */}
+      {done && (
+        <p className="text-sm mt-4 leading-relaxed" style={{ color: toneColor }}>
+          {verdict}
+        </p>
+      )}
     </div>
   );
 }
@@ -116,7 +127,7 @@ function Column({
 export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId: string }) {
   const [left, setLeft] = useState<Row[]>([]);
   const [right, setRight] = useState<Row[]>([]);
-  const [phase, setPhase] = useState<'idle' | 'preparing' | 'left' | 'right' | 'done'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'preparing' | 'running' | 'done'>('idle');
 
   async function run() {
     setLeft([]);
@@ -132,10 +143,13 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
       body: JSON.stringify({ apiId, allowanceId }),
     }).catch(() => null);
 
-    for (const mode of ['unprotected', 'allowance'] as const) {
-      setPhase(mode === 'unprotected' ? 'left' : 'right');
-      const set = mode === 'unprotected' ? setLeft : setRight;
+    setPhase('running');
 
+    /** Seven purchases down one column, filling in as each ledger closes. */
+    const column = async (
+      mode: 'unprotected' | 'allowance',
+      set: typeof setLeft,
+    ) => {
       for (let n = 1; n <= ATTEMPTS; n += 1) {
         const response = await fetch('/api/demo/step', {
           method: 'POST',
@@ -145,12 +159,18 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
         const result = await response.json();
         set((rows) => [...rows, { n, ...result }]);
       }
-    }
+    };
+
+    // Side by side, not one after the other. They spend from different accounts, so nothing is
+    // contended — and running them sequentially meant ninety seconds of watching, most of it
+    // with one column sitting empty. Racing them is also the more honest picture: the same
+    // seven attempts, at the same moment, ending differently.
+    await Promise.all([column('unprotected', setLeft), column('allowance', setRight)]);
 
     setPhase('done');
   }
 
-  const busy = phase === 'preparing' || phase === 'left' || phase === 'right';
+  const busy = phase === 'preparing' || phase === 'running';
 
   return (
     <div>
@@ -165,9 +185,9 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
         <span className="label">
           {phase === 'preparing'
             ? 'putting both sides back to the same starting position…'
-            : busy
-              ? 'each purchase waits for a ledger — about 7s'
-              : 'takes about 90 seconds'}
+            : phase === 'running'
+              ? `${left.length + right.length} of ${ATTEMPTS * 2} settled — each waits for a ledger`
+              : 'both columns at once · about 50 seconds'}
         </span>
       </div>
 
@@ -176,17 +196,19 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
           title="The agent holds its own wallet"
           tag="[ TODAY ]"
           rows={left}
-          running={phase === 'left'}
+          running={phase === 'running' && left.length < ATTEMPTS}
           done={left.length === ATTEMPTS}
           tone="drained"
+          verdict="Stopped because there was nothing left."
         />
         <Column
           title="The agent has an allowance"
           tag="[ WITH_ALLOWANCE ]"
           rows={right}
-          running={phase === 'right'}
+          running={phase === 'running' && right.length < ATTEMPTS}
           done={right.length === ATTEMPTS}
           tone="held"
+          verdict="Stopped by the rule, with money still in the contract."
         />
       </div>
     </div>
