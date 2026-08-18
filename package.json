@@ -1,0 +1,17 @@
+{
+  "name": "stellar-allowance",
+  "private": true,
+  "description": "On-chain spending limits for AI agents that pay for API calls.",
+  "scripts": {
+    "dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix web run start",
+    "lint": "npm --prefix web run lint",
+    "migrate": "npm --prefix web run migrate",
+    "mine": "npm --prefix web run mine --",
+    "agent": "npm --prefix web run agent --",
+    "reset": "npm --prefix web run reset --",
+    "contracts:test": "cargo test --manifest-path contracts/Cargo.toml",
+    "contracts:build": "cd contracts && stellar contract build"
+  }
+}

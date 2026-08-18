@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "node --env-file=.env.local scripts/migrate.mjs",
-    "mine": "node --env-file=.env.local scripts/mine.mjs"
+    "mine": "node --env-file=.env.local scripts/mine.mjs",
+    "agent": "node --env-file=.env.local scripts/agent.mjs",
+    "reset": "node --env-file=.env.local scripts/reset-demo.mjs"
   },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",
