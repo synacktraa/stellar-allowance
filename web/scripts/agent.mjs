@@ -34,8 +34,14 @@ if (!url || url.startsWith('--')) {
 
 const passphrase = process.env.STELLAR_NETWORK_PASSPHRASE ?? Networks.TESTNET;
 const rpcServer = new rpc.Server(process.env.STELLAR_RPC_URL);
-const agent = Keypair.fromSecret(process.env.DEMO_AGENT_SECRET);
 const usdc = process.env.USDC_SAC;
+
+// Two different agents, because the difference is the whole point. The unprotected one holds
+// USDC. The allowance one holds no USDC and has no trustline for it, so it could not hold any
+// even if it wanted to — its only route to spending anything is asking the contract.
+const agent = Keypair.fromSecret(
+  mode === 'allowance' ? process.env.DEMO_AGENT_SECRET : process.env.WALLET_AGENT_SECRET,
+);
 
 async function settle(tx) {
   const sent = await rpcServer.sendTransaction(tx);
@@ -82,7 +88,11 @@ async function payDirectly({ amount, recipient }) {
     prepared = await rpcServer.prepareTransaction(tx);
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause);
-    return { ok: false, reason: `could not pay - ${detail}` };
+    // The only thing that ever stops this agent is running out. Nothing refused it.
+    if (/not within the allowed range|#10/.test(detail)) {
+      return { ok: false, reason: 'wallet empty - nothing left to spend' };
+    }
+    return { ok: false, reason: `could not pay - ${detail.split('\n')[0]}` };
   }
   prepared.sign(agent);
   return settle(prepared);
