@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { connect, type Wallet } from '@/lib/freighter';
 import { SiteHeader } from '@/components/SiteHeader';
+import { Step } from '@/components/Step';
 
 /**
  * The developer tab.
@@ -121,9 +122,12 @@ export default function DeveloperPage() {
         )}
 
         {/* connect */}
-        <div className="panel p-6 pt-9">
-          <span className="panel-tag">[ 01 · {wallet ? 'DONE' : 'TODO'} ]</span>
-          <h2 className="text-base font-medium mb-4">Connect your wallet</h2>
+        <Step
+          n={1}
+          state={wallet ? 'done' : 'todo'}
+          title="Connect your wallet"
+          summary="The address your 90% is paid to."
+        >
           <p className="text-sm text-[color:var(--muted)] mb-4 max-w-[52ch]">
             This is the address your 90% is paid to. Freighter, on Testnet.
           </p>
@@ -138,65 +142,72 @@ export default function DeveloperPage() {
               {busy === 'connect' ? 'connecting…' : 'connect freighter'}
             </button>
           )}
-        </div>
+        </Step>
 
         {/* register */}
-        {wallet && (
-          <div className="panel p-6 pt-9">
-            <span className="panel-tag">[ 02 · ADD AN API ]</span>
-            <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] items-end">
-              <label className="block">
-                <span className="label block mb-1.5">name</span>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="label block mb-1.5">your API url</span>
-                <input
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="label block mb-1.5">price / call</span>
-                <input
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  className="w-24 num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
-                />
-              </label>
-            </div>
-            <button
-              className="chip chip-accent px-4 py-2.5 mt-5 cursor-pointer"
-              disabled={busy !== null}
-              onClick={() => run('register', register)}
-            >
-              {busy === 'register' ? 'deploying your contract…' : 'add API'}
-            </button>
-            <p className="label mt-3">
-              deploys a payment contract for this API alone · we pay the fee
-            </p>
+        <Step
+          n={2}
+          state={!wallet ? 'locked' : 'todo'}
+          title="Add an API"
+          summary="Point us at an API you already run and set a price. You get back a new URL that collects the money before forwarding the request."
+        >
+          <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] items-end">
+            <label className="block">
+              <span className="label block mb-1.5">name</span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="label block mb-1.5">your API url</span>
+              <input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="label block mb-1.5">price / call</span>
+              <input
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                inputMode="decimal"
+                className="w-24 num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
+              />
+            </label>
           </div>
-        )}
+          <button
+            className="chip chip-accent px-4 py-2.5 mt-5 cursor-pointer"
+            disabled={busy !== null}
+            onClick={() => run('register', register)}
+          >
+            {busy === 'register' ? 'deploying your contract…' : 'add API'}
+          </button>
+          <p className="label mt-3">
+            deploys a payment contract for this API alone · we pay the fee
+          </p>
+        </Step>
 
         {/* list */}
-        {wallet && apis.length > 0 && (
-          <div className="panel p-6 pt-9">
-            <span className="panel-tag">[ 03 · YOUR APIS ]</span>
-
-            <div className="flex items-baseline justify-between mb-6">
-              <h2 className="text-base font-medium">Earnings</h2>
-              <div className="text-right">
-                <p className="label">uncollected</p>
-                <p className="num text-2xl text-[color:var(--accent)]">{usdc(String(totalPending))} USDC</p>
-              </div>
+        <Step
+          n={3}
+          state={wallet && apis.length > 0 ? 'todo' : 'locked'}
+          title="Collect what you have earned"
+          summary="Every paid call accumulates in your API's own contract. Collect sends 90% to you and 10% to us, in a ratio fixed when the contract was made."
+        >
+          <div className="flex items-baseline justify-between mb-6">
+            <p className="text-sm text-[color:var(--muted)]">Your APIs</p>
+            <div className="text-right">
+              <p className="label">uncollected</p>
+              <p className="num text-2xl text-[color:var(--accent)]">
+                {usdc(String(totalPending))} USDC
+              </p>
             </div>
+          </div>
 
-            <div className="space-y-px bg-[color:var(--line)]">
+          <div className="space-y-px bg-[color:var(--line)]">
               {apis.map((api) => (
                 <div key={api.id} className="bg-[color:var(--ground)] py-4 px-1">
                   <div className="flex flex-wrap items-start justify-between gap-4">
@@ -231,12 +242,11 @@ export default function DeveloperPage() {
               ))}
             </div>
 
-            <p className="label mt-5 leading-relaxed">
-              collecting is permissionless — anyone can trigger a payout, and it can only ever go
-              to your address and ours, in the ratio fixed when the contract was made
-            </p>
-          </div>
-        )}
+          <p className="label mt-5 leading-relaxed">
+            collecting is permissionless — anyone can trigger a payout, and it can only ever go to
+            your address and ours, in the ratio fixed when the contract was made
+          </p>
+        </Step>
       </div>
     </main>
   );
