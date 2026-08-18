@@ -6,6 +6,7 @@ import { connect, deposit, revoke, setRules, withdraw, type Wallet } from '@/lib
 import { SiteHeader } from '@/components/SiteHeader';
 import { Step } from '@/components/Step';
 import { Copyable } from '@/components/Copyable';
+import { AgentSnippet } from '@/components/AgentSnippet';
 
 /**
  * The user tab.
@@ -560,35 +561,16 @@ export default function UserPage() {
             so there is no contract id to hard-code.
           </p>
 
-          <pre className="num text-xs leading-relaxed overflow-x-auto bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] p-4 mb-4">
-{`// 1 — ask, and be refused with a price
-const quote = await fetch(PAID_URL);            // 402
-const { amount, recipient, reference } = await quote.json();
-
-// 2 — ask the contract to pay it. It refuses if this
-//     breaks the per-call cap, the window, or the allowlist.
-const tx = new TransactionBuilder(account, { fee, networkPassphrase })
-  .addOperation(new Contract(ALLOWANCE).call(
-    'spend',
-    nativeToScVal(recipient, { type: 'address' }),
-    nativeToScVal(BigInt(amount), { type: 'i128' }),
-    nativeToScVal(reference, { type: 'symbol' }),
-  ))
-  .setTimeout(60).build();
-
-// 3 — come back and point at the payment
-await fetch(PAID_URL, { headers: { 'x-payment-tx': hash } });`}
-          </pre>
-
-          <p className="label mb-2">this allowance</p>
-          <div className="mb-5">
-            <Copyable value={contractId} label="allowance contract id" />
+          <div className="mb-4">
+            <AgentSnippet allowanceId={contractId} />
           </div>
 
           <p className="text-sm text-[color:var(--muted)] max-w-[54ch]">
-            A runnable version is <span className="num">scripts/mine.mjs</span> in the repository:
-            it looks the allowance up from the agent key, buys until a rule stops it, and prints
-            the rule that did.
+            Complete as it stands — your contract id is already in it. Set{' '}
+            <span className="num text-[color:var(--text)]">AGENT_SECRET</span> to the key from
+            step 02, then call <span className="num text-[color:var(--text)]">buy(url)</span> with
+            any API on your allowlist. A refused purchase throws with the rule that stopped it,
+            and costs nothing: the rules run during simulation, before anything is submitted.
           </p>
         </Step>
       </div>
