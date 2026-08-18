@@ -1,9 +1,14 @@
-# The contract, explained
+# The contracts, explained
 
-What `contracts/contracts/allowance/src/lib.rs` does, why it's shaped that way, and the exact
-commands used to test, deploy and run it.
+What the two contracts do, why they're shaped that way, and the exact commands used to test,
+deploy and run them.
 
-Deployed: `CDVPL2TCXOGP7NHDD3XYAOKXFKFKAF6RZHBCOU6ACU4UIXIZTSWLH5AH` (testnet)
+| | Purpose | Deployed (testnet) |
+|---|---|---|
+| **Allowance** | holds the owner's funds, enforces the rules | `CBOI5QMTUQK5AREMRIIKSUQ4P7XUPG7NKXTJDB3OFOXB6PVOMFC6JXYZ` |
+| **Splitter** | receives a payment, pays 90/10 | `CCM5PU7RVHWKUZJWNJ4UC2T23EYJB4JXENZC5V2AEKSSPNUY42HLLS7B` |
+
+Sections 1–5 cover the allowance; section 6 covers the splitter.
 
 ---
 
@@ -119,6 +124,14 @@ write is rolled back. There is no partial state.
 `reference` is the challenge id the gateway put in its 402. It goes into the event so the gateway
 can later read it back off the chain and prove *this* payment settles *that* request.
 
+### `set_rules(rules)`
+
+Replaces the rules. Owner only.
+
+It deliberately leaves the spend window untouched. If a rule change reset the window, an agent
+sitting at its cap could be handed a fresh one by any edit — including an edit that *lowers* the
+cap, which is exactly when you least want it.
+
 ### `revoke()`
 
 Sets one flag. Deliberately moves no money, so it cannot fail for balance reasons — which is what
@@ -208,7 +221,61 @@ showed up locally — which is a decent argument for having local tests at all.
 
 ---
 
-## 6. Testing
+## 6. The splitter
+
+One per registered API. The gateway's 402 names the splitter as the recipient, so an agent's
+payment lands in a contract instead of an account the platform controls.
+
+```rust
+init(developer, platform, token, fee_bps)   // fixed at creation, cannot be called twice
+flush() -> (i128, i128)                     // pays out the whole balance, 90/10
+balance() / config()
+```
+
+### Why it exists
+
+The first design had the platform receive 100% and forward 90%. That works, and it costs three
+things:
+
+| | Platform forwards | Splitter |
+|---|---|---|
+| Custody | platform holds the money briefly | never touches it |
+| Trust | developer trusts the platform to forward | reads the contract |
+| Allowlist | every API resolves to one address | each API has its own |
+
+The third is the one that surprised us. Because a spending allowlist works on addresses, and every
+API's 402 named the same platform address, the allowlist could not tell APIs apart at all. Giving
+each API its own splitter makes per-API restriction real rather than cosmetic.
+
+### `flush()` is permissionless
+
+Anyone can call it. There is nothing to guard: the funds can only reach the two addresses fixed at
+creation, and the ratio is fixed too. What it buys is that the developer can collect without
+waiting on the platform to act, which matters if the platform is down or uninterested.
+
+Verified on testnet by having the **agent** call it — not the platform.
+
+### Rounding
+
+```rust
+let platform_amount = total * fee_bps / BPS_DENOMINATOR;   // rounds down
+let developer_amount = total - platform_amount;            // takes the remainder
+```
+
+Integer division means the fee rounds down and the odd unit goes to the developer. The tests pin
+this at 100,001 stroops specifically, so the behaviour is a decision rather than whatever the
+arithmetic happened to do.
+
+### One consequence to design around
+
+Sending tokens to a contract **does not run any of its code**. A SAC transfer just credits the
+balance. So the splitter cannot pay out on receipt — something has to call `flush()`.
+
+The gateway does it immediately after verifying a payment, in the same request. If that call
+fails, the money is still safe in the splitter and the next `flush()` pays out everything
+accumulated, which is why one of the tests covers two payments arriving before any flush.
+
+## 7. Testing
 
 ### The harness
 
@@ -241,7 +308,7 @@ client.try_spend(...).unwrap_err().unwrap()   // gives you the typed error
 Use `try_*` whenever you're asserting a *refusal*, so you check it failed for the right reason
 rather than any reason.
 
-### The nine tests
+### The eleven allowance tests
 
 | | Asserts |
 |---|---|
@@ -254,17 +321,29 @@ rather than any reason.
 | 8 | revoked agent → `Revoked` |
 | 8b | owner can still withdraw after revoke (money isn't stranded) |
 | 9 | views return the same answer twice (reads don't write) |
+| 10 | owner can change rules; the old recipient stops working |
+| 11 | changing rules preserves spend history |
 
 Every refusal test asserts the balance too. "It returned an error" is not the same as "no money
 moved", and only one of those is the actual requirement.
 
+### The seven splitter tests
+
+Same principle applied to payouts: asserting the *ratio* would pass while a unit was silently
+retained, so every payout test also checks the contract is left empty and that both recipient
+balances sum to what went in.
+
+Covered: the 90/10 split, rounding at 100,001 stroops, permissionless flush, two payments arriving
+before any flush, flushing an empty contract, re-initialisation by a third party, and a fee above
+100%.
+
 ```bash
-cargo test
+cargo test          # 18 tests across both contracts, no network required
 ```
 
 ---
 
-## 7. Build, deploy, run
+## 8. Build, deploy, run
 
 ```bash
 stellar contract build
@@ -303,9 +382,24 @@ stellar contract invoke --id <C...> --source-account agent --network testnet -- 
 Note the `--source-account` differs: **owner** deposits, **agent** spends. That difference is what
 `require_auth` is checking.
 
+### The splitter
+
+```bash
+stellar contract deploy \
+  --wasm target/wasm32v1-none/release/stellar_allowance_splitter.wasm \
+  --source-account platform --network testnet --alias splitter
+
+stellar contract invoke --id <C...> --source-account platform --network testnet -- \
+  init --developer <G...> --platform <G...> --token <USDC_SAC> --fee_bps 1000
+
+stellar contract invoke --id <C...> --source-account agent --network testnet -- flush
+```
+
+Note the last one: `--source-account agent`. Any account can flush.
+
 ### Verified live
 
-Six calls at 0.1 USDC against a 0.5 cap:
+**Limits.** Six calls at 0.1 USDC against a 0.5 cap:
 
 ```
 call 1..5  ->  paid
@@ -313,19 +407,29 @@ call 6     ->  REFUSED (window cap)
 
 seller    0.5000000 USDC   exactly 5 × 0.1
 agent     no trustline     cannot hold USDC at all
-contract  1.5 USDC
 window    5000000 used, at cap
+```
+
+**Split.** Two calls of 0.1 USDC into a splitter, then flushed by the agent:
+
+```
+flush -> ["1800000","200000"]
+
+seller    +0.18   (90%)
+platform  +0.02   (10%)
+splitter   0      nothing left behind
 ```
 
 ---
 
-## 8. Things worth remembering
+## 9. Things worth remembering
 
 | | |
 |---|---|
 | **Amounts are integers** | 7 decimals. `1000000` = 0.1 USDC. Never floats. |
 | **`reference` is a `Symbol`** | max **32 chars**, `a-zA-Z0-9_`. A 64-char hex string will throw. |
 | **Contracts hold USDC without trustlines** | balance lives in SAC storage. `G…` accounts still need one — and that's where a payout fails. |
-| **Redeploy = new contract id** | script `build → deploy → init → deposit` as one command. |
+| **Redeploy = new contract id** | script `build → deploy → init → deposit` as one command. Drain the old one first — `withdraw` exists for exactly this. |
+| **Sending tokens to a contract runs no code** | the splitter can't act on receipt; something must call `flush()`. |
 | **Persistent entries get ~7 days TTL minimum** | not a concern inside a hackathon. |
 | **Never emit an event inside `__check_auth`** | only relevant if you attempt the x402 stretch — its verifier rejects any non-transfer event. |
