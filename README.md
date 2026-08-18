@@ -3,13 +3,13 @@
 On-chain spending limits for AI agents that pay for API calls.
 
 An agent that pays for things needs a wallet, and a wallet has no limits. When a request fails,
-every HTTP library retries — and each retry is now a real payment. Stellar Allowance puts the money
-in a contract the agent cannot spend from, and makes it ask.
+every HTTP library retries, and each retry is a real payment. Stellar Allowance puts the money in a
+contract the agent cannot spend from. The agent has to ask for each purchase.
 
-The owner sets three rules — most per purchase, most per rolling window, and which addresses may be
-paid — and deposits against them. The agent holds no funds and has no USDC trustline, so it cannot
-hold the asset at all. A purchase that breaks a rule reverts: no money moves, and the agent's own
-code has no say in it.
+The owner sets three rules: most per purchase, most per rolling window, and which addresses may be
+paid. The agent holds no funds and has no USDC trustline, so it cannot hold the asset at all. A
+purchase that breaks a rule reverts, so no money moves. The rules are enforced by the network, not
+by the agent's code.
 
 The same deployment also lets an API owner charge per call. Point it at an API you already run, set
 a price, and you get a URL that answers `402 Payment Required`, takes payment, and forwards the
@@ -87,16 +87,17 @@ must exist before the first build or the landing page ships without its demo.
 **Allowance** — holds the owner's funds and enforces the three rules. One per agent owner. It is
 created with a constructor rather than an `init` call, so the owner is named in the same
 transaction that deploys it: there is no moment where it exists unowned, and the owner never needs
-XLM to claim it. The platform deploys and pays the fee, and can do nothing else with it.
+XLM to claim it. The platform deploys it and pays the fee. It cannot spend from it, change its
+rules, or take it back.
 
 **Splitter** — one per registered API. The gateway's 402 names the splitter as recipient, so
-payment lands in a contract rather than in a platform account. The developer's share and the
-platform fee are fixed at creation and cannot be changed, so the developer does not have to trust
-anyone to forward their money. `flush()` is permissionless — anyone can trigger a payout, and it
-can only ever reach the two addresses set at creation.
+payment lands in a contract instead of a platform account. The developer's share and the platform
+fee are fixed at creation and cannot be changed afterwards. `flush()` is permissionless: anyone can
+trigger a payout, and it can only reach the two addresses set at creation. The developer does not
+have to wait for the platform, or trust it to forward anything.
 
-`docs/CONTRACT.md` has the design decisions, the authorization model, and the traps worth knowing
-before you hit them — including what is deliberately not built yet.
+`docs/CONTRACT.md` covers the design decisions, the authorization model, the deploy sequence, and
+what is deliberately not built yet.
 
 ## Verified on chain
 
@@ -104,10 +105,10 @@ Limits: six calls of 0.1 USDC against a 0.5 USDC window cap. Five paid, the sixt
 recipient received exactly 0.5 USDC.
 
 Split: two calls of 0.1 USDC paid into a splitter, then flushed. The developer received 0.18 and
-the platform 0.02, leaving the splitter holding nothing. The flush was triggered by the agent, not
-the platform, which is what permissionless means in practice.
+the platform 0.02, leaving the splitter holding nothing. The flush was triggered by the agent
+rather than by the platform.
 
-Timing: 4.6–9.0s per purchase, mean 6.9s — quote 0.4–1.2s, pay 2.8–6.8s waiting for a ledger to
+Timing: 4.6–9.0s per purchase, mean 6.9s. Quote 0.4–1.2s, pay 2.8–6.8s waiting for a ledger to
 close, deliver 1.4–2.0s.
 
 ## Working on the contracts
