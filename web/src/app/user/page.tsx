@@ -732,11 +732,17 @@ export default function UserPage() {
           </div>
 
           <p className="text-sm text-[color:var(--muted)] max-w-[54ch]">
-            Complete as it stands — your contract id is already in it. Set{' '}
+            Save it as <span className="num text-[color:var(--text)]">buy.mjs</span>, set{' '}
             <span className="num text-[color:var(--text)]">AGENT_SECRET</span> to the key from
-            step 02, then call <span className="num text-[color:var(--text)]">buy(url)</span> with
-            any API on your allowlist. A refused purchase throws with the rule that stopped it,
-            and costs nothing: the rules run during simulation, before anything is submitted.
+            step 02, and run it against any URL on your allowlist above:{' '}
+            <span className="num text-[color:var(--text)]">node buy.mjs &lt;paid-url&gt;</span>. It
+            buys once and prints what came back. A purchase that breaks a rule prints the rule
+            instead, and costs nothing — the rules run during simulation, before anything reaches
+            the network.
+          </p>
+          <p className="label mt-3 leading-relaxed">
+            <span className="num">examples/runner</span> in the repository is this file&rsquo;s
+            project already set up — dependencies installed, nothing to configure but the secret
           </p>
         </Step>
       </div>

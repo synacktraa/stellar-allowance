@@ -13,10 +13,12 @@ import { useState } from 'react';
  */
 
 function snippet(allowanceId: string) {
-  return `// Save as agent.mjs — the .mjs matters, these are ESM imports.
+  return `// Save as buy.mjs — the .mjs matters, these are ESM imports.
 //
 //   npm i @stellar/stellar-sdk
-//   AGENT_SECRET=S... node agent.mjs <your-paid-url>
+//   AGENT_SECRET=S... node buy.mjs <your-paid-url>
+//
+// Or paste it into examples/runner in the repo, where that is already set up.
 //
 import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk';
 
@@ -30,7 +32,7 @@ function required(name) {
   if (value) return value;
   // Without this, a missing key surfaces as a TypeError from inside the SDK's base32
   // decoder, several frames deep and naming neither the variable nor this file.
-  console.error(name + ' is not set.  usage: AGENT_SECRET=S... node agent.mjs <paid-url>');
+  console.error(name + ' is not set.  usage: AGENT_SECRET=S... node buy.mjs <paid-url>');
   process.exit(1);
 }
 
@@ -105,7 +107,7 @@ function why(detail) {
 const url = process.argv[2];
 
 if (!url) {
-  console.error('usage: AGENT_SECRET=S... node agent.mjs <paid-url>');
+  console.error('usage: AGENT_SECRET=S... node buy.mjs <paid-url>');
   process.exit(1);
 }
 

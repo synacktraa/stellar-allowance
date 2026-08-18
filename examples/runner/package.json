@@ -1,0 +1,14 @@
+{
+  "name": "stellar-allowance-runner",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "The smallest project that can run the buy file from the Stellar Allowance user tab. Not an agent — a place to run one purchase.",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env buy.mjs"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^16.2.0"
+  }
+}
