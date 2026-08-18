@@ -97,16 +97,25 @@ export async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * Look up allowances by owner or by agent.
+ *
+ * By agent matters for tooling: an agent knows its own key and nothing else, so this is how a
+ * script finds which allowance it is allowed to ask, without anyone pasting a contract id.
+ */
 export async function GET(request: NextRequest) {
   const owner = request.nextUrl.searchParams.get('owner');
-  if (!owner || !StrKey.isValidEd25519PublicKey(owner)) {
-    return Response.json({ error: 'owner query parameter is required' }, { status: 400 });
+  const agent = request.nextUrl.searchParams.get('agent');
+
+  const address = owner ?? agent;
+  if (!address || !StrKey.isValidEd25519PublicKey(address)) {
+    return Response.json({ error: 'owner or agent query parameter is required' }, { status: 400 });
   }
 
   const { data } = await db()
     .from('allowances')
-    .select('contract_id, agent_address, created_at')
-    .eq('owner_address', owner)
+    .select('contract_id, owner_address, agent_address, created_at')
+    .eq(owner ? 'owner_address' : 'agent_address', address)
     .order('created_at', { ascending: false });
 
   return Response.json({ allowances: data ?? [] });
