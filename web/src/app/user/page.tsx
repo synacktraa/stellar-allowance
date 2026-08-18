@@ -2,7 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Keypair } from '@stellar/stellar-sdk';
-import { connect, deposit, revoke, setRules, withdraw, type Wallet } from '@/lib/freighter';
+import {
+  connect,
+  createAgentAccount,
+  deposit,
+  revoke,
+  setRules,
+  withdraw,
+  type Wallet,
+} from '@/lib/freighter';
 import { SiteHeader } from '@/components/SiteHeader';
 import { Step } from '@/components/Step';
 import { Copyable } from '@/components/Copyable';
@@ -62,6 +70,9 @@ export default function UserPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState('2.00');
+  // XLM, for the agent's own transaction fees. One is the account reserve; the rest is roughly
+  // a thousand spend calls at testnet resource prices.
+  const [agentXlm, setAgentXlm] = useState('5');
 
   // Allowances this wallet already owns. Without this the page could only ever create another
   // one: a refresh dropped the contract id and there was no way back to it.
@@ -133,8 +144,17 @@ export default function UserPage() {
   }, [state, reopened]);
 
   async function createAgent() {
+    if (!wallet) return;
+    if (!(Number(agentXlm) > 0)) {
+      throw new Error('Give the agent a starting balance in XLM.');
+    }
+
+    // The key is generated here and the account is brought into existence by the owner's own
+    // transaction. Only set it in state once that succeeds — a keypair with no account behind
+    // it looks identical on screen and fails at the first spend.
     const kp = Keypair.random();
-    await fetch(`https://friendbot.stellar.org?addr=${kp.publicKey()}`);
+    await createAgentAccount(wallet.address, kp.publicKey(), Number(agentXlm).toFixed(7));
+
     setAgent({ publicKey: kp.publicKey(), secret: kp.secret() });
     setSecretShown(true);
   }
@@ -275,12 +295,15 @@ export default function UserPage() {
           n={2}
           state={!wallet ? 'locked' : agentAddress ? 'done' : 'todo'}
           title="Create an agent account"
-          summary="A key for your agent, generated in this tab. It gets no USDC trustline, so it cannot hold money at all — only ask."
+          summary="A key for your agent, generated in this tab and funded from your wallet. It gets no USDC trustline, so it cannot hold money at all — only ask."
         >
           <p className="text-sm text-[color:var(--muted)] mb-4 max-w-[52ch]">
-            Generated in this tab and never sent to us. It gets a little XLM for fees and{' '}
+            Generated in this tab and never sent to us. You create its account from your own
+            wallet — the same way you would on mainnet, where nobody hands out funded accounts.
+            The XLM below covers the agent&rsquo;s transaction fees and is the only asset it ever
+            holds: it gets{' '}
             <strong className="text-[color:var(--text)]">no USDC trustline</strong>, so it cannot
-            hold money at all — only ask.
+            hold the money it spends, only ask for it.
           </p>
           {agentAddress ? (
             <div className="space-y-3">
@@ -305,13 +328,30 @@ export default function UserPage() {
               )}
             </div>
           ) : (
-            <button
-              className="chip chip-accent px-4 py-2.5 cursor-pointer"
-              disabled={busy !== null}
-              onClick={() => run('agent', createAgent)}
-            >
-              {busy === 'agent' ? 'creating…' : 'create agent'}
-            </button>
+            <>
+              <div className="flex flex-wrap items-end gap-3 mb-3">
+                <label className="block">
+                  <span className="label block mb-1.5">starting XLM</span>
+                  <input
+                    value={agentXlm}
+                    onChange={(e) => setAgentXlm(e.target.value)}
+                    inputMode="decimal"
+                    className="num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 w-28 text-sm"
+                  />
+                </label>
+                <button
+                  className="chip chip-accent px-4 py-2.5 cursor-pointer"
+                  disabled={busy !== null}
+                  onClick={() => run('agent', createAgent)}
+                >
+                  {busy === 'agent' ? 'signing…' : 'create and fund agent'}
+                </button>
+              </div>
+              <p className="label">
+                1 XLM is the account reserve · the rest pays the agent&rsquo;s own fees, roughly
+                a thousand purchases
+              </p>
+            </>
           )}
         </Step>
 
