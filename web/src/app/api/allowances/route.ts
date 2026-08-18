@@ -3,7 +3,7 @@ import { Address, StrKey, nativeToScVal } from '@stellar/stellar-sdk';
 import { db } from '@/lib/supabase';
 import { deployInstance } from '@/lib/deploy';
 import { env } from '@/lib/env';
-import { arg } from '@/lib/stellar';
+import { arg, read } from '@/lib/stellar';
 
 /**
  * Creating an allowance.
@@ -102,6 +102,11 @@ export async function POST(request: NextRequest) {
  *
  * By agent matters for tooling: an agent knows its own key and nothing else, so this is how a
  * script finds which allowance it is allowed to ask, without anyone pasting a contract id.
+ *
+ * Each row carries its balance, rules and the names of the APIs it may pay. A list of contract
+ * ids identifies nothing to a person — `CBJNXCGG…42FF` is not a thing anyone recognises, and
+ * choosing between two of them is guesswork. What distinguishes one allowance from another is
+ * what it can buy, what is in it, and what it is capped at.
  */
 export async function GET(request: NextRequest) {
   const owner = request.nextUrl.searchParams.get('owner');
@@ -118,5 +123,65 @@ export async function GET(request: NextRequest) {
     .eq(owner ? 'owner_address' : 'agent_address', address)
     .order('created_at', { ascending: false });
 
-  return Response.json({ allowances: data ?? [] });
+  const rows = data ?? [];
+
+  // Read each one off the chain. Best effort per row: a contract that has been archived out of
+  // the ledger should leave the others listable rather than failing the whole lookup.
+  const detailed = await Promise.all(
+    rows.map(async (row) => {
+      try {
+        const [balance, rules, revoked] = await Promise.all([
+          read(row.contract_id, 'balance'),
+          read(row.contract_id, 'config'),
+          read(row.contract_id, 'revoked'),
+        ]);
+        return {
+          ...row,
+          balance: String(balance ?? 0),
+          revoked: Boolean(revoked),
+          rules: {
+            max_per_call: String((rules as Rules).max_per_call),
+            window_cap: String((rules as Rules).window_cap),
+            window_ledgers: Number((rules as Rules).window_ledgers),
+            allowlist: ((rules as Rules).allowlist ?? []).map(String),
+          },
+        };
+      } catch {
+        return { ...row, balance: null, revoked: null, rules: null };
+      }
+    }),
+  );
+
+  // Turn the allowlisted splitter addresses into the API names a person would recognise.
+  const splitters = [...new Set(detailed.flatMap((row) => row.rules?.allowlist ?? []))];
+  const names = new Map<string, string>();
+
+  if (splitters.length > 0) {
+    const { data: apis } = await db()
+      .from('apis')
+      .select('name, splitter_contract_id')
+      .in('splitter_contract_id', splitters);
+
+    for (const api of apis ?? []) {
+      if (api.splitter_contract_id) names.set(api.splitter_contract_id, api.name);
+    }
+  }
+
+  const allowances = detailed.map((row) => ({
+    ...row,
+    // Anything without a name is an address allowlisted directly rather than picked from the
+    // directory — still worth listing, since it still gets paid.
+    can_pay: (row.rules?.allowlist ?? []).map(
+      (id) => names.get(id) ?? `${id.slice(0, 6)}…${id.slice(-4)}`,
+    ),
+  }));
+
+  return Response.json({ allowances });
 }
+
+type Rules = {
+  max_per_call: bigint;
+  window_cap: bigint;
+  window_ledgers: number;
+  allowlist: unknown[];
+};

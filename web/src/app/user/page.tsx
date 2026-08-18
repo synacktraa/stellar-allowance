@@ -39,7 +39,36 @@ type State = {
   };
 };
 
-type Existing = { contract_id: string; agent_address: string; created_at: string };
+type Existing = {
+  contract_id: string;
+  agent_address: string;
+  created_at: string;
+  balance: string | null;
+  revoked: boolean | null;
+  rules: State['rules'] | null;
+  /** The APIs this allowance may pay, by name — how a person tells one from another. */
+  can_pay: string[];
+};
+
+/**
+ * Describes an allowance the way its owner would.
+ *
+ * A contract id identifies it to the network and to nobody else. What makes one recognisable is
+ * what it can buy and what is in it.
+ */
+function describe(row: Existing): string {
+  const buys =
+    row.can_pay.length === 0
+      ? 'nothing allowlisted'
+      : row.can_pay.length <= 2
+        ? row.can_pay.join(' + ')
+        : `${row.can_pay[0]} + ${row.can_pay.length - 1} more`;
+
+  const held = row.balance === null ? '—' : `${usdc(row.balance)} USDC`;
+  const state = row.revoked ? ' · revoked' : '';
+
+  return `${buys} · ${held}${state}`;
+}
 
 const usdc = (stroops?: string) => (stroops ? (Number(stroops) / 1e7).toFixed(2) : '0.00');
 const short = (v: string) => `${v.slice(0, 6)}…${v.slice(-4)}`;
@@ -285,34 +314,6 @@ export default function UserPage() {
           onConnect={openWallet}
         />
 
-        {/* Allowances this wallet already owns. */}
-        {wallet && existing.length > 0 && !contractId && (
-          <div className="panel p-6 pt-9">
-            <span className="panel-tag">[ ALREADY YOURS ]</span>
-            <p className="text-sm text-[color:var(--muted)] mb-4 max-w-[52ch]">
-              Open one of these instead of making another. Its balance and rules are read live
-              from the chain.
-            </p>
-            <div className="space-y-px bg-[color:var(--line)]">
-              {existing.map((row) => (
-                <button
-                  key={row.contract_id}
-                  onClick={() => {
-                    setReopened(row);
-                    setContractId(row.contract_id);
-                  }}
-                  className="w-full text-left bg-[color:var(--ground)] px-3 py-3 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-[color:var(--panel-2)] transition-colors"
-                >
-                  <span className="num text-xs break-all">{row.contract_id}</span>
-                  <span className="label whitespace-nowrap">
-                    agent {short(row.agent_address)} · open →
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* 2 — agent */}
         <Step
           n={2}
@@ -320,14 +321,67 @@ export default function UserPage() {
           title="Create an agent account"
           summary="A key for your agent, generated in this tab and funded from your wallet. It gets no USDC trustline, so it cannot hold money at all — only ask."
         >
-          <p className="text-sm text-[color:var(--muted)] mb-4 max-w-[52ch]">
-            Generated in this tab and never sent to us. You create its account from your own
-            wallet — the same way you would on mainnet, where nobody hands out funded accounts.
-            The XLM below covers the agent&rsquo;s transaction fees and is the only asset it ever
-            holds: it gets{' '}
-            <strong className="text-[color:var(--text)]">no USDC trustline</strong>, so it cannot
-            hold the money it spends, only ask for it.
-          </p>
+          {/* Reopening comes first: someone who already has an allowance is here to get back
+              into it, and offering to build another one first is the wrong default. */}
+          {existing.length > 0 && !agent && (
+            <div className="mb-6">
+              <label className="block">
+                <span className="label block mb-1.5">allowance</span>
+                <select
+                  value={reopened?.contract_id ?? ''}
+                  onChange={(e) => {
+                    const row = existing.find((a) => a.contract_id === e.target.value);
+                    setReopened(row ?? null);
+                    setContractId(row?.contract_id ?? '');
+                  }}
+                  className="w-full bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2.5 text-sm cursor-pointer"
+                >
+                  <option value="">Create a new agent and allowance</option>
+                  {existing.map((row) => (
+                    <option key={row.contract_id} value={row.contract_id}>
+                      {describe(row)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {reopened && (
+                <div className="mt-4 panel p-4">
+                  <div className="flex flex-wrap gap-6 mb-3">
+                    <div>
+                      <p className="label mb-1">can pay</p>
+                      <p className="text-sm">
+                        {reopened.can_pay.length > 0 ? reopened.can_pay.join(', ') : '—'}
+                      </p>
+                    </div>
+                    {reopened.rules && (
+                      <div>
+                        <p className="label mb-1">limits</p>
+                        <p className="num text-sm">
+                          {usdc(reopened.rules.max_per_call)} / call ·{' '}
+                          {usdc(reopened.rules.window_cap)} per{' '}
+                          {Math.round(reopened.rules.window_ledgers / LEDGERS_PER_MINUTE)} min
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <p className="label mb-1">contract</p>
+                  <Copyable value={reopened.contract_id} label="allowance contract id" />
+                </div>
+              )}
+            </div>
+          )}
+
+          {reopened ? null : (
+            <p className="text-sm text-[color:var(--muted)] mb-4 max-w-[52ch]">
+              Generated in this tab and never sent to us. You create its account from your own
+              wallet — the same way you would on mainnet, where nobody hands out funded accounts.
+              The XLM below covers the agent&rsquo;s transaction fees and is the only asset it
+              ever holds: it gets{' '}
+              <strong className="text-[color:var(--text)]">no USDC trustline</strong>, so it
+              cannot hold the money it spends, only ask for it.
+            </p>
+          )}
           {agentAddress ? (
             <div className="space-y-3">
               <div>
