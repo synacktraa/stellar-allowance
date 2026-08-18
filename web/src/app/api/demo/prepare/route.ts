@@ -40,7 +40,11 @@ export const maxDuration = 60;
 const START = 12_000_000n; // 1.2 USDC on both sides
 const WALLET_TARGET = START;
 const ALLOWANCE_TARGET = START;
-const ALLOWANCE_FLOOR = 10_000_000n; // refill before a run could end short of its cap
+// Top up whenever it is below target, not below some lower floor. A floor let the allowance
+// start anywhere in a band while the wallet was always set exactly, so a run could open at
+// 1.20 against 1.10 — unequal starting positions, which is the one thing this demo cannot
+// have. It costs no extra transaction in practice: after a run the balance is below either.
+const ALLOWANCE_FLOOR = ALLOWANCE_TARGET;
 
 async function usdcBalance(address: string): Promise<bigint> {
   const balance = await read(env.usdcSac(), 'balance', [arg.address(address)]);
