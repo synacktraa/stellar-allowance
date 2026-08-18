@@ -277,11 +277,11 @@ export default function Home() {
             <strong className="text-[color:var(--text)] font-medium">
               And the money doesn&rsquo;t come to us.
             </strong>{' '}
-            Payment lands in a splitter contract built for you. The split — your share and the
+            Payment lands in a payment contract built for you. The split — your share and the
             platform fee — is fixed when the contract is created and cannot be changed by either
-            side. <span className="num text-[color:var(--text)]">flush()</span> is permissionless:
-            anyone can trigger the payout, and it can only ever reach the two addresses set at
-            creation. If we vanished tomorrow, you could still collect.
+            side. Paying it out needs nobody&rsquo;s permission: anyone can trigger it, and the
+            money can only ever reach the two addresses set at creation. If we vanished tomorrow,
+            you could still collect.
           </p>
         </div>
       </section>
