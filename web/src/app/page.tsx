@@ -109,16 +109,23 @@ export default function Home() {
             <p>Your agents can&rsquo;t break them. Ever.</p>
           </div>
 
+          {/*
+            Both buttons go straight to the side they belong to, and each has to name its own
+            audience: "Set an allowance" only reads correctly under the RUNNING AN AGENT card
+            further down, where the framing is already established. Up here there is nothing
+            above it, so the possessive does that work instead — a reader with an agent and a
+            reader with an API can each tell in one glance which of these is theirs.
+          */}
           <div className="mt-10 flex flex-wrap gap-3">
             <Link href="/user" className="chip chip-accent px-5 py-3">
-              Set an allowance →
+              Limit what my agent spends →
             </Link>
-            <a
-              href="#how"
+            <Link
+              href="/developer"
               className="chip px-5 py-3 hover:border-[color:var(--accent)] hover:text-[color:var(--accent)] transition-colors"
             >
-              Learn how →
-            </a>
+              Register an API →
+            </Link>
           </div>
         </div>
       </section>
