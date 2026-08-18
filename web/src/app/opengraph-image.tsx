@@ -11,7 +11,7 @@ import { ImageResponse } from 'next/og';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 export const alt =
-  'Stellar Allowance — on-chain spending limits for AI agents that pay for API calls';
+  'Stellar Allowance — spending limits for AI agents, enforced by the network rather than by the agent';
 
 export default function OpengraphImage() {
   return new ImageResponse(
@@ -63,12 +63,12 @@ export default function OpengraphImage() {
               flexDirection: 'column',
             }}
           >
-            <span>Agents can spend.</span>
-            <span>Nothing stops them.</span>
+            <span>Your agent can spend.</span>
+            <span>Your budget cannot.</span>
           </div>
           <div style={{ fontSize: 30, color: '#8a8d94', marginTop: 28, maxWidth: 900 }}>
-            The money sits in a contract the agent cannot reach. It has to ask, and the network
-            refuses anything outside the rules.
+            The money sits in a contract the agent cannot reach. It has to ask before every
+            purchase, and the network refuses anything outside your rules.
           </div>
         </div>
 

@@ -24,7 +24,7 @@ const siteUrl =
     : "http://localhost:3000");
 
 const description =
-  "An AI agent that pays for API calls needs a wallet, and a wallet has no limits. Stellar Allowance holds the money in a contract instead, and makes the agent ask.";
+  "Set three limits — most per purchase, most per rolling window, and who may be paid. Your AI agent has to ask before every purchase, and the contract answers. Break a rule and the money does not move.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

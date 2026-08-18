@@ -260,12 +260,16 @@ export default function UserPage() {
 
       <div className="mx-auto max-w-[900px] px-6 py-12 space-y-4">
         <div className="mb-8">
-          <p className="label mb-4">[ FOR AGENT OWNERS ]</p>
+          <p className="label mb-4">[ FOR AGENT OWNERS · FOUR STEPS ]</p>
           <h1 className="display max-w-[14ch]">Give your agent a budget.</h1>
-          <p className="mt-6 max-w-[54ch] text-[color:var(--muted)] leading-relaxed">
+          <p className="mt-6 max-w-[54ch] text-[color:var(--text)] leading-relaxed">
+            Connect a wallet, create an agent, set three rules, add money. About ten minutes, and
+            it assumes you have never touched a blockchain.
+          </p>
+          <p className="mt-4 max-w-[54ch] text-[color:var(--muted)] leading-relaxed">
             The money stays in a contract you own. Your agent can ask it to pay, and it will
-            refuse anything outside the rules you set. We deploy it and pay the fee; we cannot
-            spend from it or change it.
+            refuse anything outside the rules you set. We deploy the contract and pay the fee — we
+            cannot spend from it, change its rules, or stop you emptying it.
           </p>
         </div>
 

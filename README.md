@@ -48,7 +48,7 @@ docs/CONTRACT.md                 design decisions, auth model, deploy sequence
 
 ```bash
 cd contracts
-cargo test                # 9 tests, no network required
+cargo test                # 18 tests across both contracts, no network required
 stellar contract build    # → target/wasm32v1-none/release/stellar_allowance.wasm
 ```
 
