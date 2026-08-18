@@ -2,17 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Keypair } from '@stellar/stellar-sdk';
-import {
-  connect,
-  createAgentAccount,
-  deposit,
-  revoke,
-  setRules,
-  withdraw,
-  type Wallet,
-} from '@/lib/freighter';
+import { createAgentAccount, deposit, revoke, setRules, withdraw } from '@/lib/freighter';
+import { useWallet } from '@/lib/useWallet';
 import { SiteHeader } from '@/components/SiteHeader';
 import { Step } from '@/components/Step';
+import { ConnectStep } from '@/components/ConnectStep';
 import { Copyable } from '@/components/Copyable';
 import { AgentSnippet } from '@/components/AgentSnippet';
 
@@ -62,7 +56,15 @@ type DirectoryApi = {
 const LEDGERS_PER_MINUTE = 12;
 
 export default function UserPage() {
-  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const {
+    wallet,
+    funds,
+    connecting,
+    restoring,
+    error: walletError,
+    connect: openWallet,
+    refresh: refreshFunds,
+  } = useWallet();
   const [agent, setAgent] = useState<{ publicKey: string; secret: string } | null>(null);
   const [secretShown, setSecretShown] = useState(false);
   const [contractId, setContractId] = useState('');
@@ -145,8 +147,21 @@ export default function UserPage() {
 
   async function createAgent() {
     if (!wallet) return;
-    if (!(Number(agentXlm) > 0)) {
+    const starting = Number(agentXlm);
+    if (!(starting > 0)) {
       throw new Error('Give the agent a starting balance in XLM.');
+    }
+    if (starting < 1) {
+      throw new Error('A Stellar account needs at least 1 XLM to exist. Send 1 or more.');
+    }
+    // Your own account has to keep its reserve behind, so the spendable figure is not the
+    // balance on screen. Saying so beats a reverted transaction that mentions neither.
+    if (funds && starting > funds.xlm - 1.5) {
+      throw new Error(
+        `You hold ${funds.xlm.toFixed(2)} XLM and must keep about 1.5 in reserve, so you can ` +
+          `send at most ${Math.max(0, funds.xlm - 1.5).toFixed(2)}. Fund your wallet at ` +
+          `friendbot.stellar.org, or lower the starting balance.`,
+      );
     }
 
     // The key is generated here and the account is brought into existence by the owner's own
@@ -157,6 +172,27 @@ export default function UserPage() {
 
     setAgent({ publicKey: kp.publicKey(), secret: kp.secret() });
     setSecretShown(true);
+    await refreshFunds();
+  }
+
+  /** Checks the wallet can cover a deposit before anyone is asked to sign for it. */
+  function checkDeposit(usdcAmount: number) {
+    if (!(usdcAmount > 0)) {
+      throw new Error('Enter an amount above zero.');
+    }
+    if (!funds) return;
+    if (!funds.hasUsdcTrustline) {
+      throw new Error(
+        'Your wallet has no USDC trustline, so it cannot hold or send USDC. Add one in ' +
+          'Freighter for issuer GBBD47IF…FLA5, then reconnect.',
+      );
+    }
+    if (usdcAmount > funds.usdc) {
+      throw new Error(
+        `Your wallet holds ${funds.usdc.toFixed(2)} USDC and this would send ` +
+          `${usdcAmount.toFixed(2)}. Lower the amount, or top the wallet up first.`,
+      );
+    }
   }
 
   async function createAllowance() {
@@ -233,34 +269,21 @@ export default function UserPage() {
           </p>
         </div>
 
-        {error && (
+        {(error ?? walletError) && (
           <div className="panel p-4 border-[color:var(--drained)]">
-            <p className="text-sm" style={{ color: 'var(--drained)' }}>{error}</p>
+            <p className="text-sm" style={{ color: 'var(--drained)' }}>{error ?? walletError}</p>
           </div>
         )}
 
         {/* 1 — connect */}
-        <Step
-          n={1}
-          state={wallet ? 'done' : 'todo'}
-          title="Connect your wallet"
-          summary="Proves the allowance is yours."
-        >
-          <p className="text-sm text-[color:var(--muted)] mb-4 max-w-[52ch]">
-            This is how you prove the allowance is yours. Freighter, on Testnet.
-          </p>
-          {wallet ? (
-            <p className="num text-sm break-all">{wallet.address}</p>
-          ) : (
-            <button
-              className="chip chip-accent px-4 py-2.5 cursor-pointer"
-              disabled={busy !== null}
-              onClick={() => run('connect', async () => setWallet(await connect()))}
-            >
-              {busy === 'connect' ? 'connecting…' : 'connect freighter'}
-            </button>
-          )}
-        </Step>
+        <ConnectStep
+          wallet={wallet}
+          funds={funds}
+          connecting={connecting}
+          restoring={restoring}
+          purpose="This is how you prove the allowance is yours, and the wallet the money comes from. Freighter, on Testnet."
+          onConnect={openWallet}
+        />
 
         {/* Allowances this wallet already owns. */}
         {wallet && existing.length > 0 && !contractId && (
@@ -497,12 +520,14 @@ export default function UserPage() {
               disabled={busy !== null}
               onClick={() =>
                 run('deposit', async () => {
+                  checkDeposit(Number(amount));
                   await deposit(
                     wallet!.address,
                     contractId,
                     BigInt(Math.round(Number(amount) * 1e7)),
                   );
                   await refresh(contractId);
+                  await refreshFunds();
                 })
               }
             >
@@ -515,6 +540,7 @@ export default function UserPage() {
                 run('withdraw', async () => {
                   await withdraw(wallet!.address, contractId, BigInt(state?.balance ?? '0'));
                   await refresh(contractId);
+                  await refreshFunds();
                 })
               }
             >

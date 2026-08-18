@@ -13,6 +13,7 @@ import {
 import {
   getAddress,
   getNetwork,
+  isAllowed,
   isConnected,
   requestAccess,
   signTransaction,
@@ -26,9 +27,71 @@ import {
  */
 
 const RPC_URL = 'https://soroban-testnet.stellar.org';
+const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const PASSPHRASE = 'Test SDF Network ; September 2015';
+const USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 
 export type Wallet = { address: string; network: string };
+
+/** What the wallet can actually pay with. Absent means the account does not exist yet. */
+export type Balances = { xlm: number; usdc: number; hasUsdcTrustline: boolean };
+
+/**
+ * Restores an existing connection without prompting.
+ *
+ * Freighter only shows its approval popup the first time. After that `requestAccess` resolves
+ * silently — so a page that keeps the connection in component state shows a Connect button
+ * that, when clicked, appears to do nothing. The fix is not to re-ask on click; it is to stop
+ * forgetting across navigations in the first place.
+ *
+ * Returns null rather than throwing: not being connected yet is the ordinary case on first
+ * visit, not an error worth showing anyone.
+ */
+export async function restore(): Promise<Wallet | null> {
+  try {
+    const installed = await isConnected();
+    if (!installed.isConnected) return null;
+
+    const allowed = await isAllowed();
+    if (!allowed.isAllowed) return null;
+
+    const address = await getAddress();
+    if (address.error || !address.address) return null;
+
+    const network = await getNetwork();
+    if (network.error || network.network !== 'TESTNET') return null;
+
+    return { address: address.address, network: network.network };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What the connected wallet holds.
+ *
+ * Read before signing anything that spends, so an insufficient balance is named on screen
+ * rather than surfacing as a reverted transaction whose error mentions neither the asset nor
+ * the shortfall.
+ */
+export async function balances(address: string): Promise<Balances> {
+  const response = await fetch(`${HORIZON_URL}/accounts/${address}`);
+  if (!response.ok) return { xlm: 0, usdc: 0, hasUsdcTrustline: false };
+
+  const account = await response.json();
+  const lines: Array<Record<string, string>> = account.balances ?? [];
+
+  const native = lines.find((b) => b.asset_type === 'native');
+  const usdc = lines.find(
+    (b) => b.asset_code === 'USDC' && b.asset_issuer === USDC_ISSUER,
+  );
+
+  return {
+    xlm: Number(native?.balance ?? 0),
+    usdc: Number(usdc?.balance ?? 0),
+    hasUsdcTrustline: Boolean(usdc),
+  };
+}
 
 export async function connect(): Promise<Wallet> {
   const installed = await isConnected();

@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { connect, type Wallet } from '@/lib/freighter';
+import { useWallet } from '@/lib/useWallet';
 import { SiteHeader } from '@/components/SiteHeader';
 import { Step } from '@/components/Step';
+import { ConnectStep } from '@/components/ConnectStep';
 
 /**
  * The developer tab.
@@ -27,8 +28,18 @@ type Api = {
 const usdc = (stroops?: string) => (Number(stroops ?? 0) / 1e7).toFixed(2);
 
 export default function DeveloperPage() {
-  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const {
+    wallet,
+    funds,
+    connecting,
+    restoring,
+    error: walletError,
+    connect: openWallet,
+  } = useWallet();
   const [apis, setApis] = useState<Api[]>([]);
+  // Distinguishes "we have not asked yet" from "asked, and you have none" — without it an
+  // empty list and an unloaded one look the same, and the page says nothing either way.
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -53,6 +64,7 @@ export default function DeveloperPage() {
   const load = useCallback(async (address: string) => {
     const response = await fetch(`/api/apis?developer=${address}`);
     if (response.ok) setApis((await response.json()).apis ?? []);
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -110,9 +122,9 @@ export default function DeveloperPage() {
           </p>
         </div>
 
-        {error && (
+        {(error ?? walletError) && (
           <div className="panel p-4" style={{ borderColor: 'var(--drained)' }}>
-            <p className="text-sm" style={{ color: 'var(--drained)' }}>{error}</p>
+            <p className="text-sm" style={{ color: 'var(--drained)' }}>{error ?? walletError}</p>
           </div>
         )}
         {note && (
@@ -122,27 +134,14 @@ export default function DeveloperPage() {
         )}
 
         {/* connect */}
-        <Step
-          n={1}
-          state={wallet ? 'done' : 'todo'}
-          title="Connect your wallet"
-          summary="The address your 90% is paid to."
-        >
-          <p className="text-sm text-[color:var(--muted)] mb-4 max-w-[52ch]">
-            This is the address your 90% is paid to. Freighter, on Testnet.
-          </p>
-          {wallet ? (
-            <p className="num text-sm break-all">{wallet.address}</p>
-          ) : (
-            <button
-              className="chip chip-accent px-4 py-2.5 cursor-pointer"
-              disabled={busy !== null}
-              onClick={() => run('connect', async () => setWallet(await connect()))}
-            >
-              {busy === 'connect' ? 'connecting…' : 'connect freighter'}
-            </button>
-          )}
-        </Step>
+        <ConnectStep
+          wallet={wallet}
+          funds={funds}
+          connecting={connecting}
+          restoring={restoring}
+          purpose="This is the address your 90% is paid to, and how we know which APIs are yours. Freighter, on Testnet."
+          onConnect={openWallet}
+        />
 
         {/* register */}
         <Step
@@ -193,12 +192,16 @@ export default function DeveloperPage() {
         {/* list */}
         <Step
           n={3}
-          state={wallet && apis.length > 0 ? 'todo' : 'locked'}
-          title="Collect what you have earned"
-          summary="Every paid call accumulates in your API's own contract. Collect sends 90% to you and 10% to us, in a ratio fixed when the contract was made."
+          state={wallet ? 'todo' : 'locked'}
+          title="Your APIs"
+          summary="Everything you have registered, what each one has earned, and a button to collect it."
         >
           <div className="flex items-baseline justify-between mb-6">
-            <p className="text-sm text-[color:var(--muted)]">Your APIs</p>
+            <p className="text-sm text-[color:var(--muted)]">
+              {apis.length === 0
+                ? 'Nothing registered yet.'
+                : `${apis.length} registered · earnings read live from each contract`}
+            </p>
             <div className="text-right">
               <p className="label">uncollected</p>
               <p className="num text-2xl text-[color:var(--accent)]">
@@ -206,6 +209,14 @@ export default function DeveloperPage() {
               </p>
             </div>
           </div>
+
+          {apis.length === 0 && (
+            <p className="text-sm text-[color:var(--muted)] max-w-[52ch]">
+              {loaded
+                ? 'Add one in step 02 and it will appear here, with its paid URL and its contract.'
+                : 'Loading…'}
+            </p>
+          )}
 
           <div className="space-y-px bg-[color:var(--line)]">
               {apis.map((api) => (
