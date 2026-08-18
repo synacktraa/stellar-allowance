@@ -4,7 +4,7 @@ import { StrKey } from '@stellar/stellar-sdk';
 import { db } from '@/lib/supabase';
 import { deployInstance } from '@/lib/deploy';
 import { env } from '@/lib/env';
-import { arg } from '@/lib/stellar';
+import { arg, read } from '@/lib/stellar';
 
 /**
  * Registering an API.
@@ -144,7 +144,22 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false });
 
   const origin = request.nextUrl.origin;
-  return Response.json({
-    apis: (data ?? []).map((row) => ({ ...row, paid_url: `${origin}/api/pay/${row.id}` })),
-  });
+
+  // Uncollected earnings are the splitter's balance, read from the chain. There is no mirrored
+  // figure in the database that could disagree with it.
+  const apis = await Promise.all(
+    (data ?? []).map(async (row) => {
+      let pending = '0';
+      if (row.splitter_contract_id) {
+        try {
+          pending = String(await read(row.splitter_contract_id, 'balance'));
+        } catch {
+          pending = '0';
+        }
+      }
+      return { ...row, paid_url: `${origin}/api/pay/${row.id}`, pending_stroops: pending };
+    }),
+  );
+
+  return Response.json({ apis });
 }
