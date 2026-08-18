@@ -13,13 +13,26 @@ import { useState } from 'react';
  */
 
 function snippet(allowanceId: string) {
-  return `// npm i @stellar/stellar-sdk
+  return `// Save as agent.mjs — the .mjs matters, these are ESM imports.
+//
+//   npm i @stellar/stellar-sdk
+//   AGENT_SECRET=S... node agent.mjs <your-paid-url>
+//
 import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stellar/stellar-sdk';
 
 const RPC        = 'https://soroban-testnet.stellar.org';
 const PASSPHRASE = 'Test SDF Network ; September 2015';
 const ALLOWANCE  = '${allowanceId}';
-const AGENT      = Keypair.fromSecret(process.env.AGENT_SECRET);
+const AGENT      = Keypair.fromSecret(required('AGENT_SECRET'));
+
+function required(name) {
+  const value = process.env[name];
+  if (value) return value;
+  // Without this, a missing key surfaces as a TypeError from inside the SDK's base32
+  // decoder, several frames deep and naming neither the variable nor this file.
+  console.error(name + ' is not set.  usage: AGENT_SECRET=S... node agent.mjs <paid-url>');
+  process.exit(1);
+}
 
 const server = new rpc.Server(RPC);
 
@@ -85,7 +98,63 @@ function why(detail) {
   if (/#10/.test(detail)) return 'the allowance is empty';
   return detail.split('\\n')[0];
 }
+
+// --- run it -----------------------------------------------------------------
+// Without this the file only defines buy() and exits without doing anything.
+
+const url = process.argv[2];
+
+if (!url) {
+  console.error('usage: AGENT_SECRET=S... node agent.mjs <paid-url>');
+  process.exit(1);
+}
+
+try {
+  const response = await buy(url);
+  console.log(response.status, (await response.text()).slice(0, 120));
+} catch (error) {
+  console.error(error.message);
+  process.exit(1);
+}
 `;
+}
+
+/**
+ * Colours comments, strings and keywords, and nothing else.
+ *
+ * Comments and strings are matched first and in the same pass, so a keyword inside a string —
+ * or a quote inside a comment — cannot be picked up by the later rule. Highlighting is display
+ * only: the copy button reads the raw source, so a mistake here can never corrupt what someone
+ * pastes into a file.
+ */
+const TOKENS =
+  /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|('(?:[^'\\]|\\.)*')|(\b(?:import|from|export|async|await|const|let|function|return|if|throw|new|while|try|catch|of|true|false)\b)/g;
+
+function highlight(source: string) {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+
+  TOKENS.lastIndex = 0;
+  while ((match = TOKENS.exec(source)) !== null) {
+    if (match.index > last) out.push(source.slice(last, match.index));
+
+    const colour = match[1]
+      ? 'var(--faint)' // comment
+      : match[2]
+        ? 'var(--held)' // string
+        : 'var(--lavender)'; // keyword
+
+    out.push(
+      <span key={`${match.index}`} style={{ color: colour }}>
+        {match[0]}
+      </span>,
+    );
+    last = match.index + match[0].length;
+  }
+
+  out.push(source.slice(last));
+  return out;
 }
 
 export function AgentSnippet({ allowanceId }: { allowanceId: string }) {
@@ -94,10 +163,13 @@ export function AgentSnippet({ allowanceId }: { allowanceId: string }) {
 
   return (
     <div className="relative">
+      {/* Sits clear of the scrollbar gutter, which the wider "copy file" label overlapped. */}
       <button
         type="button"
-        className="chip absolute right-3 top-3 z-10 cursor-pointer bg-[color:var(--panel-2)] transition-colors hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
-        style={copied ? { borderColor: 'var(--held)', color: 'var(--held)' } : undefined}
+        aria-label={copied ? 'Copied' : 'Copy the file'}
+        title={copied ? 'Copied' : 'Copy the file'}
+        className="chip absolute right-6 top-3 z-10 cursor-pointer bg-[color:var(--panel-2)] px-2 py-1.5 text-sm leading-none transition-colors hover:border-[color:var(--accent)]"
+        style={copied ? { borderColor: 'var(--held)' } : undefined}
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(code);
@@ -108,11 +180,11 @@ export function AgentSnippet({ allowanceId }: { allowanceId: string }) {
           }
         }}
       >
-        {copied ? 'copied' : 'copy file'}
+        {copied ? '✅' : '📋'}
       </button>
 
       <pre className="num text-[11px] leading-relaxed overflow-x-auto max-h-[420px] overflow-y-auto bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] p-4">
-        <code>{code}</code>
+        <code>{highlight(code)}</code>
       </pre>
     </div>
   );

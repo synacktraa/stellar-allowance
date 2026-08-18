@@ -349,10 +349,10 @@ export default function UserPage() {
                   }}
                   className="w-full bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2.5 text-sm cursor-pointer"
                 >
-                  {/* This step creates an account for the agent and nothing else — the rules,
-                      and the allowance itself, come in step 03. Naming both here promised
-                      something the button underneath does not do. */}
-                  <option value="">Create a new agent</option>
+                  {/* This step creates a Stellar account and nothing else. Not an agent — the
+                      agent is a program the owner writes — and not an allowance, which is step
+                      03. Both are things this button does not do. */}
+                  <option value="">Create a new agent account</option>
                   {existing.map((row) => (
                     <option key={row.contract_id} value={row.contract_id}>
                       {describe(row)}
