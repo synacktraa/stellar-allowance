@@ -111,17 +111,27 @@ rather than by the platform.
 Timing: 4.6–9.0s per purchase, mean 6.9s. Quote 0.4–1.2s, pay 2.8–6.8s waiting for a ledger to
 close, deliver 1.4–2.0s.
 
+## Tests
+
+```bash
+npm run contracts:test    # 18 tests, no network, seconds
+npm test                  # the gateway, against testnet — needs `npm run dev` running
+```
+
+The gateway tests are integration tests with nothing stubbed: real HTTP, the real database, real
+payments. A run costs a few cents of testnet USDC. `testing.md` covers what each suite is for and
+what it needs.
+
 ## Working on the contracts
 
 Only needed if you change them. Rust 1.84+ with the `wasm32v1-none` target and `stellar-cli` 27.
 
 ```bash
-npm run contracts:test    # 18 tests, no network required
 npm run contracts:build
 ```
 
-Tests use `register_stellar_asset_contract_v2` for a local USDC stand-in, so nothing touches the
-network and no funding is needed. After rebuilding, upload the wasm and replace
+The contract tests use `register_stellar_asset_contract_v2` for a local USDC stand-in, so nothing
+touches the network and no funding is needed. After rebuilding, upload the wasm and replace
 `ALLOWANCE_WASM_HASH` / `SPLITTER_WASM_HASH` in `.env.local`.
 
 ## Layout
@@ -133,6 +143,7 @@ web/src/app/                     landing page, developer tab, agent-owner tab, g
 web/src/app/api/pay/[apiId]/     the 402, payment verification, and the proxy
 web/src/lib/verify.ts            reads payments back off the chain
 web/scripts/                     setup, migrations, demo seeding, a buying agent
+web/tests/                       gateway tests, against a live server and testnet
 supabase/migrations/             database schema
 docs/CONTRACT.md                 design decisions and the deploy sequence
 ```

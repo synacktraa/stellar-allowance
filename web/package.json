@@ -12,7 +12,8 @@
     "migrate": "node --env-file=.env.local scripts/migrate.mjs",
     "seed-demo": "node --env-file=.env.local scripts/seed-demo.mjs",
     "mine": "node --env-file=.env.local scripts/mine.mjs",
-    "agent": "node --env-file=.env.local scripts/agent.mjs"
+    "agent": "node --env-file=.env.local scripts/agent.mjs",
+    "test": "node --env-file=.env.local --test \"tests/*.test.mjs\""
   },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",

@@ -9,6 +9,7 @@
     "build": "npm --prefix web run build",
     "start": "npm --prefix web run start",
     "lint": "npm --prefix web run lint",
+    "test": "npm --prefix web run test",
     "setup": "npm --prefix web run setup",
     "migrate": "npm --prefix web run migrate",
     "seed-demo": "npm --prefix web run seed-demo",
