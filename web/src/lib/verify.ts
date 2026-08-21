@@ -9,15 +9,17 @@ import { server } from './stellar';
  * only says where to look. Transaction hashes are public, so a caller can send someone else's.
  * Everything that matters is read back off the chain.
  *
- * Two facts have to hold together:
+ * Two facts are read back, and neither is useful alone. A payment with no reference cannot be
+ * matched to a request; a reference with no payment is just a string.
  *
- *   1. Real USDC moved to this API's splitter, in this transaction, for at least the price.
- *      Read from the token contract's own transfer event, so a contract that merely *claims*
- *      to have paid proves nothing.
- *   2. The transaction carries the reference we issued for this challenge.
+ *   1. How much USDC moved to this API's splitter in this transaction. Read from the token
+ *      contract's own transfer event, so a contract that merely *claims* to have paid proves
+ *      nothing.
+ *   2. The reference the transaction carries.
  *
- * Either alone is useless. A payment with no reference cannot be matched to a request; a
- * reference with no payment is just a string.
+ * What is deliberately left out is whether the amount is *enough*. That is not a fact about the
+ * transaction — it depends on the challenge this payment settles, and only the caller knows
+ * which one that is.
  *
  * Note what is deliberately *not* checked: whether the payer used an allowance. A direct payer
  * with no allowance is equally welcome — the gateway is not the thing enforcing limits.
@@ -64,14 +66,20 @@ function contractEvents(meta: xdr.TransactionMeta): xdr.ContractEvent[] {
 }
 
 /**
- * Finds a `transfer` event emitted by the USDC contract itself.
+ * Adds up every `transfer` the USDC contract itself emitted towards one recipient.
  *
  * Topics for the SAC are ["transfer", from, to, sep41_asset_string] and the value is the amount.
+ *
+ * A total rather than a first match, because this function no longer knows what counts as
+ * enough — that is the caller's question now, and the answer depends on a challenge row this
+ * file has never seen. "How much reached the splitter in this transaction" is the only figure
+ * that can be read here without guessing.
  */
-function findTransfer(
+function totalTransferred(
   events: xdr.ContractEvent[],
   expectedRecipient: string,
-): { to: string; amount: bigint } | null {
+): bigint {
+  let total = 0n;
   const usdc = env.usdcSac();
 
   for (const event of events) {
@@ -107,10 +115,10 @@ function findTransfer(
       continue;
     }
 
-    return { to, amount };
+    total += amount;
   }
 
-  return null;
+  return total;
 }
 
 /**
@@ -151,7 +159,7 @@ function readReference(events: xdr.ContractEvent[]): string | null {
 
 export async function verifyPayment(
   txHash: string,
-  expected: { recipient: string; minAmountStroops: bigint },
+  expected: { recipient: string },
 ): Promise<VerifyResult> {
   const result = await server().getTransaction(txHash);
 
@@ -164,8 +172,11 @@ export async function verifyPayment(
 
   const events = contractEvents(result.resultMetaXdr);
 
-  const transfer = findTransfer(events, expected.recipient);
-  if (!transfer || transfer.amount < expected.minAmountStroops) {
+  // Zero means nothing reached the splitter at all — a hash for someone else's payment, or for
+  // a transaction that did something unrelated. Whether a non-zero amount clears the price is
+  // the caller's decision.
+  const amountStroops = totalTransferred(events, expected.recipient);
+  if (amountStroops === 0n) {
     return { ok: false, reason: 'no_matching_transfer' };
   }
 
@@ -177,8 +188,8 @@ export async function verifyPayment(
     ok: true,
     payment: {
       reference,
-      amountStroops: transfer.amount,
-      recipient: transfer.to,
+      amountStroops,
+      recipient: expected.recipient,
     },
   };
 }

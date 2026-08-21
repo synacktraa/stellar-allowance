@@ -341,6 +341,17 @@ before any flush, flushing an empty contract, re-initialisation by a third party
 cargo test          # 18 tests across both contracts, no network required
 ```
 
+### The gateway is tested differently
+
+The contracts can be tested in a vacuum because they *are* the whole system inside the transaction.
+The gateway is not: it decides using an HTTP header, a database row, and a transaction's events at
+once, and the bugs live in the disagreements between the three. So `web/tests/` runs against a real
+server, the real database and real testnet payments, and stubs none of them.
+
+That is the first suite there, and it exists because of one such disagreement: the gateway checked
+a payment against the API's price *now* rather than the price it had quoted, so a price rise
+between quote and payment left the buyer paid and undelivered. See `testing.md`.
+
 ---
 
 ## 8. Build, deploy, run
