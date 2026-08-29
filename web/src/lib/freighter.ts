@@ -31,6 +31,39 @@ const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const PASSPHRASE = 'Test SDF Network ; September 2015';
 const USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 
+/** What a signed request carries. No session, no cookie — proof travels with each action. */
+export type Proof = { address: string; nonce: string; signed: string };
+
+/**
+ * Proves the connected address is yours, by signing a challenge transaction.
+ *
+ * The transaction has sequence number zero, which no real transaction ever has, so the network
+ * could never accept it however it is signed. That is the SEP-10 pattern, and it is the standard
+ * way to prove an account on Stellar.
+ *
+ * An earlier version asked the wallet to sign a readable *message* instead. Freighter hands that
+ * to its extension as an opaque blob and signs something no reconstruction here could reproduce —
+ * forty-eight combinations of payload and encoding all failed to verify. A transaction has one
+ * canonical hash that both sides compute with the same library, so there is nothing to guess.
+ */
+export async function proveAddress(address: string): Promise<Proof> {
+  const issued = await fetch('/api/auth/challenge', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ address }),
+  });
+  if (!issued.ok) throw new Error('Could not start the signature.');
+  const { nonce, transaction } = await issued.json();
+
+  const result = await signTransaction(transaction, {
+    networkPassphrase: PASSPHRASE,
+    address,
+  });
+  if (result.error) throw new Error(String(result.error));
+
+  return { address, nonce, signed: result.signedTxXdr };
+}
+
 export type Wallet = { address: string; network: string };
 
 /** What the wallet can actually pay with. Absent means the account does not exist yet. */

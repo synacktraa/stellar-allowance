@@ -140,7 +140,8 @@ export async function GET(request: NextRequest) {
     .from('apis')
     .select('id, name, upstream_url, price_stroops, splitter_contract_id, payout_address, status, created_at')
     .eq('developer_address', developer)
-    .neq('status', 'archived')
+    // Disabled APIs stay listed. Filtering them out also removed the only way to collect what
+    // they had already earned, which made "anything uncollected stays collectable" false.
     .order('created_at', { ascending: false });
 
   const origin = request.nextUrl.origin;

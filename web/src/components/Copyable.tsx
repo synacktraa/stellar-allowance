@@ -9,12 +9,27 @@ import { useState } from 'react';
  * wrapped line is the kind of small failure that makes a demo look unfinished, and it happens
  * in front of whoever is watching.
  */
-export function Copyable({ value, label }: { value: string; label?: string }) {
+export function Copyable({
+  value,
+  label,
+  oneLine,
+}: {
+  value: string;
+  label?: string;
+  /** Clip to a single line instead of wrapping. For table cells, where a wrapped 56-character
+   *  value pushes every other column out of shape. Copy still takes the whole thing. */
+  oneLine?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
 
   return (
     <div className="flex items-start gap-2">
-      <p className="num text-sm break-all min-w-0 flex-1">{value}</p>
+      <p
+        className={`num text-sm min-w-0 flex-1 ${oneLine ? 'truncate' : 'break-all'}`}
+        title={oneLine ? value : undefined}
+      >
+        {value}
+      </p>
       <button
         type="button"
         aria-label={label ? `Copy ${label}` : 'Copy'}

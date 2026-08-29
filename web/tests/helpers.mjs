@@ -111,8 +111,8 @@ export async function payDirect(recipient, amountStroops) {
  * Upstream is GitHub's zen endpoint: free, no key, and it answers with a sentence, so a
  * delivered body is visibly a delivered body.
  */
-export async function registerApi(priceStroops, upstreamUrl = 'https://api.github.com/zen') {
-  const developer = process.env.PLATFORM_ADDRESS;
+export async function registerApi(priceStroops, upstreamUrl = 'https://api.github.com/zen', developerAddress) {
+  const developer = developerAddress ?? process.env.PLATFORM_ADDRESS;
 
   const response = await fetch(`${ORIGIN}/api/apis`, {
     method: 'POST',
@@ -167,8 +167,28 @@ export async function archiveApi(id) {
   await db().from('apis').update({ status: 'archived' }).eq('id', id);
 }
 
-/** The only way to change a price today. There is no route for it, which is precisely why the
- *  gateway comparing against the live price has gone unnoticed. */
+/**
+ * Everything a signed request needs, produced the way a wallet would produce it.
+ *
+ * The server issues a nonce and states exactly what text will be signed; this signs that text.
+ * Freighter does the same thing in the browser, and that is the one part of this these tests
+ * cannot reach.
+ */
+export async function prove(keypair) {
+  const { nonce, transaction, network_passphrase } = await fetch(`${ORIGIN}/api/auth/challenge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ address: keypair.publicKey() }),
+  }).then((r) => r.json());
+
+  const challenge = TransactionBuilder.fromXDR(transaction, network_passphrase);
+  challenge.sign(keypair);
+
+  return { address: keypair.publicKey(), nonce, signed: challenge.toXDR() };
+}
+
+/** Changes a price straight in the database. `PATCH /api/apis/:id` is the real way now; this
+ *  stays because a test about the gateway should not need a signature to set up. */
 export async function setPrice(id, priceStroops) {
   const { error } = await db()
     .from('apis')
