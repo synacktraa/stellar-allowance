@@ -13,13 +13,15 @@
     "seed-demo": "node --env-file=.env.local scripts/seed-demo.mjs",
     "mine": "node --env-file=.env.local scripts/mine.mjs",
     "agent": "node --env-file=.env.local scripts/agent.mjs",
-    "test": "node --env-file=.env.local --test \"tests/*.test.mjs\""
+    "test": "node --env-file=.env.local --test --test-concurrency=1 \"tests/*.test.mjs\""
   },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^16.2.0",
     "@supabase/supabase-js": "^2.112.3",
+    "@types/qrcode": "^1.5.6",
     "next": "16.3.1",
+    "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
