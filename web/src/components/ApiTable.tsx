@@ -68,14 +68,24 @@ export function ApiTable({
                 >
                   {usdc(api.pending_stroops)}
                 </td>
-                <td className="px-4 py-3 text-right" onClick={(event) => event.stopPropagation()}>
-                  <button
-                    onClick={() => onCollect(api)}
-                    disabled={!waiting || busy !== null}
-                    className="chip px-3 py-1.5 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    {busy === `collect-${api.id}` ? 'paying out…' : 'collect'}
-                  </button>
+                <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
+                  <div className="flex items-center justify-end gap-2">
+                    {/* The row opens too, but a row that only *looks* like text is a control
+                        nobody finds — which is the same as not having one. */}
+                    <button
+                      onClick={() => onOpen(api)}
+                      className="chip px-3 py-1.5 cursor-pointer"
+                    >
+                      edit
+                    </button>
+                    <button
+                      onClick={() => onCollect(api)}
+                      disabled={!waiting || busy !== null}
+                      className="chip px-3 py-1.5 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      {busy === `collect-${api.id}` ? 'paying out…' : 'collect'}
+                    </button>
+                  </div>
                 </td>
               </tr>
             );

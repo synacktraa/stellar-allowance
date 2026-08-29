@@ -84,6 +84,63 @@ export default function DeveloperPage() {
 
   const uncollected = apis.reduce((total, api) => total + Number(api.pending_stroops ?? 0), 0);
 
+  // Before there is anything to show, there is nothing to head. The title and the add button
+  // used to sit above the connect card, which read as a dashboard that had failed to load rather
+  // than a page waiting for a wallet.
+  if (!address || !knownHandle || !handle) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <SiteHeader />
+        <main className="flex-1 flex items-center justify-center px-4 py-10">
+          {!address ? (
+            <div className="panel p-6 pt-8 w-full max-w-[440px]">
+              <span className="panel-tag">[ WALLET ]</span>
+              <p className="text-sm text-[color:var(--muted)] mb-5 leading-relaxed">
+                Your wallet is how an API is proved to be yours, and where its earnings are paid.
+                Freighter, on Testnet.
+              </p>
+              <button
+                onClick={connect}
+                disabled={connecting || restoring}
+                className="chip chip-accent px-4 py-2.5 cursor-pointer disabled:opacity-40"
+              >
+                {restoring ? 'checking…' : connecting ? 'waiting for Freighter…' : 'connect wallet'}
+              </button>
+              {walletError && (
+                <p className="text-sm mt-4" style={{ color: 'var(--drained)' }}>
+                  {walletError}
+                </p>
+              )}
+            </div>
+          ) : !knownHandle ? (
+            <p className="label">loading…</p>
+          ) : (
+            <div className="w-full max-w-[440px]">
+              {error && (
+                <p className="text-sm mb-4" style={{ color: 'var(--drained)' }}>
+                  {error}
+                </p>
+              )}
+              <ChooseHandle
+                busy={busy === 'handle'}
+                onChoose={(username) =>
+                  signed('handle', async (proof) => {
+                    const response = await fetch('/api/developers', {
+                      method: 'POST',
+                      headers: { 'content-type': 'application/json' },
+                      body: JSON.stringify({ ...proof, username }),
+                    });
+                    if (!response.ok) throw new Error((await response.json()).error);
+                  })
+                }
+              />
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       <SiteHeader />
@@ -95,22 +152,18 @@ export default function DeveloperPage() {
             <h1 className="text-2xl font-medium">Your APIs</h1>
           </div>
 
-          {address && handle && (
-            <button
-              onClick={() => setAdding(true)}
-              className="chip chip-accent px-4 py-2.5 cursor-pointer whitespace-nowrap"
-            >
-              + add an API
-            </button>
-          )}
+          <button
+            onClick={() => setAdding(true)}
+            className="chip chip-accent px-4 py-2.5 cursor-pointer whitespace-nowrap"
+          >
+            + add an API
+          </button>
         </div>
 
-        {address && handle && (
-          <p className="label mb-6">
-            <span style={{ color: 'var(--lavender)' }}>@{handle}</span>
-            {uncollected > 0 && ` · ${usdc(String(uncollected))} USDC waiting to be collected`}
-          </p>
-        )}
+        <p className="label mb-6">
+          <span style={{ color: 'var(--lavender)' }}>@{handle}</span>
+          {uncollected > 0 && ` · ${usdc(String(uncollected))} USDC waiting to be collected`}
+        </p>
 
         {error && (
           <p className="text-sm mb-5 max-w-[70ch]" style={{ color: 'var(--drained)' }}>
@@ -118,44 +171,7 @@ export default function DeveloperPage() {
           </p>
         )}
 
-        {/* --------------------------------------------------------- not here yet */}
-        {!address ? (
-          <div className="panel p-6 pt-8 max-w-[520px]">
-            <span className="panel-tag">[ WALLET ]</span>
-            <p className="text-sm text-[color:var(--muted)] mb-5 max-w-[46ch] leading-relaxed">
-              Your wallet is how an API is proved to be yours, and where its earnings are paid.
-              Freighter, on Testnet.
-            </p>
-            <button
-              onClick={connect}
-              disabled={connecting || restoring}
-              className="chip chip-accent px-4 py-2.5 cursor-pointer disabled:opacity-40"
-            >
-              {restoring ? 'checking…' : connecting ? 'waiting for Freighter…' : 'connect wallet'}
-            </button>
-            {walletError && (
-              <p className="text-sm mt-4" style={{ color: 'var(--drained)' }}>
-                {walletError}
-              </p>
-            )}
-          </div>
-        ) : !knownHandle ? (
-          <p className="label">loading…</p>
-        ) : !handle ? (
-          <ChooseHandle
-            busy={busy === 'handle'}
-            onChoose={(username) =>
-              signed('handle', async (proof) => {
-                const response = await fetch('/api/developers', {
-                  method: 'POST',
-                  headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ ...proof, username }),
-                });
-                if (!response.ok) throw new Error((await response.json()).error);
-              })
-            }
-          />
-        ) : apis.length === 0 ? (
+        {apis.length === 0 ? (
           <div className="panel p-6 pt-8 max-w-[560px]">
             <span className="panel-tag">[ NOTHING LISTED ]</span>
             <p className="text-sm text-[color:var(--muted)] max-w-[48ch] leading-relaxed">
@@ -179,9 +195,9 @@ export default function DeveloperPage() {
         )}
       </main>
 
-      {adding && handle && (
+      {adding && (
         <AddApi
-          payout={address!}
+          payout={address}
           busy={busy === 'add'}
           onClose={() => setAdding(false)}
           onAdd={(fields) =>
@@ -189,9 +205,15 @@ export default function DeveloperPage() {
               const response = await fetch('/api/apis', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ ...fields, developer_address: address, payout_address: address }),
+                body: JSON.stringify({
+                  ...fields,
+                  developer_address: address,
+                  payout_address: address,
+                }),
               });
-              if (!response.ok) throw new Error((await response.json()).error ?? 'Could not register it.');
+              if (!response.ok) {
+                throw new Error((await response.json()).error ?? 'Could not register it.');
+              }
               setAdding(false);
             })
           }
