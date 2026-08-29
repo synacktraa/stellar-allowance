@@ -66,20 +66,17 @@ function contractEvents(meta: xdr.TransactionMeta): xdr.ContractEvent[] {
 }
 
 /**
- * Adds up every `transfer` the USDC contract itself emitted towards one recipient.
+ * Finds a `transfer` event emitted by the USDC contract itself.
  *
  * Topics for the SAC are ["transfer", from, to, sep41_asset_string] and the value is the amount.
  *
- * A total rather than a first match, because this function no longer knows what counts as
- * enough — that is the caller's question now, and the answer depends on a challenge row this
- * file has never seen. "How much reached the splitter in this transaction" is the only figure
- * that can be read here without guessing.
+ * One event is all there ever is: Soroban permits a single operation per transaction, so a
+ * payment cannot be split across several transfers in one go.
  */
-function totalTransferred(
+function findTransfer(
   events: xdr.ContractEvent[],
   expectedRecipient: string,
-): bigint {
-  let total = 0n;
+): { to: string; amount: bigint } | null {
   const usdc = env.usdcSac();
 
   for (const event of events) {
@@ -115,10 +112,10 @@ function totalTransferred(
       continue;
     }
 
-    total += amount;
+    return { to, amount };
   }
 
-  return total;
+  return null;
 }
 
 /**
@@ -172,11 +169,11 @@ export async function verifyPayment(
 
   const events = contractEvents(result.resultMetaXdr);
 
-  // Zero means nothing reached the splitter at all — a hash for someone else's payment, or for
-  // a transaction that did something unrelated. Whether a non-zero amount clears the price is
-  // the caller's decision.
-  const amountStroops = totalTransferred(events, expected.recipient);
-  if (amountStroops === 0n) {
+  // Nothing reached the splitter at all — a hash for someone else's payment, or for a
+  // transaction that did something unrelated. Whether what did arrive clears the price is the
+  // caller's decision, not this one's.
+  const transfer = findTransfer(events, expected.recipient);
+  if (!transfer) {
     return { ok: false, reason: 'no_matching_transfer' };
   }
 
@@ -188,8 +185,8 @@ export async function verifyPayment(
     ok: true,
     payment: {
       reference,
-      amountStroops,
-      recipient: expected.recipient,
+      amountStroops: transfer.amount,
+      recipient: transfer.to,
     },
   };
 }
