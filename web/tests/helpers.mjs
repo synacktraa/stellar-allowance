@@ -105,7 +105,7 @@ export async function payDirect(recipient, amountStroops) {
  * Upstream is GitHub's zen endpoint: free, no key, and it answers with a sentence, so a
  * delivered body is visibly a delivered body.
  */
-export async function registerApi(priceStroops) {
+export async function registerApi(priceStroops, upstreamUrl = 'https://api.github.com/zen') {
   const developer = process.env.PLATFORM_ADDRESS;
 
   const response = await fetch(`${ORIGIN}/api/apis`, {
@@ -115,7 +115,7 @@ export async function registerApi(priceStroops) {
       developer_address: developer,
       payout_address: developer,
       name: `gateway test ${new Date().toISOString()}`,
-      upstream_url: 'https://api.github.com/zen',
+      upstream_url: upstreamUrl,
       price_stroops: String(priceStroops),
     }),
   });
@@ -141,9 +141,15 @@ export async function setPrice(id, priceStroops) {
   if (error) throw new Error(`could not change the price: ${error.message}`);
 }
 
-/** Asks for a quote. Returns the 402 body, which carries the price and the reference. */
-export async function quote(paidUrl) {
-  const response = await fetch(paidUrl);
+/**
+ * Asks for a quote. Returns the 402 body, which carries the price and the reference.
+ *
+ * A POST is quoted the same way as a GET, and the body is sent both times — once to be refused,
+ * once to be delivered. That is inherent to 402: the first call cannot be served, so whatever
+ * it carried has to be sent again with the payment.
+ */
+export async function quote(paidUrl, init = {}) {
+  const response = await fetch(paidUrl, request(init));
   if (response.status !== 402) {
     throw new Error(`expected a 402 quote, got ${response.status}`);
   }
@@ -151,12 +157,20 @@ export async function quote(paidUrl) {
 }
 
 /** Comes back with the payment, the way an agent does on its second call. */
-export function deliver(paidUrl, { txHash, reference }) {
-  return fetch(paidUrl, {
-    headers: {
-      'x-payment-tx': txHash,
-      // A direct payer cannot put the reference on-chain, so it names it here.
-      'x-allowance-reference': reference,
-    },
-  });
+export function deliver(paidUrl, { txHash, reference, ...init }) {
+  return fetch(paidUrl, request(init, {
+    'x-payment-tx': txHash,
+    // A direct payer cannot put the reference on-chain, so it names it here.
+    'x-allowance-reference': reference,
+  }));
+}
+
+/** Builds a fetch init, defaulting to GET and JSON-encoding any body given. */
+function request({ method, body } = {}, headers = {}) {
+  if (body === undefined) return { method: method ?? 'GET', headers };
+  return {
+    method: method ?? 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  };
 }

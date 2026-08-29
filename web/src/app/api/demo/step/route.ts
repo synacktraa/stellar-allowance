@@ -158,8 +158,27 @@ export async function POST(request: NextRequest) {
   const headers: Record<string, string> = { 'x-payment-tx': paid.hash };
   if (mode !== 'allowance') headers['x-allowance-reference'] = reference;
 
-  const delivery = await fetch(paidUrl, { headers });
-  const body = await delivery.text();
+  // Every purchase buys a QR of the payment that bought it, so each row is visibly a different
+  // thing rather than seven copies of one. It also exercises the query string, which is the
+  // half of the gateway a bare GET never touches.
+  const receipt = `https://stellar.expert/explorer/testnet/tx/${paid.hash}`;
+  const delivery = await fetch(
+    `${paidUrl}?text=${encodeURIComponent(receipt)}&size=200`,
+    { headers },
+  );
+  const raw = await delivery.text();
+
+  // The API answers with JSON carrying the SVG. Showing that raw would fill the row with
+  // markup, so it is summarised — and if the shape ever changes, the raw text still shows.
+  let body = raw.replace(/s+/g, ' ').slice(0, 90);
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.modules) {
+      body = `QR ${parsed.modules}×${parsed.modules} · receipt ${paid.hash.slice(0, 8)}`;
+    }
+  } catch {
+    // Not JSON — an error page, most likely. Leave the raw text, which says more than a guess.
+  }
 
   return Response.json({
     delivered: delivery.ok,

@@ -20,6 +20,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  Address,
   Asset,
   Contract,
   Horizon,
@@ -46,7 +47,7 @@ const owner = Keypair.fromSecret(process.env.OWNER_SECRET);
 const demoAgent = process.env.DEMO_AGENT_ADDRESS;
 const walletAgent = process.env.WALLET_AGENT_ADDRESS;
 
-const NAME = 'GitHub Zen (demo)';
+const NAME = 'QR Codes (demo)';
 const PRICE = '1000000'; // 0.10 USDC
 
 async function alive() {
@@ -111,7 +112,8 @@ if (api) {
       developer_address: platform,
       payout_address: platform,
       name: NAME,
-      upstream_url: 'https://api.github.com/zen',
+      // Our own, so the demo cannot be taken down by somebody else's outage.
+      upstream_url: `${origin}/api/demo/qr`,
       price_stroops: PRICE,
     }),
   });
@@ -127,7 +129,13 @@ console.log(`splitter            ${api.splitter_contract_id}`);
 const mine = await fetch(`${origin}/api/allowances?owner=${owner.publicKey()}`).then((r) =>
   r.json(),
 );
-let allowanceId = (mine.allowances ?? []).find((a) => a.agent_address === demoAgent)?.contract_id;
+// Prefer whichever one the environment already names. More than one allowance can share an
+// agent, and picking a different one each run would leave the funded one behind and hand the
+// landing page an empty contract — which looks exactly like a broken demo.
+const known = process.env.ALLOWANCE_CONTRACT_ID;
+const forAgent = (mine.allowances ?? []).filter((a) => a.agent_address === demoAgent);
+let allowanceId =
+  forAgent.find((a) => a.contract_id === known)?.contract_id ?? forAgent[0]?.contract_id;
 
 if (allowanceId) {
   console.log(`allowance  reusing  ${allowanceId}`);
@@ -150,6 +158,47 @@ if (allowanceId) {
   if (!response.ok) throw new Error(body.error ?? 'could not create the demo allowance');
   allowanceId = body.contract_id;
   console.log(`allowance  created  ${allowanceId}`);
+}
+
+// --- 2b. let the allowance actually pay it --------------------------------
+//
+// Creating an allowance allowlists whatever API existed at the time. An API registered later —
+// or one whose splitter changed — is not on that list, and every purchase refuses with #6 while
+// looking, from the outside, exactly like an empty balance. Reading the list back and adding
+// when missing is what makes this script safe to re-run against an allowance that already
+// exists.
+
+const detail = await fetch(`${origin}/api/allowances/${allowanceId}`).then((r) => r.json());
+const allowlist = detail.rules?.allowlist ?? [];
+
+if (!allowlist.includes(api.splitter_contract_id)) {
+  await submit(
+    new Contract(allowanceId).call(
+      'set_rules',
+      // set_rules replaces the whole struct, so the three numbers have to be sent back
+      // unchanged or this would quietly reset limits nobody asked it to touch.
+      nativeToScVal(
+        {
+          max_per_call: BigInt(detail.rules.max_per_call),
+          window_ledgers: detail.rules.window_ledgers,
+          window_cap: BigInt(detail.rules.window_cap),
+          allowlist: [...allowlist, api.splitter_contract_id].map((a) => Address.fromString(a)),
+        },
+        {
+          type: {
+            max_per_call: ['symbol', 'i128'],
+            window_ledgers: ['symbol', 'u32'],
+            window_cap: ['symbol', 'i128'],
+            allowlist: ['symbol', null],
+          },
+        },
+      ),
+    ),
+    owner,
+  );
+  console.log(`allowance  allowlisted ${api.splitter_contract_id.slice(0, 8)}…`);
+} else {
+  console.log('allowance  already allowlisted');
 }
 
 // --- 3. money -------------------------------------------------------------

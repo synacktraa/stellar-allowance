@@ -13,9 +13,22 @@ import { env } from '@/lib/env';
  *
  * The two calls share no state except through the database, because they are separate HTTP
  * requests and the payment happened on a network this server was not part of.
+ *
+ * GET and POST are the same transaction with a different envelope, so both run through
+ * `handle`. A POST sends its body twice — once to be refused, once to be delivered — which is
+ * inherent to 402 rather than a quirk here: the first call cannot be served, so whatever it
+ * carried has to come again with the payment.
+ *
+ * The quote is deliberately *not* bound to the body. The price is per call, not per byte, so a
+ * quote taken for one body and spent on another costs the developer nothing. That changes the
+ * day pricing is metered, and then the body's hash belongs in the challenge.
  */
 
 const CHALLENGE_TTL_SECONDS = 300;
+
+// Far more than a request to a paid API should ever need, and small enough that nobody can
+// make the gateway hold a large buffer for the price of an unpaid request.
+const MAX_BODY_BYTES = 64 * 1024;
 
 type Api = {
   id: string;
@@ -33,8 +46,17 @@ function problem(status: number, title: string, detail: string, extra: Record<st
   );
 }
 
-export async function GET(request: NextRequest, ctx: RouteContext<'/api/pay/[apiId]'>) {
-  const { apiId } = await ctx.params;
+async function handle(request: NextRequest, apiId: string, method: 'GET' | 'POST') {
+  // Read once, before anything else can consume the stream. An unpaid POST is refused without
+  // its body ever being forwarded, but it still has to be measured.
+  let payload: string | null = null;
+  if (method === 'POST') {
+    payload = await request.text();
+    if (payload.length > MAX_BODY_BYTES) {
+      return problem(413, 'too-large', `Body is larger than ${MAX_BODY_BYTES} bytes.`);
+    }
+  }
+
   const supabase = db();
 
   const { data: api } = await supabase
@@ -188,7 +210,15 @@ export async function GET(request: NextRequest, ctx: RouteContext<'/api/pay/[api
     });
 
     upstream = await fetch(target, {
-      headers: { 'x-allowance-secret': api.upstream_secret },
+      method,
+      headers: {
+        'x-allowance-secret': api.upstream_secret,
+        // Carried through so the API sees what the buyer actually sent, not our guess at it.
+        ...(payload === null
+          ? {}
+          : { 'content-type': request.headers.get('content-type') ?? 'application/json' }),
+      },
+      body: payload ?? undefined,
       // The buyer is waiting; a slow origin should fail rather than hold the payment open.
       signal: AbortSignal.timeout(8000),
     });
@@ -227,4 +257,14 @@ export async function GET(request: NextRequest, ctx: RouteContext<'/api/pay/[api
       'x-allowance-delivered': String(delivered),
     },
   });
+}
+
+export async function GET(request: NextRequest, ctx: RouteContext<'/api/pay/[apiId]'>) {
+  const { apiId } = await ctx.params;
+  return handle(request, apiId, 'GET');
+}
+
+export async function POST(request: NextRequest, ctx: RouteContext<'/api/pay/[apiId]'>) {
+  const { apiId } = await ctx.params;
+  return handle(request, apiId, 'POST');
 }

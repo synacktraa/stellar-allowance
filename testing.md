@@ -46,6 +46,13 @@ gateway and the UI, and are left in place so a failed run stays inspectable. Top
 setup needs nothing extra. `TEST_ORIGIN` overrides the default `http://localhost:3000` if you want
 to point the suite at a deployment.
 
+**One file at a time.** The runner is pinned to `--test-concurrency=1`, and it has to be. Every test
+file registers an API, which deploys a splitter from the platform account, and every payment is
+signed by the wallet agent — so two files running at once put two transactions on one Stellar
+account and they collide on its sequence number. The symptom is not a clean failure but a
+`hookFailed: deploy timed out` and a suite reported as *cancelled*. Chain tests that share a
+signing key are serial whether you plan for it or not.
+
 If the server is not answering, the suite fails rather than skipping. A skipped suite and a green
 suite look identical to anyone reading a summary.
 

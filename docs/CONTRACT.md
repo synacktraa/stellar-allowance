@@ -341,6 +341,19 @@ before any flush, flushing an empty contract, re-initialisation by a third party
 cargo test          # 18 tests across both contracts, no network required
 ```
 
+### What the gateway sells
+
+A paid endpoint accepts `GET` and `POST`. A query string is forwarded to the origin; a POST body
+is forwarded with its content type, capped at 64KB.
+
+A POST sends its body twice — once to be refused with the 402, once with the payment. That is
+inherent to the pattern rather than a quirk of this implementation: the first call cannot be
+served, so whatever it carried has to come again.
+
+**The quote is not bound to the body.** The price is per call, not per byte, so a quote taken for
+one body and spent on another costs the developer nothing. That stops being true the day pricing
+is metered, and then the body's hash belongs in the challenge row.
+
 ### The gateway is tested differently
 
 The contracts can be tested in a vacuum because they *are* the whole system inside the transaction.

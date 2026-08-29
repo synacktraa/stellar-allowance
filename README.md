@@ -141,6 +141,7 @@ contracts/contracts/allowance/   spending rules, one per agent owner
 contracts/contracts/splitter/    fee split, one per registered API
 web/src/app/                     landing page, developer tab, agent-owner tab, gateway
 web/src/app/api/pay/[apiId]/     the 402, payment verification, and the proxy
+web/src/app/api/demo/qr/         the API sold in the demo, computed here rather than fetched
 web/src/lib/verify.ts            reads payments back off the chain
 web/scripts/                     setup, migrations, demo seeding, a buying agent
 web/tests/                       gateway tests, against a live server and testnet
