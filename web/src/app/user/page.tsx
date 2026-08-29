@@ -8,6 +8,7 @@ import {
   deposit,
   proveAddress,
   revoke,
+  sendAgentXlm,
   setRules,
   withdraw,
 } from '@/lib/freighter';
@@ -120,7 +121,9 @@ export default function UserPage() {
               {agents.length === 0
                 ? 'none yet'
                 : `${agents.length} agent${agents.length === 1 ? '' : 's'}${
-                    funds ? ` · ${funds.usdc.toFixed(2)} USDC in your wallet` : ''
+                    funds
+                      ? ` · your wallet holds ${funds.usdc.toFixed(2)} USDC and ${funds.xlm.toFixed(2)} XLM`
+                      : ''
                   }`}
             </p>
           </>
@@ -388,6 +391,7 @@ function AgentDetail({
 }) {
   const [name, setName] = useState(agent.name ?? '');
   const [amount, setAmount] = useState('2.00');
+  const [topUp, setTopUp] = useState('2');
   // The chain stores addresses; the list endpoint has already resolved their names. Computed at
   // mount rather than in an effect: the component is keyed on the agent, so switching one
   // remounts this and the initialiser runs again with the right rules.
@@ -414,6 +418,7 @@ function AgentDetail({
 
   const balance = agent.balance === null ? 0 : Number(agent.balance) / 1e7;
   const stopped = agent.revoked === true;
+  const lowOnFees = agent.xlm !== null && agent.xlm < 1;
 
   return (
     <Overlay title={agent.name ?? 'agent'} onClose={onClose}>
@@ -422,11 +427,7 @@ function AgentDetail({
       <p className="num text-3xl mb-1" style={{ color: 'var(--accent)' }}>
         {balance.toFixed(2)} <span className="text-sm text-[color:var(--faint)]">USDC</span>
       </p>
-      <p className="label mb-4">
-        {agent.xlm === null
-          ? 'the agent account does not exist yet'
-          : `the agent holds ${agent.xlm.toFixed(2)} XLM for its own fees`}
-      </p>
+      <p className="label mb-4">what the agent may ask this contract to spend</p>
 
       <div className="flex gap-3 items-end mb-2">
         <Field
@@ -440,17 +441,53 @@ function AgentDetail({
           disabled={busy !== null}
           className="chip chip-accent px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40 whitespace-nowrap"
         >
-          {busy === 'deposit' ? 'signing…' : 'add'}
+          {busy === 'deposit' ? 'signing…' : 'deposit'}
         </button>
         <button
           onClick={() => run('withdraw', () => withdraw(owner, agent.contract_id, stroops(amount)))}
           disabled={busy !== null || balance === 0}
           className="chip px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40 whitespace-nowrap"
         >
-          {busy === 'withdraw' ? 'signing…' : 'take back'}
+          {busy === 'withdraw' ? 'signing…' : 'withdraw'}
         </button>
       </div>
       <p className="label mb-6">both are signed by you — we can do neither</p>
+
+      {/* ------------------------------------------------------------- fees */}
+      <div className="border-t border-[color:var(--line)] pt-4 mb-6">
+        <p className="label mb-1">the agent&rsquo;s own XLM, for transaction fees</p>
+        <p className="num text-lg mb-3" style={{ color: lowOnFees ? 'var(--drained)' : undefined }}>
+          {agent.xlm === null ? '—' : agent.xlm.toFixed(2)}{' '}
+          <span className="text-sm text-[color:var(--faint)]">XLM</span>
+          {lowOnFees && (
+            <span className="label ml-2" style={{ color: 'var(--drained)' }}>
+              too low to keep paying fees
+            </span>
+          )}
+        </p>
+
+        <div className="flex gap-3 items-end">
+          <Field
+            label="amount (XLM)"
+            value={topUp}
+            onChange={(e) => setTopUp(e.target.value)}
+            inputMode="decimal"
+          />
+          <button
+            onClick={() => run('xlm', () => sendAgentXlm(owner, agent.agent_address, topUp))}
+            disabled={busy !== null || !(Number(topUp) > 0)}
+            className="chip px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40 whitespace-nowrap"
+          >
+            {busy === 'xlm' ? 'signing…' : 'send XLM'}
+          </button>
+        </div>
+
+        {/* Asked for, and not possible — worth saying rather than leaving a missing button. */}
+        <p className="label leading-relaxed">
+          this cannot be taken back: it is the agent&rsquo;s own account, and only the agent&rsquo;s
+          key can move it — the same thing that makes handing over that key safe
+        </p>
+      </div>
 
       {/* ------------------------------------------------------------- name */}
       <div className="border-t border-[color:var(--line)] pt-4">

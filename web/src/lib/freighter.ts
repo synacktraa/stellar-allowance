@@ -2,6 +2,7 @@
 
 import {
   Address,
+  Asset,
   Contract,
   Operation,
   Transaction,
@@ -243,6 +244,38 @@ export async function createAgentAccount(
     .build();
 
   return signAndSubmit(address, built, 'Funding the agent');
+}
+
+/**
+ * Tops up an agent's XLM, for its own transaction fees.
+ *
+ * A plain payment, not a contract call: this is the agent's *account*, not its allowance. It
+ * pays for submitting transactions and nothing else — the agent still cannot spend a cent of
+ * USDC without asking the contract.
+ *
+ * There is deliberately no matching way to take it back. The XLM belongs to the agent's account,
+ * and only the agent's own key can move it — which is the same property that makes the agent
+ * safe to hand a key to. Send it what it needs rather than a float.
+ */
+export async function sendAgentXlm(address: string, agentPublicKey: string, amountXlm: string) {
+  const server = new rpc.Server(RPC_URL);
+  const account = await server.getAccount(address);
+
+  const built = new TransactionBuilder(account, {
+    fee: '100000',
+    networkPassphrase: PASSPHRASE,
+  })
+    .addOperation(
+      Operation.payment({
+        destination: agentPublicKey,
+        asset: Asset.native(),
+        amount: amountXlm,
+      }),
+    )
+    .setTimeout(120)
+    .build();
+
+  return signAndSubmit(address, built, 'Sending XLM to the agent');
 }
 
 export function deposit(address: string, contractId: string, stroops: bigint) {
