@@ -28,7 +28,6 @@ import { SiteHeader } from '@/components/SiteHeader';
  * being asked to go and set one up. It is the only claim on this page they can check themselves.
  */
 
-const DEMO_API_ID = process.env.DEMO_API_ID ?? '';
 const DEMO_ALLOWANCE = process.env.ALLOWANCE_CONTRACT_ID ?? '';
 const AGENT = process.env.DEMO_AGENT_ADDRESS ?? '';
 
@@ -243,21 +242,13 @@ export default function Home() {
             Same script, same API, same seven attempts against the same failing service — and
             crucially, the same 1.20 USDC to spend. The only thing that differs is where that
             money sits. One agent holds it; the other can only ask a contract for it. Both runs
-            pay real testnet USDC, side by side.
+            paid real testnet USDC — what follows is the recording, and every receipt in it
+            links to the transaction that paid for it.
           </p>
 
-          {DEMO_API_ID && DEMO_ALLOWANCE ? (
-            <DemoRunner apiId={DEMO_API_ID} allowanceId={DEMO_ALLOWANCE} />
-          ) : (
-            <div className="panel p-6 pt-8">
-              <span className="panel-tag">[ NOT_CONFIGURED ]</span>
-              <p className="text-sm text-[color:var(--muted)]">
-                Set <code className="font-mono text-[color:var(--accent)]">DEMO_API_ID</code> and{' '}
-                <code className="font-mono text-[color:var(--accent)]">ALLOWANCE_CONTRACT_ID</code>{' '}
-                to run the demo from this page.
-              </p>
-            </div>
-          )}
+          {/* No configuration branch any more: the recording ships with the page, so a fresh
+              clone shows the same evidence as the deployment. */}
+          <DemoRunner />
         </div>
       </section>
 

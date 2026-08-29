@@ -2,12 +2,12 @@
 
 Two suites, and they are very different animals.
 
-| | Contracts | Gateway |
-|---|---|---|
-| Where | `contracts/contracts/*/src/test.rs` | `web/tests/` |
-| Runner | `cargo test` | `node --test` |
-| Needs | nothing | a dev server, the database, testnet USDC |
-| Time | seconds | about half a minute |
+| | Contracts | Recording | Gateway |
+|---|---|---|---|
+| Where | `contracts/contracts/*/src/test.rs` | `web/tests/recording.test.mjs` | `web/tests/*.test.mjs` |
+| Runner | `cargo test` | `node --test` | `node --test` |
+| Needs | nothing | nothing | a dev server, the database, testnet USDC |
+| Time | seconds | instant | under a minute |
 
 ## Contracts
 
@@ -55,6 +55,24 @@ signing key are serial whether you plan for it or not.
 
 If the server is not answering, the suite fails rather than skipping. A skipped suite and a green
 suite look identical to anyone reading a summary.
+
+## The recording
+
+`web/tests/recording.test.mjs` checks `src/lib/demo-run.json`, the run the landing page replays.
+No network, no chain, no server — it runs anywhere, and it runs as part of `npm test`.
+
+The page stopped performing a live run because a single demo agent and a single allowance cannot
+serve two visitors at once: their transactions collide on one account's sequence number, and they
+spend from shared balances. Replaying a recording fixes that, but only honestly if the recording
+stays a real run — a plausible number typed by hand would look exactly like a measured one.
+
+So these tests check the properties a real run cannot violate: both columns start with the same
+balance, every delivery carries a 64-character transaction hash, every refusal states a reason and
+carries no payment, and the closing balance equals the start minus the price times the deliveries.
+That last one is the load-bearing check; editing any figure by hand breaks the arithmetic.
+
+Re-record with `npm run record-demo`, which needs `DEMO_RECORDER_SECRET` set and about 1.4 USDC,
+most of which flushes back.
 
 ## Not covered
 

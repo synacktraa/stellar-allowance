@@ -10,6 +10,7 @@ import {
 } from '@stellar/stellar-sdk';
 import { env } from '@/lib/env';
 import { read, server } from '@/lib/stellar';
+import { isRecorder } from '@/lib/recorder';
 
 /**
  * One purchase, either way.
@@ -77,6 +78,11 @@ function readReason(detail: string, mode: 'allowance' | 'unprotected'): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Spends real money, so it answers the recorder and nobody else.
+  if (!isRecorder(request)) {
+    return Response.json({ error: 'This endpoint records the demo; it is not public.' }, { status: 401 });
+  }
+
   const { mode = 'unprotected', apiId, allowanceId }: Body = await request.json();
   if (!apiId) return Response.json({ error: 'apiId is required' }, { status: 400 });
   if (mode === 'allowance' && !allowanceId) {

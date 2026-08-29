@@ -10,6 +10,7 @@
  */
 
 import {
+  Contract,
   Keypair,
   Networks,
   Operation,
@@ -125,9 +126,39 @@ export async function registerApi(priceStroops, upstreamUrl = 'https://api.githu
   return body;
 }
 
-/** Leaves the row behind on purpose — archived APIs are invisible to the gateway and to the UI,
- *  and keeping them makes a failed run inspectable afterwards. */
+/**
+ * Flushes the splitter, then archives the row.
+ *
+ * The row is left behind on purpose — archived APIs are invisible to the gateway and to the UI,
+ * and keeping them makes a failed run inspectable afterwards. The *money* is not: every run used
+ * to leave its couple of cents in a splitter nobody would ever call `flush` on again, and
+ * eighteen runs had quietly stranded 0.275 USDC that way. Test APIs pay out to the platform, so
+ * flushing returns all of it.
+ */
 export async function archiveApi(id) {
+  const { data } = await db()
+    .from('apis')
+    .select('splitter_contract_id')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (data?.splitter_contract_id) {
+    try {
+      const platform = Keypair.fromSecret(process.env.PLATFORM_SECRET);
+      const account = await server.getAccount(platform.publicKey());
+      const tx = new TransactionBuilder(account, { fee: '3000000', networkPassphrase: PASSPHRASE })
+        .addOperation(new Contract(data.splitter_contract_id).call('flush'))
+        .setTimeout(60)
+        .build();
+      const prepared = await server.prepareTransaction(tx);
+      prepared.sign(platform);
+      await settle((await server.sendTransaction(prepared)).hash);
+    } catch {
+      // An empty splitter refuses the flush, which is the common case and not worth reporting.
+      // Cleanup must never be the reason a green run looks red.
+    }
+  }
+
   await db().from('apis').update({ status: 'archived' }).eq('id', id);
 }
 
