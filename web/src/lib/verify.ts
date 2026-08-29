@@ -9,15 +9,17 @@ import { server } from './stellar';
  * only says where to look. Transaction hashes are public, so a caller can send someone else's.
  * Everything that matters is read back off the chain.
  *
- * Two facts have to hold together:
+ * Two facts are read back, and neither is useful alone. A payment with no reference cannot be
+ * matched to a request; a reference with no payment is just a string.
  *
- *   1. Real USDC moved to this API's splitter, in this transaction, for at least the price.
- *      Read from the token contract's own transfer event, so a contract that merely *claims*
- *      to have paid proves nothing.
- *   2. The transaction carries the reference we issued for this challenge.
+ *   1. How much USDC moved to this API's splitter in this transaction. Read from the token
+ *      contract's own transfer event, so a contract that merely *claims* to have paid proves
+ *      nothing.
+ *   2. The reference the transaction carries.
  *
- * Either alone is useless. A payment with no reference cannot be matched to a request; a
- * reference with no payment is just a string.
+ * What is deliberately left out is whether the amount is *enough*. That is not a fact about the
+ * transaction — it depends on the challenge this payment settles, and only the caller knows
+ * which one that is.
  *
  * Note what is deliberately *not* checked: whether the payer used an allowance. A direct payer
  * with no allowance is equally welcome — the gateway is not the thing enforcing limits.
@@ -67,6 +69,9 @@ function contractEvents(meta: xdr.TransactionMeta): xdr.ContractEvent[] {
  * Finds a `transfer` event emitted by the USDC contract itself.
  *
  * Topics for the SAC are ["transfer", from, to, sep41_asset_string] and the value is the amount.
+ *
+ * One event is all there ever is: Soroban permits a single operation per transaction, so a
+ * payment cannot be split across several transfers in one go.
  */
 function findTransfer(
   events: xdr.ContractEvent[],
@@ -151,7 +156,7 @@ function readReference(events: xdr.ContractEvent[]): string | null {
 
 export async function verifyPayment(
   txHash: string,
-  expected: { recipient: string; minAmountStroops: bigint },
+  expected: { recipient: string },
 ): Promise<VerifyResult> {
   const result = await server().getTransaction(txHash);
 
@@ -164,8 +169,11 @@ export async function verifyPayment(
 
   const events = contractEvents(result.resultMetaXdr);
 
+  // Nothing reached the splitter at all — a hash for someone else's payment, or for a
+  // transaction that did something unrelated. Whether what did arrive clears the price is the
+  // caller's decision, not this one's.
   const transfer = findTransfer(events, expected.recipient);
-  if (!transfer || transfer.amount < expected.minAmountStroops) {
+  if (!transfer) {
     return { ok: false, reason: 'no_matching_transfer' };
   }
 

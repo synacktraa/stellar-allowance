@@ -98,10 +98,9 @@ export async function GET(request: NextRequest, ctx: RouteContext<'/api/pay/[api
   }
 
   // ------------------------------------------------------------------ paid
-  const verified = await verifyPayment(txHash, {
-    recipient: api.splitter_contract_id,
-    minAmountStroops: BigInt(api.price_stroops),
-  });
+  // Only that money reached the splitter, and which request it names. Whether it is *enough*
+  // is settled further down, against the challenge — not against whatever the price says now.
+  const verified = await verifyPayment(txHash, { recipient: api.splitter_contract_id });
 
   if (!verified.ok) {
     return problem(402, 'payment-invalid', `Payment could not be verified: ${verified.reason}.`, {
@@ -119,11 +118,12 @@ export async function GET(request: NextRequest, ctx: RouteContext<'/api/pay/[api
 
   const { data: challenge } = await supabase
     .from('challenges')
-    .select('reference, api_id, expires_at, consumed_tx_hash')
+    .select('reference, api_id, amount_stroops, expires_at, consumed_tx_hash')
     .eq('reference', reference)
     .maybeSingle<{
       reference: string;
       api_id: string;
+      amount_stroops: string;
       expires_at: string;
       consumed_tx_hash: string | null;
     }>();
@@ -136,6 +136,22 @@ export async function GET(request: NextRequest, ctx: RouteContext<'/api/pay/[api
 
   if (new Date(challenge.expires_at) < new Date()) {
     return problem(402, 'expired', 'The challenge for that payment has expired.');
+  }
+
+  // The price the 402 named, not the price the API charges now.
+  //
+  // The agent was told an amount and paid it. If the developer moved the price in between, the
+  // agent has no way to know and no way to take the money back — it is already in the splitter.
+  // Measuring against the current price would mean keeping a payment and refusing what it
+  // bought. A quote holds until `expires_at`; that is what a quote is.
+  const owed = BigInt(challenge.amount_stroops);
+  if (verified.payment.amountStroops < owed) {
+    return problem(402, 'underpaid', 'That payment is less than the amount this request was quoted.', {
+      quoted: owed.toString(),
+      paid: verified.payment.amountStroops.toString(),
+      // Unconsumed, so the reference is still good until it expires.
+      reference,
+    });
   }
 
   // Consume atomically. A select-then-update would let two concurrent requests both pass.
