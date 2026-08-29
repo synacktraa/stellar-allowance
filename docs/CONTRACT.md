@@ -448,21 +448,7 @@ splitter   0      nothing left behind
 
 ## 9. Not built yet
 
-One gap in the interface, then three in the contracts, in order of cost.
-
-### An allowlist editor on a live allowance — ~30 minutes, web only
-
-The contract supports this and the interface does not, which is the worst combination. `set_rules`
-replaces the whole `Rules` struct, allowlist included, it is owner-gated, and
-`owner_can_change_the_rules` already covers it. But step 05 of the user tab edits the three numbers
-and never renders the API picker, so an owner cannot add an API to an allowance after creating it.
-
-Worse, `update rules` sends whatever allowlist the picker last held and reports success. An owner
-who believes they added an API is told it worked, and only finds out when a purchase is refused
-with `#6`.
-
-Fix: render the same directory picker step 03 uses, seeded from the allowlist read back off the
-chain. No contract change, no new wasm hash, no redeploy.
+Three gaps, all in the contracts, in order of cost.
 
 ### Refuse a duplicate reference — ~20 minutes
 

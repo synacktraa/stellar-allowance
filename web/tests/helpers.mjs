@@ -39,7 +39,12 @@ export const db = () =>
  */
 export async function requireServer() {
   try {
-    const response = await fetch(`${ORIGIN}/api/directory`, { signal: AbortSignal.timeout(5000) });
+    // Hits the database too. A server that is up but cannot reach Supabase would otherwise
+    // fail later, inside a test, looking like the test's fault.
+    const response = await fetch(
+      `${ORIGIN}/api/allowances?owner=${process.env.PLATFORM_ADDRESS}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch (cause) {
     throw new Error(

@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { read } from '@/lib/stellar';
+import { db } from '@/lib/supabase';
 
 /**
  * Live state for one allowance, read straight off the chain.
@@ -9,6 +10,9 @@ import { read } from '@/lib/stellar';
  * with the thing it is describing — there is no second copy to disagree.
  *
  * All four are simulations, so they cost nothing and need no signature.
+ *
+ * The one thing not read from the chain is the *names* of the allowlisted addresses. The
+ * contract stores addresses because addresses are all it can check; a person cannot read one.
  */
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +42,23 @@ export async function GET(_request: NextRequest, ctx: RouteContext<'/api/allowan
 
     const config = rules as Rules;
 
+    // The allowlist is addresses, because that is what the contract stores. Nobody can read one.
+    // Naming them here rather than in the page keeps a single source for it — the list endpoint
+    // already did this, and step 05 polls this one, so the two used to disagree.
+    const names: Record<string, string> = {};
+    if (config.allowlist.length > 0) {
+      const { data: apis } = await db()
+        .from('apis')
+        .select('name, splitter_contract_id')
+        .in('splitter_contract_id', config.allowlist);
+
+      for (const api of apis ?? []) {
+        if (api.splitter_contract_id) names[api.splitter_contract_id] = api.name;
+      }
+    }
+
     return Response.json({
+      names,
       contract_id: contractId,
       balance: String(balance ?? 0),
       remaining: String(remaining ?? 0),

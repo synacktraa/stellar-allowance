@@ -6,6 +6,7 @@ import { createAgentAccount, deposit, revoke, setRules, withdraw } from '@/lib/f
 import { useWallet } from '@/lib/useWallet';
 import { SiteHeader } from '@/components/SiteHeader';
 import { Step } from '@/components/Step';
+import { AllowlistInput, type Allowed } from '@/components/AllowlistInput';
 import { ConnectStep } from '@/components/ConnectStep';
 import { Copyable } from '@/components/Copyable';
 import { AgentSnippet } from '@/components/AgentSnippet';
@@ -31,6 +32,8 @@ type State = {
   remaining: string;
   spent_in_window: string;
   revoked: boolean;
+  /** Splitter address to API name, for the allowlist. The chain stores only the addresses. */
+  names: Record<string, string>;
   rules: {
     max_per_call: string;
     window_ledgers: number;
@@ -82,14 +85,6 @@ function describe(row: Existing): string {
 const usdc = (stroops?: string) => (stroops ? (Number(stroops) / 1e7).toFixed(2) : '0.00');
 const short = (v: string) => `${v.slice(0, 6)}…${v.slice(-4)}`;
 
-type DirectoryApi = {
-  id: string;
-  name: string;
-  upstream_url: string;
-  price_stroops: string;
-  splitter_contract_id: string;
-};
-
 /** Testnet closes a ledger roughly every five seconds. */
 const LEDGERS_PER_MINUTE = 12;
 
@@ -123,8 +118,9 @@ export default function UserPage() {
   const [maxPerCall, setMaxPerCall] = useState('0.10');
   const [windowCap, setWindowCap] = useState('0.50');
   const [windowMinutes, setWindowMinutes] = useState('15');
-  const [directory, setDirectory] = useState<DirectoryApi[]>([]);
-  const [allowed, setAllowed] = useState<string[]>([]);
+  const [allowed, setAllowed] = useState<Allowed[]>([]);
+  // Ours, offered to somebody who has not been given a URL by anybody yet.
+  const [example, setExample] = useState<{ paid_url: string; name: string } | null>(null);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(label);
@@ -150,17 +146,18 @@ export default function UserPage() {
     return () => clearInterval(timer);
   }, [contractId, refresh]);
 
+  // Nothing is allowed by default — an empty allowlist refuses everything, which is the right
+  // starting point for a spending limit. All this fetches is the example URL to offer someone
+  // who has not been handed one.
   useEffect(() => {
-    fetch('/api/directory')
-      .then((r) => r.json())
+    fetch('/api/demo/example')
+      .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
-        const apis: DirectoryApi[] = body.apis ?? [];
-        setDirectory(apis);
-        // Nothing is allowed by default. An empty allowlist refuses everything, which is the
-        // right starting point for a spending limit.
-        setAllowed([]);
+        if (body?.paid_url) {
+          setExample({ paid_url: window.location.origin + body.paid_url, name: body.name });
+        }
       })
-      .catch(() => setDirectory([]));
+      .catch(() => setExample(null));
   }, []);
 
   useEffect(() => {
@@ -173,14 +170,27 @@ export default function UserPage() {
 
   // A reopened allowance already has rules on chain. Show those in the editor rather than the
   // creation defaults, or the first edit silently reverts limits the owner never touched.
-  const hydrated = useRef(false);
+  //
+  // Keyed on which allowance was loaded, not on a boolean. It used to latch after the first one
+  // and never open again, so switching allowances in step 02 left the editor showing the
+  // previous contract's values while pointing at the new one — and `update rules` then wrote all
+  // four of them onto it and reported success. One dropdown change could silently replace an
+  // allowance's caps and its entire allowlist.
+  const hydratedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!state || !reopened || hydrated.current) return;
-    hydrated.current = true;
+    if (!state || !reopened || hydratedFor.current === reopened.contract_id) return;
+    hydratedFor.current = reopened.contract_id;
     setMaxPerCall(usdc(state.rules.max_per_call));
     setWindowCap(usdc(state.rules.window_cap));
     setWindowMinutes(String(Math.round(state.rules.window_ledgers / LEDGERS_PER_MINUTE)));
-    setAllowed(state.rules.allowlist);
+    // Only the addresses are on chain. Anything the gateway cannot name is still shown, since it
+    // still gets paid — hiding it would be the more dangerous omission.
+    setAllowed(
+      state.rules.allowlist.map((address) => ({
+        splitter_contract_id: address,
+        name: state.names?.[address] ?? short(address),
+      })),
+    );
   }, [state, reopened]);
 
   async function createAgent() {
@@ -247,7 +257,7 @@ export default function UserPage() {
         max_per_call: String(Math.round(Number(maxPerCall) * 1e7)),
         window_cap: String(Math.round(Number(windowCap) * 1e7)),
         window_ledgers: Math.max(1, Math.round(Number(windowMinutes) * LEDGERS_PER_MINUTE)),
-        allowlist: allowed,
+        allowlist: allowed.map((a) => a.splitter_contract_id),
       }),
     });
     const body = await response.json();
@@ -500,51 +510,10 @@ export default function UserPage() {
                 = at most {callsPerWindow} calls in any {windowMinutes} minutes, rolling
               </p>
 
-              <p className="label block mb-2">which APIs may be paid</p>
-              {directory.length === 0 ? (
-                <p className="text-sm text-[color:var(--muted)] mb-5">
-                  No APIs registered yet.{' '}
-                  <a href="/developer" className="text-[color:var(--accent)] underline">
-                    Add one first
-                  </a>
-                  .
-                </p>
-              ) : (
-                <div className="space-y-px bg-[color:var(--line)] mb-3">
-                  {directory.map((api) => {
-                    const on = allowed.includes(api.splitter_contract_id);
-                    return (
-                      <button
-                        key={api.id}
-                        onClick={() =>
-                          setAllowed((list) =>
-                            on
-                              ? list.filter((a) => a !== api.splitter_contract_id)
-                              : [...list, api.splitter_contract_id],
-                          )
-                        }
-                        className="w-full text-left bg-[color:var(--ground)] px-3 py-3 flex items-center justify-between gap-4 cursor-pointer"
-                      >
-                        <span className="min-w-0">
-                          <span
-                            className="text-sm block"
-                            style={{ color: on ? 'var(--accent)' : undefined }}
-                          >
-                            {on ? '✓ ' : '  '}
-                            {api.name}
-                          </span>
-                          <span className="num text-xs text-[color:var(--faint)] break-all">
-                            {api.upstream_url}
-                          </span>
-                        </span>
-                        <span className="num text-xs whitespace-nowrap">
-                          {usdc(api.price_stroops)} / call
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="mb-5">
+                <AllowlistInput value={allowed} onChange={setAllowed} example={example} />
+              </div>
+
               <p className="label mb-5">
                 anything not on this list is refused, however small the amount
               </p>
@@ -681,6 +650,13 @@ export default function UserPage() {
 
           <div className="mb-4">{rulesFields}</div>
 
+          {/* The contract has always accepted a new allowlist — `set_rules` replaces the whole
+              struct — but this step only ever edited the three numbers, so an API could not be
+              added after creation. Same component as step 03, so there is one way to do it. */}
+          <div className="mb-5">
+            <AllowlistInput value={allowed} onChange={setAllowed} example={example} />
+          </div>
+
           <p className="label mb-5">
             currently {usdc(state?.rules.max_per_call)} per call ·{' '}
             {usdc(state?.rules.window_cap)} per{' '}
@@ -704,7 +680,7 @@ export default function UserPage() {
                     1,
                     Math.round(Number(windowMinutes) * LEDGERS_PER_MINUTE),
                   ),
-                  allowlist: allowed.length > 0 ? allowed : (state?.rules.allowlist ?? []),
+                  allowlist: allowed.map((a) => a.splitter_contract_id),
                 });
                 await refresh(contractId);
               })
