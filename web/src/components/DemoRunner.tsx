@@ -225,6 +225,7 @@ export function DemoRunner() {
     if (!node) return;
 
     let timer: ReturnType<typeof setInterval> | undefined;
+    let poll: ReturnType<typeof setInterval> | undefined;
     let started = false;
 
     const begin = () => {
@@ -245,25 +246,28 @@ export function DemoRunner() {
       }, REVEAL_MS);
     };
 
-    // A scroll listener rather than IntersectionObserver, deliberately. IO is the tidier API,
-    // but it did not fire at all under the preview renderer this was built in — and a reveal
-    // that cannot be watched cannot be verified. This is measurable anywhere.
+    // Polled, rather than IntersectionObserver or a scroll listener.
+    //
+    // Both of those are tidier, and both proved unobservable: IO never fired under the preview
+    // renderer this was built in, and window scroll events never arrived there either — so the
+    // reveal could only be confirmed by reloading the page already scrolled to it, which is not
+    // how anybody reads it. Polling depends on no event being delivered, works the same whether
+    // the window or some container scrolls, and can be watched anywhere.
+    //
+    // It costs one getBoundingClientRect every quarter second, and only until it fires.
     const check = () => {
       const box = node.getBoundingClientRect();
       const onScreen = box.top < window.innerHeight * 0.85 && box.bottom > 0;
       if (!onScreen) return;
       begin();
-      window.removeEventListener('scroll', check);
-      window.removeEventListener('resize', check);
+      if (poll) clearInterval(poll);
     };
 
     check();
-    window.addEventListener('scroll', check, { passive: true });
-    window.addEventListener('resize', check, { passive: true });
+    poll = setInterval(check, 250);
 
     return () => {
-      window.removeEventListener('scroll', check);
-      window.removeEventListener('resize', check);
+      if (poll) clearInterval(poll);
       if (timer) clearInterval(timer);
     };
   }, []);
