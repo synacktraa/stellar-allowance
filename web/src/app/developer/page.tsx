@@ -116,15 +116,28 @@ export default function DeveloperPage() {
           )}
         </div>
 
-        {/* The heading belongs to the table. Over a connect card it read as a dashboard that had
-            failed to load rather than a page waiting for a wallet. */}
-        {ready && (
+        {/* Two headings, because the page is answering two different questions. Before a wallet
+            it is "what is this for", and "Your APIs" over a connect card read as a dashboard
+            that had failed to load. After, it is "what have I got". */}
+        {ready ? (
           <>
             <h1 className="text-2xl font-medium mb-1">Your APIs</h1>
             <p className="label mb-6">
               {uncollected > 0
                 ? `${usdc(String(uncollected))} USDC waiting to be collected`
                 : 'nothing waiting to be collected'}
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl font-medium mb-3">Charge for an API you already run.</h1>
+            <p className="text-sm text-[color:var(--muted)] max-w-[52ch] leading-relaxed mb-2">
+              Set a price and get a URL that takes the payment and forwards the request. Nothing
+              about your API changes.
+            </p>
+            <p className="text-sm text-[color:var(--muted)] max-w-[52ch] leading-relaxed">
+              Payments land in a contract with your address fixed inside it. We cannot redirect
+              them, and you do not need us to release them.
             </p>
           </>
         )}
