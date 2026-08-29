@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { Keypair } from '@stellar/stellar-sdk';
 import { db } from '@/lib/supabase';
+import { isRecorder } from '@/lib/recorder';
 import { env } from '@/lib/env';
 import { arg, invoke, platformKeypair, read } from '@/lib/stellar';
 
@@ -52,6 +53,11 @@ async function usdcBalance(address: string): Promise<bigint> {
 }
 
 export async function POST(request: NextRequest) {
+  // Spends real money, so it answers the recorder and nobody else.
+  if (!isRecorder(request)) {
+    return Response.json({ error: 'This endpoint records the demo; it is not public.' }, { status: 401 });
+  }
+
   const { apiId, allowanceId }: { apiId?: string; allowanceId?: string } = await request.json();
   if (!apiId || !allowanceId) {
     return Response.json({ error: 'apiId and allowanceId are required' }, { status: 400 });

@@ -1,0 +1,132 @@
+{
+  "recordedAt": "2026-08-29",
+  "network": "testnet",
+  "explorer": "https://stellar.expert/explorer/testnet/tx/{hash}",
+  "attempts": 7,
+  "price": "0.10",
+  "start": {
+    "wallet": "1.2",
+    "allowance": "1.2"
+  },
+  "rules": {
+    "max_per_call": "1000000",
+    "window_ledgers": 180,
+    "window_cap": "5000000",
+    "allowlist": [
+      "CCUP6YO3B2XQILSNAZCO44PV2R5SIWTCECJSL4NMZ2UTV5LY5CB2C42X",
+      "CCFZZ4WUWQLLTNIFXA2QMYXDNPUNSDHRGQVIZS6WJHGTWP7VQGJ7LLMU"
+    ]
+  },
+  "wallet": [
+    {
+      "n": 1,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "cdb55705567ddcd0b3459109a9e82de370c9c89d2b5bf587dd46952f2ee07408",
+      "body": "QR 41×41 · receipt cdb55705",
+      "remaining": "1.1000000"
+    },
+    {
+      "n": 2,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "08a82e2f859d212f4e756a5cffe3f6996967c7b80dfca4f5a11a373e20fe5edb",
+      "body": "QR 41×41 · receipt 08a82e2f",
+      "remaining": "1.0000000"
+    },
+    {
+      "n": 3,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "cf40ce2f356e84c72ddc69debe6b2462efd440b111763adae3b8f18384dbf3eb",
+      "body": "QR 45×45 · receipt cf40ce2f",
+      "remaining": "0.9000000"
+    },
+    {
+      "n": 4,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "808160045f87be05e089d0b6982f97c7699207a10ff441ac4e5f7519ba89b847",
+      "body": "QR 41×41 · receipt 80816004",
+      "remaining": "0.8000000"
+    },
+    {
+      "n": 5,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "9f23542f1a17e58fef598976d959c93c10dd4628d981f27449da699be0a563f4",
+      "body": "QR 45×45 · receipt 9f23542f",
+      "remaining": "0.7000000"
+    },
+    {
+      "n": 6,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "9755f84397ba8dd85761bc488893f760b1e69a5d090f398526e954d285cc50aa",
+      "body": "QR 41×41 · receipt 9755f843",
+      "remaining": "0.6000000"
+    },
+    {
+      "n": 7,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "a681c725deb2ed35375d42476cdb87fb540450cf9a02c6f7f53c48932b5b6717",
+      "body": "QR 41×41 · receipt a681c725",
+      "remaining": "0.5000000"
+    }
+  ],
+  "allowance": [
+    {
+      "n": 1,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "69f414c770b290ca0ffb9e14f464298c5ec1ade69ecb58c247f4a83ffcde837a",
+      "body": "QR 45×45 · receipt 69f414c7",
+      "remaining": "1.1"
+    },
+    {
+      "n": 2,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "77fc2aa4cf43e8d8a27cdcbaa858311869b40aed472d4d00c05717552a43fbfb",
+      "body": "QR 41×41 · receipt 77fc2aa4",
+      "remaining": "1"
+    },
+    {
+      "n": 3,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "c0e576fc654b5e9cfe4f26efedbf8f26c6a26acbe70ff39b512f6776009ded97",
+      "body": "QR 41×41 · receipt c0e576fc",
+      "remaining": "0.9"
+    },
+    {
+      "n": 4,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "ac0d09b73863d59fe86005b7ed1dcd6a7aa39d4874a00f587e955b3defa8aa77",
+      "body": "QR 45×45 · receipt ac0d09b7",
+      "remaining": "0.8"
+    },
+    {
+      "n": 5,
+      "delivered": true,
+      "amount": "1000000",
+      "txHash": "990b265e0d83a847824ec7b28adb03dfb902833b0ba7a18a53fa4f9e159b760a",
+      "body": "QR 41×41 · receipt 990b265e",
+      "remaining": "0.7"
+    },
+    {
+      "n": 6,
+      "delivered": false,
+      "reason": "over the window cap",
+      "remaining": "0.7"
+    },
+    {
+      "n": 7,
+      "delivered": false,
+      "reason": "over the window cap",
+      "remaining": "0.7"
+    }
+  ]
+}

@@ -111,6 +111,11 @@ rather than by the platform.
 Timing: 4.6–9.0s per purchase, mean 6.9s. Quote 0.4–1.2s, pay 2.8–6.8s waiting for a ledger to
 close, deliver 1.4–2.0s.
 
+The landing page replays one such run rather than performing a new one per visitor — a single
+demo agent and a single allowance cannot serve two people at once, and every visit spent money
+that only returned if a flush followed. `npm run record-demo` produces the recording, and every
+receipt on the page is a transaction hash you can look up.
+
 ## Tests
 
 ```bash
@@ -143,7 +148,8 @@ web/src/app/                     landing page, developer tab, agent-owner tab, g
 web/src/app/api/pay/[apiId]/     the 402, payment verification, and the proxy
 web/src/app/api/demo/qr/         the API sold in the demo, computed here rather than fetched
 web/src/lib/verify.ts            reads payments back off the chain
-web/scripts/                     setup, migrations, demo seeding, a buying agent
+web/scripts/                     setup, migrations, demo seeding, recording, a buying agent
+web/src/lib/demo-run.json        the recorded run the landing page replays
 web/tests/                       gateway tests, against a live server and testnet
 supabase/migrations/             database schema
 docs/CONTRACT.md                 design decisions and the deploy sequence

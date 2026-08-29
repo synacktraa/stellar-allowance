@@ -1,32 +1,46 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import run from '@/lib/demo-run.json';
 
 /**
- * The two runs, side by side.
+ * The two runs, side by side — replayed from a recording.
  *
  * Same agent, same API, same number of attempts. The only difference is where the money sits,
- * so the columns are deliberately identical in every other respect — the contrast has to come
+ * so the columns are deliberately identical in every other respect: the contrast has to come
  * from the outcome, not from the presentation.
+ *
+ * This used to run live on every visit, and could not keep doing so. One demo agent and one
+ * allowance are shared by everybody, so two visitors at once drove the same Stellar accounts
+ * and collided on the sequence number; and every visit spent real USDC that only returned if a
+ * flush happened to follow. Neither is fixable by adding money.
+ *
+ * What replaces it is not a mock-up. `npm run record-demo` performs a real run and writes
+ * `demo-run.json`, and every delivered row here carries the transaction hash that paid for it —
+ * so a visitor can click through to the chain instead of taking the page's word for it. That is
+ * a stronger claim than watching numbers appear, not a weaker one: a live run is gone the
+ * moment it ends, and a hash is permanent.
  */
 
 type Row = {
   n: number;
   delivered: boolean;
-  refused: boolean;
   reason?: string;
   amount?: string;
-  status?: number;
   body?: string;
   txHash?: string;
   /** USDC left, in the place that holds it: the agent's wallet, or the contract. */
-  remaining?: string;
-  remainingLabel?: string;
+  remaining: string;
 };
 
-const ATTEMPTS = 7;
+const ATTEMPTS = run.attempts;
+
+/** Compressed. Each of these really took about seven seconds, which the caption says. */
+const REVEAL_MS = 1400;
 
 const ORDINALS = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'];
+
+const explorer = (hash: string) => run.explorer.replace('{hash}', hash);
 
 /**
  * What actually happened, rather than what usually happens.
@@ -69,31 +83,43 @@ function usdc(stroops?: string) {
   return (Number(stroops) / 1e7).toFixed(2);
 }
 
+/** The limits as they stood on the contract when this was recorded. */
+function ruleChips(): string[] {
+  const amount = (v: string) => (Number(v) / 1e7).toFixed(2);
+  const minutes = Math.round(run.rules.window_ledgers / 12);
+  const allowed = run.rules.allowlist.length;
+  return [
+    `max ${amount(run.rules.max_per_call)} per call`,
+    `max ${amount(run.rules.window_cap)} per ${minutes} min`,
+    `${allowed} allowed recipient${allowed === 1 ? '' : 's'}`,
+  ];
+}
+
 function Column({
-  title, tag, rows, running, done, tone, verdict, holds, startedWith, rules,
+  title, tag, rows, shown, tone, holds, startedWith, rules, side,
 }: {
   title: string;
   tag: string;
   rows: Row[];
-  running: boolean;
-  done: boolean;
+  /** How many attempts have been revealed so far. */
+  shown: number;
   tone: 'drained' | 'held';
-  /** Why this column stopped. Both deliver 5 of 7 — the reason is the entire difference. */
-  verdict: string;
   /** Where this side's money sits: a wallet it controls, or a contract it does not. */
   holds: string;
-  /** The balance before the run. Null until prepare has reported it. */
-  startedWith: number | null;
+  startedWith: number;
   /** What is enforced against this side. Empty for the wallet, which is the point. */
   rules: string[];
+  side: 'wallet' | 'allowance';
 }) {
-  const delivered = rows.filter((r) => r.delivered).length;
-  const last = rows[rows.length - 1];
+  const visible = rows.slice(0, shown);
+  const done = shown >= ATTEMPTS;
+  const delivered = visible.filter((r) => r.delivered).length;
+  const last = visible[visible.length - 1];
   const toneColor = tone === 'drained' ? 'var(--drained)' : 'var(--held)';
 
   // One slot per attempt, always. Rendering only the rows that have arrived left both panels as
-  // empty boxes until someone pressed the button, which reads as broken rather than as ready.
-  const pending = ATTEMPTS - rows.length - (running ? 1 : 0);
+  // empty boxes before the replay reached them, which reads as broken rather than as pending.
+  const pending = ATTEMPTS - visible.length;
 
   return (
     <div className="panel p-5 pt-8">
@@ -119,13 +145,22 @@ function Column({
       </div>
 
       <div className="space-y-1.5 num text-xs">
-        {rows.map((row) => (
+        {visible.map((row) => (
           <div key={row.n} className="flex gap-3 items-baseline">
             <span className="text-[color:var(--faint)] w-4">{String(row.n).padStart(2, '0')}</span>
-            {row.delivered ? (
+            {row.delivered && row.txHash ? (
               <>
                 <span className="text-[color:var(--accent)]">{usdc(row.amount)}</span>
-                <span className="text-[color:var(--muted)] truncate">{row.body}</span>
+                {/* The receipt is the proof. Anything else here would be a picture of one. */}
+                <a
+                  href={explorer(row.txHash)}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  title="see this payment on chain"
+                  className="text-[color:var(--muted)] truncate underline decoration-dotted underline-offset-2 hover:text-[color:var(--accent)] transition-colors"
+                >
+                  {row.body}
+                </a>
               </>
             ) : (
               <span style={{ color: toneColor }}>refused — {row.reason}</span>
@@ -133,22 +168,13 @@ function Column({
           </div>
         ))}
 
-        {running && (
-          <div className="flex gap-3 items-baseline text-[color:var(--faint)]">
-            <span className="w-4">{String(rows.length + 1).padStart(2, '0')}</span>
-            <span className="animate-pulse">waiting for a ledger…</span>
-          </div>
-        )}
-
         {Array.from({ length: Math.max(0, pending) }, (_, i) => (
           <div
             key={`ghost-${i}`}
             className="flex gap-3 items-baseline text-[color:var(--line-bright)]"
             aria-hidden="true"
           >
-            <span className="w-4">
-              {String(ATTEMPTS - pending + i + 1).padStart(2, '0')}
-            </span>
+            <span className="w-4">{String(ATTEMPTS - pending + i + 1).padStart(2, '0')}</span>
             <span>········</span>
           </div>
         ))}
@@ -163,12 +189,10 @@ function Column({
         </div>
         <div className="text-right">
           <p className="label">{holds}</p>
-          {/* A closing balance on its own is unreadable — 0.00 and 0.60 only mean something
-              against what each side started with. Both spent the same 0.50. */}
+          {/* A closing balance on its own is unreadable — 0.50 and 0.70 only mean something
+              against what each side started with. Both spent from the same 1.20. */}
           <p className="num text-2xl">
-            <span className="text-[color:var(--faint)]">
-              {startedWith === null ? '—' : startedWith.toFixed(2)}
-            </span>
+            <span className="text-[color:var(--faint)]">{startedWith.toFixed(2)}</span>
             <span className="text-[color:var(--faint)] text-base"> → </span>
             <span style={{ color: done ? toneColor : 'var(--line-bright)' }}>
               {done ? Number(last?.remaining ?? 0).toFixed(2) : '—'}
@@ -178,167 +202,108 @@ function Column({
         </div>
       </div>
 
-      {/* Both columns deliver five of seven. Printing only the counts makes them look
-          identical, so the sentence that distinguishes them has to be on screen too. */}
+      {/* Both columns pay for most of their attempts. Printing only the counts makes them look
+          similar, so the sentence that distinguishes them has to be on screen too. */}
       {done && (
         <p className="text-sm mt-4 leading-relaxed" style={{ color: toneColor }}>
-          {verdict}
+          {verdictFor(side, rows)}
         </p>
       )}
     </div>
   );
 }
 
-export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId: string }) {
-  const [left, setLeft] = useState<Row[]>([]);
-  const [right, setRight] = useState<Row[]>([]);
-  const [phase, setPhase] = useState<'idle' | 'preparing' | 'running' | 'done' | 'blocked'>(
-    'idle',
-  );
-  const [blocked, setBlocked] = useState<string | null>(null);
-  const [start, setStart] = useState<{ left: number; right: number } | null>(null);
-  const [rules, setRules] = useState<string[]>([]);
+export function DemoRunner() {
+  const [shown, setShown] = useState(0);
+  const host = useRef<HTMLDivElement | null>(null);
 
-  // Read the live rules off the contract rather than hard-coding them here. A demo that states
-  // limits the chain is not actually enforcing would be the one lie this page cannot afford.
+  // Plays itself when it comes into view, once. There is no button because there is nothing to
+  // trigger — the run already happened, and asking a visitor to press play before showing them
+  // the evidence only puts a step in front of it.
   useEffect(() => {
-    fetch(`/api/allowances/${allowanceId}`)
-      .then((r) => r.json())
-      .then((body) => {
-        if (!body?.rules) return;
-        const usdcOf = (v: string) => (Number(v) / 1e7).toFixed(2);
-        const minutes = Math.round(body.rules.window_ledgers / 12);
-        setRules([
-          `max ${usdcOf(body.rules.max_per_call)} per call`,
-          `max ${usdcOf(body.rules.window_cap)} per ${minutes} min`,
-          `${body.rules.allowlist.length} allowed recipient${body.rules.allowlist.length === 1 ? '' : 's'}`,
-        ]);
-      })
-      .catch(() => setRules([]));
-  }, [allowanceId]);
+    const node = host.current;
+    if (!node) return;
 
-  async function run() {
-    setLeft([]);
-    setRight([]);
+    let timer: ReturnType<typeof setInterval> | undefined;
+    let started = false;
 
-    // Put both sides back to their starting position first. This is a public page spending real
-    // testnet USDC, so without it the tenth visitor watches two empty columns refuse everything
-    // for the same reason, which is the opposite of what the demo is for.
-    setPhase('preparing');
-    setStart(null);
-    const prepared = await fetch('/api/demo/prepare', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ apiId, allowanceId }),
-    })
-      .then((r) => r.json())
-      .catch(() => null);
+    const begin = () => {
+      if (started) return;
+      started = true;
 
-    // Where each side began. Without it the closing figures are unreadable: 0.00 and 0.60 say
-    // nothing until you know they started at 0.50 and 1.10 — that the same half a dollar left
-    // both, and only one of them had anything behind it.
-    if (prepared?.start) {
-      setStart({
-        left: Number(prepared.start.wallet) / 1e7,
-        right: Number(prepared.start.allowance) / 1e7,
-      });
-    }
-
-    // `ready` was reported all along and never read, so a reset that could not level the two
-    // sides ran anyway and the page narrated the result as though it had.
-    if (!prepared?.ready) {
-      setBlocked(
-        prepared?.error ??
-          'Could not put both sides back to the same starting position, so this run would ' +
-            'compare the funding rather than the rules.',
-      );
-      setPhase('blocked');
-      return;
-    }
-
-    setBlocked(null);
-    setPhase('running');
-
-    /** Seven purchases down one column, filling in as each ledger closes. */
-    const column = async (
-      mode: 'unprotected' | 'allowance',
-      set: typeof setLeft,
-    ) => {
-      for (let n = 1; n <= ATTEMPTS; n += 1) {
-        const response = await fetch('/api/demo/step', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ mode, apiId, allowanceId }),
-        });
-        const result = await response.json();
-        set((rows) => [...rows, { n, ...result }]);
+      // Someone who has asked for less motion wants the outcome, not the reveal.
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        setShown(ATTEMPTS);
+        return;
       }
+
+      timer = setInterval(() => {
+        setShown((n) => {
+          if (n + 1 >= ATTEMPTS && timer) clearInterval(timer);
+          return Math.min(n + 1, ATTEMPTS);
+        });
+      }, REVEAL_MS);
     };
 
-    // Side by side, not one after the other. They spend from different accounts, so nothing is
-    // contended — and running them sequentially meant ninety seconds of watching, most of it
-    // with one column sitting empty. Racing them is also the more honest picture: the same
-    // seven attempts, at the same moment, ending differently.
-    await Promise.all([column('unprotected', setLeft), column('allowance', setRight)]);
+    // A scroll listener rather than IntersectionObserver, deliberately. IO is the tidier API,
+    // but it did not fire at all under the preview renderer this was built in — and a reveal
+    // that cannot be watched cannot be verified. This is measurable anywhere.
+    const check = () => {
+      const box = node.getBoundingClientRect();
+      const onScreen = box.top < window.innerHeight * 0.85 && box.bottom > 0;
+      if (!onScreen) return;
+      begin();
+      window.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
 
-    setPhase('done');
-  }
+    check();
+    window.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check, { passive: true });
 
-  const busy = phase === 'preparing' || phase === 'running';
+    return () => {
+      window.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+      if (timer) clearInterval(timer);
+    };
+  }, []);
+
+  const recorded = new Date(`${run.recordedAt}T00:00:00Z`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-5">
-        <button
-          onClick={run}
-          disabled={busy}
-          className="chip chip-accent px-4 py-2.5 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-        >
-          {busy ? 'running…' : phase === 'done' ? 'run again' : 'run both'}
-        </button>
-        <span className="label">
-          {phase === 'preparing'
-            ? 'putting both sides back to the same starting position…'
-            : phase === 'running'
-              ? `${left.length + right.length} of ${ATTEMPTS * 2} settled — each waits for a ledger`
-              : 'both columns at once · about 50 seconds'}
-        </span>
-      </div>
-
-      {phase === 'blocked' && blocked && (
-        <p
-          className="text-sm mb-5 max-w-[68ch] leading-relaxed"
-          style={{ color: 'var(--drained)' }}
-          role="status"
-        >
-          {blocked}
-        </p>
-      )}
+    <div ref={host}>
+      <p className="label mb-5">
+        a real run, recorded {recorded} on {run.network} · each purchase took about 7 seconds,
+        almost all of it waiting for a ledger to close · every receipt below links to the chain
+      </p>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Column
+          side="wallet"
           title="The agent holds its own wallet"
           tag="[ TODAY ]"
-          rows={left}
-          running={phase === 'running' && left.length < ATTEMPTS}
-          done={left.length === ATTEMPTS}
+          rows={run.wallet}
+          shown={shown}
           tone="drained"
-          verdict={verdictFor('wallet', left)}
           holds="in its own wallet"
-          startedWith={start?.left ?? null}
+          startedWith={Number(run.start.wallet)}
           rules={[]}
         />
         <Column
+          side="allowance"
           title="The agent has an allowance"
           tag="[ WITH_ALLOWANCE ]"
-          rows={right}
-          running={phase === 'running' && right.length < ATTEMPTS}
-          done={right.length === ATTEMPTS}
+          rows={run.allowance}
+          shown={shown}
           tone="held"
-          verdict={verdictFor('allowance', right)}
           holds="in the contract"
-          startedWith={start?.right ?? null}
-          rules={rules}
+          startedWith={Number(run.start.allowance)}
+          rules={ruleChips()}
         />
       </div>
     </div>
