@@ -50,13 +50,24 @@ export function ApiTable({
         <tbody>
           {apis.map((api) => {
             const waiting = Number(api.pending_stroops ?? 0) > 0;
+            // Disabled rows stay, dimmed. They are still yours, they may still hold money, and
+            // hiding them is what made the money unreachable.
+            const off = api.status !== 'active';
             return (
               <tr
                 key={api.id}
                 onClick={() => onOpen(api)}
                 className="border-b border-[color:var(--line)] last:border-0 cursor-pointer hover:bg-[color:var(--panel-2)]"
+                style={off ? { opacity: 0.45 } : undefined}
               >
-                <td className="px-4 py-3">{api.name}</td>
+                <td className="px-4 py-3">
+                  {api.name}
+                  {off && (
+                    <span className="label ml-2" style={{ color: 'var(--drained)' }}>
+                      disabled
+                    </span>
+                  )}
+                </td>
                 {/* The copy button is its own action; clicking it should not also open the row. */}
                 <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                   <Copyable value={api.paid_url} label="paid url" />

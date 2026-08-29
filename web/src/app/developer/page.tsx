@@ -240,7 +240,7 @@ export default function DeveloperPage() {
           api={editing}
           busy={busy === 'edit'}
           onClose={() => setEditing(null)}
-          onSave={(patch) =>
+          onSave={(patch: Record<string, string | boolean>) =>
             signed('edit', async (proof) => {
               const response = await fetch(`/api/apis/${editing.id}`, {
                 method: 'PATCH',
@@ -354,12 +354,13 @@ function EditApi({
   api: Api;
   busy: boolean;
   onClose: () => void;
-  onSave: (patch: Record<string, string>) => void;
+  onSave: (patch: Record<string, string | boolean>) => void;
 }) {
   const [name, setName] = useState(api.name);
   const [url, setUrl] = useState(api.upstream_url);
   const [price, setPrice] = useState(usdc(api.price_stroops));
-  const [confirmRetire, setConfirmRetire] = useState(false);
+  const [confirmDisable, setConfirmDisable] = useState(false);
+  const off = api.status !== 'active';
 
   return (
     <Overlay title={api.name} onClose={onClose}>
@@ -393,20 +394,35 @@ function EditApi({
           {busy ? 'signing…' : 'save'}
         </button>
 
-        <button
-          onClick={() => (confirmRetire ? onSave({ status: 'archived' }) : setConfirmRetire(true))}
-          disabled={busy}
-          className="chip px-4 py-2.5 cursor-pointer disabled:opacity-40"
-          style={{ borderColor: 'var(--drained)', color: 'var(--drained)' }}
-        >
-          {confirmRetire ? 'yes, retire it' : 'retire'}
-        </button>
-
-        {confirmRetire && (
-          <span className="label" style={{ color: 'var(--drained)' }}>
-            the URL stops answering · anything uncollected stays collectable
-          </span>
+        {/* A switch, not a trapdoor. Disabling used to be one-way and hid the row, which took
+            the collect button with it — while the confirmation promised the opposite. */}
+        {off ? (
+          <button
+            onClick={() => onSave({ enabled: true })}
+            disabled={busy}
+            className="chip px-4 py-2.5 cursor-pointer disabled:opacity-40"
+            style={{ borderColor: 'var(--held)', color: 'var(--held)' }}
+          >
+            enable
+          </button>
+        ) : (
+          <button
+            onClick={() => (confirmDisable ? onSave({ enabled: false }) : setConfirmDisable(true))}
+            disabled={busy}
+            className="chip px-4 py-2.5 cursor-pointer disabled:opacity-40"
+            style={{ borderColor: 'var(--drained)', color: 'var(--drained)' }}
+          >
+            {confirmDisable ? 'yes, disable it' : 'disable'}
+          </button>
         )}
+
+        <span className="label" style={{ color: off ? 'var(--held)' : 'var(--drained)' }}>
+          {off
+            ? 'the URL is not answering · you can still collect what it earned'
+            : confirmDisable
+              ? 'the URL stops answering · you can turn it back on any time'
+              : ''}
+        </span>
       </div>
     </Overlay>
   );

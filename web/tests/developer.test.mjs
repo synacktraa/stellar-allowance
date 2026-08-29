@@ -144,11 +144,38 @@ describe('editing an API', { timeout: 4 * 60_000 }, () => {
     assert.match((await response.json()).error, /Nothing to change/);
   });
 
-  it('retires it, and the gateway stops selling it', async () => {
-    const response = await patch(`/api/apis/${api.id}`, { ...(await prove(owner)), status: 'archived' });
+  it('disables it, and the gateway stops selling it', async () => {
+    const response = await patch(`/api/apis/${api.id}`, { ...(await prove(owner)), enabled: false });
     assert.equal(response.status, 200);
 
-    const gone = await fetch(api.paid_url);
-    assert.equal(gone.status, 404);
+    assert.equal((await fetch(api.paid_url)).status, 404);
+    // And it cannot be newly allowlisted, since nobody should point an allowance at a URL that
+    // is not answering.
+    const resolved = await fetch(`${ORIGIN}/api/apis/resolve?url=${encodeURIComponent(api.paid_url)}`);
+    assert.equal(resolved.status, 404);
+  });
+
+  it('leaves a disabled API listed, so its earnings stay reachable', async () => {
+    // Filtering these out took the collect button away with the row, while the confirmation
+    // promised that anything uncollected stayed collectable. It was true on chain and false
+    // everywhere a person could see.
+    const { apis } = await fetch(`${ORIGIN}/api/apis?developer=${owner.publicKey()}`).then((r) => r.json());
+    const listed = apis.find((row) => row.id === api.id);
+
+    assert.ok(listed, "a disabled API disappeared from its own developer's list");
+    assert.equal(listed.status, 'archived');
+  });
+
+  it('enables it again, and the gateway sells it once more', async () => {
+    const response = await patch(`/api/apis/${api.id}`, { ...(await prove(owner)), enabled: true });
+    assert.equal(response.status, 200, JSON.stringify(await response.json()));
+
+    // A switch, not a trapdoor.
+    assert.equal((await fetch(api.paid_url)).status, 402);
+  });
+
+  it('refuses an enabled flag that is not a boolean', async () => {
+    const response = await patch(`/api/apis/${api.id}`, { ...(await prove(owner)), enabled: 'yes' });
+    assert.equal(response.status, 400);
   });
 });

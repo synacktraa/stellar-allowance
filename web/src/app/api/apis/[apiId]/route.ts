@@ -25,6 +25,7 @@ type Api = {
   name: string;
   upstream_url: string;
   price_stroops: string;
+  splitter_contract_id: string | null;
   status: string;
 };
 
@@ -38,7 +39,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<'/api/apis/[
     name?: string;
     price_stroops?: string | number;
     upstream_url?: string;
-    status?: string;
+    enabled?: boolean;
   };
   try {
     body = await request.json();
@@ -54,7 +55,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<'/api/apis/[
   const supabase = db();
   const { data: api } = await supabase
     .from('apis')
-    .select('id, developer_address, name, upstream_url, price_stroops, status')
+    .select('id, developer_address, name, upstream_url, price_stroops, splitter_contract_id, status')
     .eq('id', apiId)
     .maybeSingle<Api>();
 
@@ -100,13 +101,20 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<'/api/apis/[
     patch.upstream_url = target.toString();
   }
 
-  if (body.status !== undefined) {
-    // Retiring is the only status a developer sets. `pending` belongs to a half-finished deploy
-    // and `active` is what the deploy decides, so neither is theirs to assert.
-    if (body.status !== 'archived') {
-      return Response.json({ error: 'status can only be set to archived.' }, { status: 400 });
+  if (body.enabled !== undefined) {
+    // A boolean rather than a status, because on and off are the only two a developer sets.
+    // `pending` belongs to a half-finished deploy, and neither is theirs to assert.
+    if (typeof body.enabled !== 'boolean') {
+      return Response.json({ error: 'enabled must be true or false.' }, { status: 400 });
     }
-    patch.status = 'archived';
+    if (body.enabled && !api.splitter_contract_id) {
+      // Its payment contract never finished deploying, so there is nothing to sell through.
+      return Response.json(
+        { error: 'This API has no payment contract, so it cannot be enabled.' },
+        { status: 409 },
+      );
+    }
+    patch.status = body.enabled ? 'active' : 'archived';
   }
 
   if (Object.keys(patch).length === 0) {
@@ -115,8 +123,13 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<'/api/apis/[
 
   const { error } = await supabase.from('apis').update(patch).eq('id', api.id);
   if (error) {
-    // The only constraint that can fail here is one name per developer.
-    return Response.json({ error: `You already have an API called ${patch.name}.` }, { status: 409 });
+    // One name per developer, and the index ignores disabled ones — so a name freed by
+    // disabling can be taken, and enabling that API again then collides.
+    const name = patch.name ?? api.name;
+    return Response.json(
+      { error: `You already have an API called ${name}. Rename one of them first.` },
+      { status: 409 },
+    );
   }
 
   return Response.json({ ...api, ...patch });
