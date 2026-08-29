@@ -175,17 +175,16 @@ export async function archiveApi(id) {
  * cannot reach.
  */
 export async function prove(keypair) {
-  const { nonce, message } = await fetch(`${ORIGIN}/api/auth/challenge`, {
+  const { nonce, transaction, network_passphrase } = await fetch(`${ORIGIN}/api/auth/challenge`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ address: keypair.publicKey() }),
   }).then((r) => r.json());
 
-  return {
-    address: keypair.publicKey(),
-    nonce,
-    signature: keypair.sign(Buffer.from(message, 'utf8')).toString('base64'),
-  };
+  const challenge = TransactionBuilder.fromXDR(transaction, network_passphrase);
+  challenge.sign(keypair);
+
+  return { address: keypair.publicKey(), nonce, signed: challenge.toXDR() };
 }
 
 /** Changes a price straight in the database. `PATCH /api/apis/:id` is the real way now; this

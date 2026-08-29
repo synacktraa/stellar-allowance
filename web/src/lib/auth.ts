@@ -1,43 +1,70 @@
 import { randomBytes } from 'node:crypto';
-import { Keypair, StrKey } from '@stellar/stellar-sdk';
+import {
+  Account,
+  Keypair,
+  Operation,
+  StrKey,
+  TransactionBuilder,
+} from '@stellar/stellar-sdk';
 import { db } from './supabase';
+import { env } from './env';
 
 /**
  * Proving an address is yours, without a password or a session.
  *
- * The developer surface used to be open, because nothing on it could be changed: APIs were
- * listed by `?developer=<address>` and that was all. A dashboard changes that — a price, an
- * upstream URL and a handle are all editable, and "anyone can edit anyone's API" is not a
- * property this project should have.
+ * The developer surface used to be open, because nothing on it could be changed. A dashboard
+ * changes that — a price, an upstream URL and a handle are all editable — and "anyone can edit
+ * anyone's API" is not a property this project should have.
  *
- * There is no account to log into. The only thing a developer has is a Stellar keypair, so the
- * proof is a signature over a nonce we issued: we hand out a string, they sign it with the key
- * that owns the address, and we check it. Nothing is stored that could be stolen and replayed —
- * a nonce is single-use and expires in five minutes.
+ * The proof is a **challenge transaction**, the shape SEP-10 uses. The server builds a
+ * transaction the account could never actually submit, the wallet signs it, and the server
+ * checks the signature. Nothing is stored that could be replayed: the nonce inside is
+ * single-use and expires in five minutes.
  *
- * `auth_challenges` has been in the schema since migration 0001, described exactly this way, and
- * nothing ever wrote a row to it.
+ * It signs a transaction rather than a message on purpose, and the first attempt did the
+ * opposite. Freighter's `signMessage` hands the text to its extension as a blob and the
+ * extension signs *something* — forty-eight reconstructions of that payload all failed to
+ * verify, and guessing a forty-ninth is not a method. A transaction has one canonical hash that
+ * both sides compute with the same library, so there is no encoding to guess at. It is also the
+ * path this app already uses for deposits and rule changes, which is known to work.
+ *
+ * `auth_challenges` has been in the schema since migration 0001, described exactly this way,
+ * and nothing ever wrote a row to it.
  */
 
 const NONCE_TTL_SECONDS = 300;
 
+/** Names the operation so a wallet shows what is being asked, and so we can recognise it back. */
+const PURPOSE = 'stellar-allowance auth';
+
 /**
- * What the wallet actually shows the person signing.
+ * A transaction that cannot be submitted, ever.
  *
- * A bare nonce in a signing prompt is a string of noise, and approving noise is a habit worth
- * not teaching. This says who is asking and what for, and the server rebuilds it from the stored
- * nonce rather than trusting the client to send the same text back.
+ * Sequence zero is the trick SEP-10 relies on: a real transaction must use the account's next
+ * sequence number, and zero never is one. So this can be signed safely — there is no state in
+ * which the network would accept it — and it carries no operation that moves anything.
  */
-export function messageFor(address: string, nonce: string): string {
-  return [
-    'Stellar Allowance',
-    '',
-    'Prove this address is yours. This is a signature, not a transaction:',
-    'it moves no money and costs nothing.',
-    '',
-    `address: ${address}`,
-    `nonce:   ${nonce}`,
-  ].join('\n');
+function challengeTransaction(address: string, nonce: string, expiresAt: Date) {
+  // "-1" so the builder increments to zero.
+  const account = new Account(address, '-1');
+
+  return new TransactionBuilder(account, {
+    fee: '100',
+    networkPassphrase: env.networkPassphrase(),
+  })
+    .addOperation(
+      Operation.manageData({
+        name: PURPOSE,
+        value: nonce,
+        source: address,
+      }),
+    )
+    // Timebounds from the stored expiry, never from "now". `setTimeout` bakes the current clock
+    // into the transaction, so rebuilding it a second later produced a different hash and the
+    // signature stopped matching — a failure that looked exactly like a forgery and appeared
+    // only when issuing and verifying happened to straddle a second.
+    .setTimebounds(0, Math.floor(expiresAt.getTime() / 1000))
+    .build();
 }
 
 export async function issueChallenge(address: string) {
@@ -50,7 +77,12 @@ export async function issueChallenge(address: string) {
     expires_at: expiresAt.toISOString(),
   });
 
-  return { nonce, message: messageFor(address, nonce), expires_at: expiresAt.toISOString() };
+  return {
+    nonce,
+    transaction: challengeTransaction(address, nonce, expiresAt).toXDR(),
+    network_passphrase: env.networkPassphrase(),
+    expires_at: expiresAt.toISOString(),
+  };
 }
 
 export type ProofFailure =
@@ -59,25 +91,27 @@ export type ProofFailure =
   | 'wrong_address'
   | 'already_used'
   | 'expired'
+  | 'not_the_challenge'
   | 'bad_signature';
 
 /**
- * Checks a signature and burns the nonce.
+ * Checks a signed challenge and burns the nonce.
  *
- * The nonce is consumed whether or not the signature checks out. A nonce that survived a failed
- * attempt would let someone keep guessing against it, and there is no cost to issuing another.
+ * The nonce is consumed whether or not the signature checks out. One that survived a failed
+ * attempt could be guessed against for the rest of its five minutes, and issuing another costs
+ * nothing.
  */
 export async function verifyProof(proof: {
   address?: string;
   nonce?: string;
-  signature?: string;
+  signed?: string;
 }): Promise<{ ok: true; address: string } | { ok: false; reason: ProofFailure }> {
-  const { address, nonce, signature } = proof;
+  const { address, nonce, signed } = proof;
 
   if (!address || !StrKey.isValidEd25519PublicKey(address)) {
     return { ok: false, reason: 'not_an_address' };
   }
-  if (!nonce || !signature) return { ok: false, reason: 'unknown_nonce' };
+  if (!nonce || !signed) return { ok: false, reason: 'unknown_nonce' };
 
   const supabase = db();
   const { data: challenge } = await supabase
@@ -97,11 +131,27 @@ export async function verifyProof(proof: {
   if (challenge.address !== address) return { ok: false, reason: 'wrong_address' };
   if (new Date(challenge.expires_at) < new Date()) return { ok: false, reason: 'expired' };
 
+  // Rebuilt here rather than trusted from the wire. What comes back only has to carry a valid
+  // signature over the transaction *we* composed — so a wallet returning some other transaction,
+  // signed perfectly, proves nothing and is refused.
+  const expected = challengeTransaction(address, nonce, new Date(challenge.expires_at));
+
   try {
-    const verified = Keypair.fromPublicKey(address).verify(
-      Buffer.from(messageFor(address, nonce), 'utf8'),
-      Buffer.from(signature, 'base64'),
-    );
+    const returned = TransactionBuilder.fromXDR(signed, env.networkPassphrase());
+    if (returned.hash().toString('hex') !== expected.hash().toString('hex')) {
+      return { ok: false, reason: 'not_the_challenge' };
+    }
+
+    const key = Keypair.fromPublicKey(address);
+    const hash = expected.hash();
+    const verified = returned.signatures.some((signature) => {
+      try {
+        return key.verify(hash, signature.signature());
+      } catch {
+        return false;
+      }
+    });
+
     return verified ? { ok: true, address } : { ok: false, reason: 'bad_signature' };
   } catch {
     return { ok: false, reason: 'bad_signature' };

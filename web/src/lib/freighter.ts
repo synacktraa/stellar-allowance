@@ -16,7 +16,6 @@ import {
   isAllowed,
   isConnected,
   requestAccess,
-  signMessage,
   signTransaction,
 } from '@stellar/freighter-api';
 
@@ -33,14 +32,19 @@ const PASSPHRASE = 'Test SDF Network ; September 2015';
 const USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 
 /** What a signed request carries. No session, no cookie — proof travels with each action. */
-export type Proof = { address: string; nonce: string; signature: string };
+export type Proof = { address: string; nonce: string; signed: string };
 
 /**
- * Proves the connected address is yours, by signing a nonce the server issued.
+ * Proves the connected address is yours, by signing a challenge transaction.
  *
- * Costs nothing and touches no network: a message signature is not a transaction. The server
- * decides the exact text and rebuilds it from the stored nonce, so the wallet prompt shows
- * something a person can read rather than a string of noise to approve out of habit.
+ * The transaction has sequence number zero, which no real transaction ever has, so the network
+ * could never accept it however it is signed. That is the SEP-10 pattern, and it is the standard
+ * way to prove an account on Stellar.
+ *
+ * An earlier version asked the wallet to sign a readable *message* instead. Freighter hands that
+ * to its extension as an opaque blob and signs something no reconstruction here could reproduce —
+ * forty-eight combinations of payload and encoding all failed to verify. A transaction has one
+ * canonical hash that both sides compute with the same library, so there is nothing to guess.
  */
 export async function proveAddress(address: string): Promise<Proof> {
   const issued = await fetch('/api/auth/challenge', {
@@ -49,33 +53,15 @@ export async function proveAddress(address: string): Promise<Proof> {
     body: JSON.stringify({ address }),
   });
   if (!issued.ok) throw new Error('Could not start the signature.');
-  const { nonce, message } = await issued.json();
+  const { nonce, transaction } = await issued.json();
 
-  const result = await signMessage(message, { address });
-  if (result.error) {
-    throw new Error(String((result.error as { message?: string }).message ?? result.error));
-  }
+  const result = await signTransaction(transaction, {
+    networkPassphrase: PASSPHRASE,
+    address,
+  });
+  if (result.error) throw new Error(String(result.error));
 
-  return { address, nonce, signature: asBase64(result.signedMessage) };
-}
-
-/**
- * Freighter's signature has arrived in more than one shape across its versions — a base64
- * string, raw bytes, and a serialised Buffer. The server only ever wants base64, so the
- * normalising happens here rather than being guessed at on both sides.
- */
-function asBase64(signed: unknown): string {
-  if (typeof signed === 'string') return signed;
-
-  const bytes =
-    signed instanceof Uint8Array
-      ? signed
-      : signed && typeof signed === 'object' && Array.isArray((signed as { data?: number[] }).data)
-        ? Uint8Array.from((signed as { data: number[] }).data)
-        : null;
-
-  if (!bytes) throw new Error('The wallet returned a signature in a shape this app cannot read.');
-  return btoa(String.fromCharCode(...bytes));
+  return { address, nonce, signed: result.signedTxXdr };
 }
 
 export type Wallet = { address: string; network: string };
