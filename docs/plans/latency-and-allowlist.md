@@ -95,12 +95,23 @@ The rules run during **simulation**, not at apply time. By the time `prepareTran
 the per-call cap, the window and the allowlist have all been checked. A refusal is already known.
 
 So the agent can hand the gateway a *signed, simulated* transaction rather than a hash. The
-gateway re-simulates it in about a tenth of a second, confirms recipient, amount and reference,
-**delivers**, then submits and monitors in the background.
+gateway re-simulates it, confirms recipient, amount and reference, **delivers**, then submits and
+monitors in the background.
 
 This is card authorization: the shop hands over the coffee at auth, not at settlement.
 
-**7s → ~1.5s.**
+**Measured, once built.** The estimate above — "about a tenth of a second" — was wrong:
+
+| | |
+|---|---|
+| Gateway re-simulation | **482ms** |
+| Submission to `PENDING` | ~300ms |
+| Ledger wait removed | ~5000ms |
+
+The delivery call grows by roughly 0.8s and loses a 5s wait: **about four seconds saved per
+purchase, not 5.5.** Neither step is optional. The agent's own simulation is a claim by the
+sender, and `PENDING` is the only thing proving the signature, sequence number and fee are
+good — none of which simulation looks at.
 
 ### What it costs, precisely
 

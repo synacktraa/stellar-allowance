@@ -354,6 +354,38 @@ served, so whatever it carried has to come again.
 one body and spent on another costs the developer nothing. That stops being true the day pricing
 is metered, and then the body's hash belongs in the challenge row.
 
+### Delivering before the ledger closes
+
+A purchase takes about seven seconds, and roughly five of them are spent waiting for Stellar to
+close a ledger. Nothing changes that interval — but *waiting* for it is a choice.
+
+The rules run during **simulation**, not at apply time. By the time `prepareTransaction` returns,
+the per-call cap, the rolling window and the allowlist have all been checked; a refusal is already
+known. So an API can opt into taking a signed, simulated transaction (`X-Payment-Envelope`) rather
+than a hash of a settled one. The gateway reads what it would do, simulates it again for itself,
+submits it, and delivers on the network's acceptance.
+
+Two checks, not one. **Simulation** proves the allowance permits it; **submission returning
+`PENDING`** proves the network validated the signature, the sequence number and the fee, which
+simulation never looks at. Delivering on a simulation alone would hand out goods for a
+transaction that could not have been submitted at all.
+
+**What it costs.** Simulation reads state now and the ledger applies it about five seconds later.
+Two purchases in flight from one agent can both see the same headroom and only one can have it;
+an owner can revoke inside the gap. A revert after delivery means the developer served one call
+for nothing.
+
+So it is bounded and it is the developer's call:
+
+| | |
+|---|---|
+| **Off by default** | It is the developer's money at risk, so it is the developer's switch. |
+| **Exposure** | One call's price, per revert. Never more. |
+| **Demotion** | An agent whose transaction reverts goes back to waiting for settlement for an hour. It still buys — it just waits, as everyone did before. |
+| **Always visible** | `requests.settled` records what the ledger decided, so the rate is measurable rather than assumed. |
+
+Sequential agents never hit this. It is a concurrency hazard, not a common case.
+
 ### The gateway is tested differently
 
 The contracts can be tested in a vacuum because they *are* the whole system inside the transaction.

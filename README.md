@@ -111,6 +111,11 @@ rather than by the platform.
 Timing: 4.6–9.0s per purchase, mean 6.9s. Quote 0.4–1.2s, pay 2.8–6.8s waiting for a ledger to
 close, deliver 1.4–2.0s.
 
+An API can opt out of that wait. With `optimistic` set, the agent sends the signed transaction
+rather than a hash, and the gateway simulates it, submits it, and delivers on the network's
+acceptance — about four seconds faster, at the cost of one free call on the rare transaction that
+reverts after a clean simulation. Off by default, because it is the developer's money at risk.
+
 The landing page replays one such run rather than performing a new one per visitor — a single
 demo agent and a single allowance cannot serve two people at once, and every visit spent money
 that only returned if a flush followed. `npm run record-demo` produces the recording, and every

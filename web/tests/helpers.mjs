@@ -106,6 +106,53 @@ export async function payDirect(recipient, amountStroops) {
 }
 
 /**
+ * Builds a signed `spend`, simulated but never submitted.
+ *
+ * This is what an agent hands the gateway when the API delivers optimistically: not a hash of
+ * something that already happened, but a transaction that is ready to happen. Everything the
+ * gateway needs is inside it, and none of it has to be taken on the sender's word.
+ */
+export async function signedSpend({ allowanceId, recipient, amountStroops, reference, prepare = true }) {
+  const agent = Keypair.fromSecret(process.env.DEMO_AGENT_SECRET);
+  const account = await server.getAccount(agent.publicKey());
+
+  const tx = new TransactionBuilder(account, { fee: '2000000', networkPassphrase: PASSPHRASE })
+    .addOperation(
+      new Contract(allowanceId).call(
+        'spend',
+        nativeToScVal(recipient, { type: 'address' }),
+        nativeToScVal(BigInt(amountStroops), { type: 'i128' }),
+        nativeToScVal(reference, { type: 'symbol' }),
+      ),
+    )
+    .setTimeout(120)
+    .build();
+
+  // The agent's own simulation, which is how it learns a rule would refuse this before spending
+  // anything on finding out. The gateway repeats it rather than trusting the result.
+  //
+  // `prepare: false` skips it, for the tests about refusals the gateway makes *before* it
+  // simulates — wrong recipient, wrong amount, wrong reference, not opted in. Those need an
+  // envelope that parses, not one that would succeed, and preparing them would make four tests
+  // depend on the allowance having spare window budget for no reason.
+  const finished = prepare ? await server.prepareTransaction(tx) : tx;
+  finished.sign(agent);
+  return finished.toXDR();
+}
+
+/** Waits for it to land, so a test can confirm the gateway's optimism was warranted. */
+export async function landed(hash, timeoutMs = 45_000) {
+  const deadline = Date.now() + timeoutMs;
+  let result = await server.getTransaction(hash);
+  while (result.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
+    if (Date.now() > deadline) return 'never_included';
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    result = await server.getTransaction(hash);
+  }
+  return result.status;
+}
+
+/**
  * Registers a throwaway API through the real endpoint, which also deploys it a real splitter.
  *
  * Upstream is GitHub's zen endpoint: free, no key, and it answers with a sentence, so a
@@ -190,6 +237,11 @@ export async function quote(paidUrl, init = {}) {
     throw new Error(`expected a 402 quote, got ${response.status}`);
   }
   return response.json();
+}
+
+/** Comes back with a transaction that is ready to happen, rather than one that already has. */
+export function deliverEnvelope(paidUrl, { envelope, ...init }) {
+  return fetch(paidUrl, request(init, { 'x-payment-envelope': envelope }));
 }
 
 /** Comes back with the payment, the way an agent does on its second call. */

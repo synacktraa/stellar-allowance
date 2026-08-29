@@ -74,6 +74,22 @@ That last one is the load-bearing check; editing any figure by hand breaks the a
 Re-record with `npm run record-demo`, which needs `DEMO_RECORDER_SECRET` set and about 1.4 USDC,
 most of which flushes back.
 
+## A note on the demo allowance
+
+`tests/optimistic.test.mjs` spends from the demo allowance, because the allowance path is the only
+one that can carry a reference on chain and that is the allowance whose owner key is available.
+
+Its window cap is **0.50 USDC per 15 minutes**, so a handful of runs in quick succession exhaust
+it and the delivery test fails with `Error(Contract, #7)` — over the window cap. That is the
+contract behaving correctly; the test is simply queued behind it.
+
+`seed-demo` creates allowances with a ~2 minute window for exactly this reason. The deployed demo
+allowance predates that and still has 15. Shortening it would make the suite runnable
+back-to-back; until then, wait for the window rather than reading `#7` as a failure.
+
+The four refusal tests do not spend anything and do not need window budget — they send envelopes
+that were never simulated, because the gateway refuses them before it would simulate.
+
 ## Not covered
 
 No tests over the React components, and no browser automation. The interactive parts have been
