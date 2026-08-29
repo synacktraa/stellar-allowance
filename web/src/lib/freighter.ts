@@ -16,6 +16,7 @@ import {
   isAllowed,
   isConnected,
   requestAccess,
+  signMessage,
   signTransaction,
 } from '@stellar/freighter-api';
 
@@ -30,6 +31,52 @@ const RPC_URL = 'https://soroban-testnet.stellar.org';
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const PASSPHRASE = 'Test SDF Network ; September 2015';
 const USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+
+/** What a signed request carries. No session, no cookie — proof travels with each action. */
+export type Proof = { address: string; nonce: string; signature: string };
+
+/**
+ * Proves the connected address is yours, by signing a nonce the server issued.
+ *
+ * Costs nothing and touches no network: a message signature is not a transaction. The server
+ * decides the exact text and rebuilds it from the stored nonce, so the wallet prompt shows
+ * something a person can read rather than a string of noise to approve out of habit.
+ */
+export async function proveAddress(address: string): Promise<Proof> {
+  const issued = await fetch('/api/auth/challenge', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ address }),
+  });
+  if (!issued.ok) throw new Error('Could not start the signature.');
+  const { nonce, message } = await issued.json();
+
+  const result = await signMessage(message, { address });
+  if (result.error) {
+    throw new Error(String((result.error as { message?: string }).message ?? result.error));
+  }
+
+  return { address, nonce, signature: asBase64(result.signedMessage) };
+}
+
+/**
+ * Freighter's signature has arrived in more than one shape across its versions — a base64
+ * string, raw bytes, and a serialised Buffer. The server only ever wants base64, so the
+ * normalising happens here rather than being guessed at on both sides.
+ */
+function asBase64(signed: unknown): string {
+  if (typeof signed === 'string') return signed;
+
+  const bytes =
+    signed instanceof Uint8Array
+      ? signed
+      : signed && typeof signed === 'object' && Array.isArray((signed as { data?: number[] }).data)
+        ? Uint8Array.from((signed as { data: number[] }).data)
+        : null;
+
+  if (!bytes) throw new Error('The wallet returned a signature in a shape this app cannot read.');
+  return btoa(String.fromCharCode(...bytes));
+}
 
 export type Wallet = { address: string; network: string };
 
