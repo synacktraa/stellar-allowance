@@ -225,7 +225,6 @@ export function DemoRunner() {
     if (!node) return;
 
     let timer: ReturnType<typeof setInterval> | undefined;
-    let poll: ReturnType<typeof setInterval> | undefined;
     let started = false;
 
     const begin = () => {
@@ -255,19 +254,19 @@ export function DemoRunner() {
     // the window or some container scrolls, and can be watched anywhere.
     //
     // It costs one getBoundingClientRect every quarter second, and only until it fires.
-    const check = () => {
+    const onScreen = () => {
       const box = node.getBoundingClientRect();
-      const onScreen = box.top < window.innerHeight * 0.85 && box.bottom > 0;
-      if (!onScreen) return;
-      begin();
-      if (poll) clearInterval(poll);
+      return box.top < window.innerHeight * 0.85 && box.bottom > 0;
     };
 
-    check();
-    poll = setInterval(check, 250);
+    const poll = setInterval(() => {
+      if (!onScreen()) return;
+      begin();
+      clearInterval(poll);
+    }, 250);
 
     return () => {
-      if (poll) clearInterval(poll);
+      clearInterval(poll);
       if (timer) clearInterval(timer);
     };
   }, []);
