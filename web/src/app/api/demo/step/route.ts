@@ -62,8 +62,13 @@ async function settle(tx: Parameters<rpc.Server['sendTransaction']>[0]) {
 }
 
 /** Turns a host error into the reason a person would give. */
-function readReason(detail: string): string {
-  if (/not within the allowed range|#10/.test(detail)) return 'wallet empty';
+function readReason(detail: string, mode: 'allowance' | 'unprotected'): string {
+  // Two different things run out here. On one side the agent's own wallet, on the other the
+  // contract's balance — and calling the contract a wallet would undo the distinction the whole
+  // demo exists to draw.
+  if (/not within the allowed range|#10/.test(detail)) {
+    return mode === 'allowance' ? 'the contract is empty' : 'wallet empty';
+  }
   if (/#7/.test(detail)) return 'over the window cap';
   if (/#5/.test(detail)) return 'over the per-call cap';
   if (/#6/.test(detail)) return 'recipient not allowed';
@@ -125,7 +130,7 @@ export async function POST(request: NextRequest) {
   } catch (cause) {
     paid = {
       ok: false as const,
-      reason: readReason(cause instanceof Error ? cause.message : String(cause)),
+      reason: readReason(cause instanceof Error ? cause.message : String(cause), mode),
     };
   }
 

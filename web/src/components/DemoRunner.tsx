@@ -26,6 +26,44 @@ type Row = {
 
 const ATTEMPTS = 7;
 
+const ORDINALS = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh'];
+
+/**
+ * What actually happened, rather than what usually happens.
+ *
+ * These two lines used to be constants. That meant the page asserted "the rule stopped it, not
+ * the balance" on runs where the balance had stopped it — printing the demo's single claim at
+ * the exact moment it was untrue. A sentence about a run has to be read off the run.
+ */
+function verdictFor(side: 'wallet' | 'allowance', rows: Row[]): string {
+  if (rows.length === 0) return '';
+
+  const delivered = rows.filter((r) => r.delivered).length;
+  const refusal = rows.find((r) => !r.delivered);
+  const left = Number(rows[rows.length - 1]?.remaining ?? 0).toFixed(2);
+
+  if (side === 'wallet') {
+    return refusal
+      ? `Paid ${delivered}, then stopped only because the money ran out. Nothing refused it — ` +
+          'there was nothing left to refuse.'
+      : 'Nothing refused it. Seven retries, seven payments — and it would have paid for the eighth.';
+  }
+
+  if (!refusal) {
+    return `All ${delivered} inside the caps, with ${left} USDC still in the contract.`;
+  }
+
+  // The difference that matters. A contract that ran dry stopped for the same reason the wallet
+  // did, and saying otherwise would claim the rules did work they did not do.
+  if (/empty/.test(refusal.reason ?? '')) {
+    return `Refused the ${ORDINALS[refusal.n] ?? `#${refusal.n}`} because the contract was ` +
+      'empty, not because a rule fired. Top it up to see the limit do the work.';
+  }
+
+  return `Refused the ${ORDINALS[refusal.n] ?? `#${refusal.n}`} — ${refusal.reason} — with ` +
+    `${left} USDC still in the contract. The rule stopped it, not the balance.`;
+}
+
 function usdc(stroops?: string) {
   if (!stroops) return '—';
   return (Number(stroops) / 1e7).toFixed(2);
@@ -154,7 +192,10 @@ function Column({
 export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId: string }) {
   const [left, setLeft] = useState<Row[]>([]);
   const [right, setRight] = useState<Row[]>([]);
-  const [phase, setPhase] = useState<'idle' | 'preparing' | 'running' | 'done'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'preparing' | 'running' | 'done' | 'blocked'>(
+    'idle',
+  );
+  const [blocked, setBlocked] = useState<string | null>(null);
   const [start, setStart] = useState<{ left: number; right: number } | null>(null);
   const [rules, setRules] = useState<string[]>([]);
 
@@ -203,6 +244,19 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
       });
     }
 
+    // `ready` was reported all along and never read, so a reset that could not level the two
+    // sides ran anyway and the page narrated the result as though it had.
+    if (!prepared?.ready) {
+      setBlocked(
+        prepared?.error ??
+          'Could not put both sides back to the same starting position, so this run would ' +
+            'compare the funding rather than the rules.',
+      );
+      setPhase('blocked');
+      return;
+    }
+
+    setBlocked(null);
     setPhase('running');
 
     /** Seven purchases down one column, filling in as each ledger closes. */
@@ -251,6 +305,16 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
         </span>
       </div>
 
+      {phase === 'blocked' && blocked && (
+        <p
+          className="text-sm mb-5 max-w-[68ch] leading-relaxed"
+          style={{ color: 'var(--drained)' }}
+          role="status"
+        >
+          {blocked}
+        </p>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2">
         <Column
           title="The agent holds its own wallet"
@@ -259,7 +323,7 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
           running={phase === 'running' && left.length < ATTEMPTS}
           done={left.length === ATTEMPTS}
           tone="drained"
-          verdict="Nothing refused it. Seven retries, seven payments — and it would have paid for the eighth."
+          verdict={verdictFor('wallet', left)}
           holds="in its own wallet"
           startedWith={start?.left ?? null}
           rules={[]}
@@ -271,7 +335,7 @@ export function DemoRunner({ apiId, allowanceId }: { apiId: string; allowanceId:
           running={phase === 'running' && right.length < ATTEMPTS}
           done={right.length === ATTEMPTS}
           tone="held"
-          verdict="Refused the sixth, with money still in the contract. The rule stopped it, not the balance."
+          verdict={verdictFor('allowance', right)}
           holds="in the contract"
           startedWith={start?.right ?? null}
           rules={rules}

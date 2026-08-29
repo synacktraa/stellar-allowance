@@ -141,17 +141,32 @@ export async function POST(request: NextRequest) {
     // The starting position, read after the resets rather than assumed from the targets — a
     // top-up that failed would otherwise be reported as a figure that was never true. The page
     // needs these: an ending balance means nothing without the one it started from.
-    return Response.json({
-      ready: true,
-      done,
-      start: {
-        wallet: (await usdcBalance(walletAgent)).toString(),
-        allowance: (await usdcBalance(allowanceId)).toString(),
-      },
-    });
+    const startWallet = await usdcBalance(walletAgent);
+    const startAllowance = await usdcBalance(allowanceId);
+    const start = { wallet: startWallet.toString(), allowance: startAllowance.toString() };
+
+    // The demo makes exactly one claim: the only difference between the columns is where the
+    // money sits. Unequal starting balances void it — whichever side was handed less stops
+    // first, and the page then reports a rule doing work the shortfall did. Better to refuse to
+    // run than to run something that argues for the wrong conclusion.
+    if (startWallet !== startAllowance) {
+      return Response.json({
+        ready: false,
+        done,
+        start,
+        error:
+          `The two sides are not level: ${Number(startWallet) / 1e7} against ` +
+          `${Number(startAllowance) / 1e7} USDC. A run now would measure the funding rather ` +
+          `than the rules. Top up the platform account from https://faucet.circle.com.`,
+      });
+    }
+
+    return Response.json({ ready: true, done, start });
   } catch (cause) {
-    // A run against a slightly-off starting position still demonstrates the mechanism, so this
-    // reports what it managed and lets the demo proceed rather than blocking on it.
+    // Reports what it managed and stops. An earlier version let the demo proceed from wherever
+    // the reset had got to, on the reasoning that a slightly-off starting position still shows
+    // the mechanism. It does not: it shows one column stopping earlier than the other, which is
+    // precisely the sentence the page then prints, and the sentence is then false.
     let start = null;
     try {
       start = {
@@ -161,12 +176,17 @@ export async function POST(request: NextRequest) {
     } catch {
       // Reporting the failure below matters more than reporting the balances.
     }
-    return Response.json({
-      ready: false,
-      done,
-      start,
-      error: cause instanceof Error ? cause.message : String(cause),
-    });
+
+    // A Soroban failure arrives as a diagnostic event log — several lines of topics and raw
+    // i128s. Accurate, and the wrong thing to put in front of a visitor. The one that actually
+    // happens is the platform running dry mid-reset, so name that and say what fixes it.
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    const human = /not within the allowed range|#10/.test(detail)
+      ? 'Not enough testnet USDC in the platform account to start both sides level, so this ' +
+        'run would compare the funding rather than the rules. Top up at https://faucet.circle.com.'
+      : `Could not reset the demo: ${detail.replace(/\s+/g, ' ').slice(0, 140)}`;
+
+    return Response.json({ ready: false, done, start, error: human });
   }
 }
 
