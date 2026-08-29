@@ -40,10 +40,10 @@ export function ApiTable({
       <table className="w-full text-sm min-w-[680px]">
         <thead>
           <tr className="border-b border-[color:var(--line)]">
-            <th className="label text-left font-normal px-4 py-3">name</th>
-            <th className="label text-left font-normal px-4 py-3">url to share</th>
-            <th className="label text-right font-normal px-4 py-3">per call</th>
-            <th className="label text-right font-normal px-4 py-3">earned</th>
+            <th className="label text-left font-normal px-4 py-3 whitespace-nowrap">name</th>
+            <th className="label text-left font-normal px-4 py-3 whitespace-nowrap">url to share</th>
+            <th className="label text-right font-normal px-4 py-3 whitespace-nowrap">per call</th>
+            <th className="label text-right font-normal px-4 py-3 whitespace-nowrap">earned</th>
             <th className="px-4 py-3" />
           </tr>
         </thead>
@@ -53,29 +53,44 @@ export function ApiTable({
             // Disabled rows stay, dimmed. They are still yours, they may still hold money, and
             // hiding them is what made the money unreachable.
             const off = api.status !== 'active';
+            // Dim what a disabled row *says*, never what it *does*. Fading the whole row took the
+            // edit and collect buttons with it, which made the one row you most need to act on
+            // the hardest to read.
+            const faded = off ? { opacity: 0.5 } : undefined;
             return (
               <tr
                 key={api.id}
                 onClick={() => onOpen(api)}
                 className="border-b border-[color:var(--line)] last:border-0 cursor-pointer hover:bg-[color:var(--panel-2)]"
-                style={off ? { opacity: 0.45 } : undefined}
               >
-                <td className="px-4 py-3">
-                  {api.name}
+                <td className="px-4 py-3 whitespace-nowrap" style={faded}>
+                  <span>{api.name}</span>
                   {off && (
-                    <span className="label ml-2" style={{ color: 'var(--drained)' }}>
-                      disabled
+                    <span
+                      className="chip ml-2 px-1.5 py-0.5 align-middle"
+                      style={{ borderColor: 'var(--drained)', color: 'var(--drained)' }}
+                    >
+                      off
                     </span>
                   )}
                 </td>
                 {/* The copy button is its own action; clicking it should not also open the row. */}
-                <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
-                  <Copyable value={api.paid_url} label="paid url" />
-                </td>
-                <td className="px-4 py-3 num text-right">{usdc(api.price_stroops)}</td>
                 <td
-                  className="px-4 py-3 num text-right"
-                  style={{ color: waiting ? 'var(--held)' : 'var(--faint)' }}
+                  className="px-4 py-3 max-w-[380px]"
+                  style={faded}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <Copyable value={api.paid_url} label="paid url" oneLine />
+                </td>
+                <td className="px-4 py-3 num text-right whitespace-nowrap" style={faded}>
+                  {usdc(api.price_stroops)}
+                </td>
+                <td
+                  className="px-4 py-3 num text-right whitespace-nowrap"
+                  style={{
+                    color: waiting ? 'var(--held)' : 'var(--faint)',
+                    ...(off ? { opacity: 0.5 } : {}),
+                  }}
                 >
                   {usdc(api.pending_stroops)}
                 </td>
