@@ -52,8 +52,10 @@ const PRICE = '1000000'; // 0.10 USDC
 
 async function alive() {
   try {
-    await fetch(`${origin}/api/directory`);
-    return true;
+    // Reaches the database as well as the server, so a running app with broken credentials
+    // fails here rather than three transactions later.
+    const response = await fetch(`${origin}/api/allowances?owner=${platform}`);
+    return response.ok;
   } catch {
     return false;
   }
