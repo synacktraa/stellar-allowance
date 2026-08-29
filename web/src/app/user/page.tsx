@@ -1,132 +1,87 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Keypair } from '@stellar/stellar-sdk';
-import { createAgentAccount, deposit, revoke, setRules, withdraw } from '@/lib/freighter';
 import { useWallet } from '@/lib/useWallet';
+import {
+  createAgentAccount,
+  deposit,
+  proveAddress,
+  revoke,
+  setRules,
+  withdraw,
+} from '@/lib/freighter';
+import { DEFAULT_WINDOW_LEDGERS, LEDGERS_PER_MINUTE, NO_RATE_LIMIT, isUnlimited } from '@/lib/rules';
 import { SiteHeader } from '@/components/SiteHeader';
-import { Step } from '@/components/Step';
+import { Overlay, Field } from '@/components/Overlay';
+import { AgentTable, type AgentRow } from '@/components/AgentTable';
 import { AllowlistInput, type Allowed } from '@/components/AllowlistInput';
-import { ConnectStep } from '@/components/ConnectStep';
-import { Copyable } from '@/components/Copyable';
 import { AgentSnippet } from '@/components/AgentSnippet';
+import { Copyable } from '@/components/Copyable';
 
 /**
- * The user tab.
+ * The agents you have given a budget to.
  *
- * Four steps from never having touched a blockchain to an agent that cannot overspend: connect,
- * create an agent, set the rules, add money.
+ * This was six numbered steps, which is the right shape for the first ten minutes and the wrong
+ * one forever after. Somebody coming back wants to top one up or change what it may buy, and had
+ * to walk past the whole tutorial to reach either.
  *
- * All five steps render from the first paint, locked ones dimmed. Revealing them one at a time
- * meant the page arrived as a single card in an empty viewport, which reads as unfinished rather
- * than as focused — a visitor could not see what they were being asked to commit to.
- *
- * The agent's secret is generated in this tab and never leaves it. It is shown once, kept in a
- * plain variable for the session, and lost on refresh. That is only defensible because the key
- * is nearly powerless — it can ask the contract and nothing else — and that is worth saying on
- * screen rather than hiding.
+ * What a row shows is chosen against what an owner needs to know: what it is called, whether it
+ * can still pay its own fees, how much it can spend, what it may spend it on, and whether
+ * anything is limiting the rate. No contract ids and no public keys — they identify nothing to a
+ * person, and everything that needs one is inside the row.
  */
 
-type State = {
-  balance: string;
-  remaining: string;
-  spent_in_window: string;
-  revoked: boolean;
-  /** Splitter address to API name, for the allowlist. The chain stores only the addresses. */
-  names: Record<string, string>;
-  rules: {
-    max_per_call: string;
-    window_ledgers: number;
-    window_cap: string;
-    allowlist: string[];
-  };
-};
+const stroops = (amount: string) => BigInt(Math.round(Number(amount) * 1e7));
 
-type Existing = {
-  contract_id: string;
-  agent_address: string;
-  created_at: string;
-  balance: string | null;
-  revoked: boolean | null;
-  rules: State['rules'] | null;
-  /** The APIs this allowance may pay, by name — how a person tells one from another. */
-  can_pay: string[];
-};
-
-/**
- * Describes an allowance the way its owner would.
- *
- * A contract id identifies it to the network and to nobody else. What makes one recognisable is
- * what it can buy and what is in it.
- *
- * Two names before the overflow count, then a six-character tail of the contract id. The tail
- * is not decoration: names and balances collide easily — two allowances over the same three
- * APIs holding the same amount would otherwise render as the same line, which is the problem
- * this function exists to solve. Everything is in the detail card once one is selected; this
- * only has to be readable and distinct, in that order.
- */
-function describe(row: Existing): string {
-  const shown = row.can_pay.slice(0, 2).join(' + ');
-  const rest = row.can_pay.length - 2;
-
-  const buys =
-    row.can_pay.length === 0
-      ? 'nothing allowlisted'
-      : rest > 0
-        ? `${shown} + ${rest} more`
-        : shown;
-
-  const held = row.balance === null ? '—' : `${usdc(row.balance)} USDC`;
-  const state = row.revoked ? ' · revoked' : '';
-
-  return `${buys} · ${held}${state} · ${row.contract_id.slice(0, 6)}`;
-}
-
-const usdc = (stroops?: string) => (stroops ? (Number(stroops) / 1e7).toFixed(2) : '0.00');
-const short = (v: string) => `${v.slice(0, 6)}…${v.slice(-4)}`;
-
-/** Testnet closes a ledger roughly every five seconds. */
-const LEDGERS_PER_MINUTE = 12;
+type NewAgent = { name: string; secret: string; contractId: string };
 
 export default function UserPage() {
-  const {
-    wallet,
-    funds,
-    connecting,
-    restoring,
-    error: walletError,
-    connect: openWallet,
-    refresh: refreshFunds,
-  } = useWallet();
-  const [agent, setAgent] = useState<{ publicKey: string; secret: string } | null>(null);
-  const [secretShown, setSecretShown] = useState(false);
-  const [contractId, setContractId] = useState('');
-  const [state, setState] = useState<State | null>(null);
+  const { wallet, funds, connecting, restoring, error: walletError, connect, refresh } = useWallet();
+
+  const [agents, setAgents] = useState<AgentRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [amount, setAmount] = useState('2.00');
-  // XLM, for the agent's own transaction fees. One is the account reserve; the rest is roughly
-  // a thousand spend calls at testnet resource prices.
-  const [agentXlm, setAgentXlm] = useState('5');
+  const [creating, setCreating] = useState(false);
+  const [justCreated, setJustCreated] = useState<NewAgent | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  // Allowances this wallet already owns. Without this the page could only ever create another
-  // one: a refresh dropped the contract id and there was no way back to it.
-  const [existing, setExisting] = useState<Existing[]>([]);
-  const [reopened, setReopened] = useState<Existing | null>(null);
+  const address = wallet?.address ?? null;
 
-  // The rules, before they are carved into a contract.
-  const [maxPerCall, setMaxPerCall] = useState('0.10');
-  const [windowCap, setWindowCap] = useState('0.50');
-  const [windowMinutes, setWindowMinutes] = useState('15');
-  const [allowed, setAllowed] = useState<Allowed[]>([]);
-  // Ours, offered to somebody who has not been given a URL by anybody yet.
-  const [example, setExample] = useState<{ paid_url: string; name: string } | null>(null);
+  const load = useCallback(async (owner: string) => {
+    const body = await fetch(`/api/allowances?owner=${owner}`).then((r) => r.json());
+    setAgents(body.allowances ?? []);
+    setLoaded(true);
+  }, []);
 
-  const run = async (label: string, fn: () => Promise<void>) => {
+  // Settled inside the promise rather than in the effect body, and dropped if the wallet changes
+  // while it is in flight — a slow answer for one address must not overwrite a newer one.
+  useEffect(() => {
+    if (!address) return;
+    let current = true;
+    fetch(`/api/allowances?owner=${address}`)
+      .then((r) => r.json())
+      .then((body) => {
+        if (!current) return;
+        setAgents(body.allowances ?? []);
+        setLoaded(true);
+      })
+      .catch(() => {
+        if (current) setLoaded(true);
+      });
+    return () => {
+      current = false;
+    };
+  }, [address]);
+
+  const run = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(label);
     setError(null);
     try {
       await fn();
+      if (address) await load(address);
+      await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -134,594 +89,482 @@ export default function UserPage() {
     }
   };
 
-  const refresh = useCallback(async (id: string) => {
-    const response = await fetch(`/api/allowances/${id}`);
-    if (response.ok) setState(await response.json());
-  }, []);
+  // Derived, not copied. A dialog holding its own snapshot of a row goes stale the moment an
+  // action changes the balance behind it, and syncing that back needed an effect.
+  const open = agents.find((a) => a.contract_id === openId) ?? null;
 
-  useEffect(() => {
-    if (!contractId) return;
-    refresh(contractId);
-    const timer = setInterval(() => refresh(contractId), 6000);
-    return () => clearInterval(timer);
-  }, [contractId, refresh]);
-
-  // Nothing is allowed by default — an empty allowlist refuses everything, which is the right
-  // starting point for a spending limit. All this fetches is the example URL to offer someone
-  // who has not been handed one.
-  useEffect(() => {
-    fetch('/api/demo/example')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((body) => {
-        if (body?.paid_url) {
-          setExample({ paid_url: window.location.origin + body.paid_url, name: body.name });
-        }
-      })
-      .catch(() => setExample(null));
-  }, []);
-
-  useEffect(() => {
-    if (!wallet) return;
-    fetch(`/api/allowances?owner=${wallet.address}`)
-      .then((r) => r.json())
-      .then((body) => setExisting(body.allowances ?? []))
-      .catch(() => setExisting([]));
-  }, [wallet]);
-
-  // A reopened allowance already has rules on chain. Show those in the editor rather than the
-  // creation defaults, or the first edit silently reverts limits the owner never touched.
-  //
-  // Keyed on which allowance was loaded, not on a boolean. It used to latch after the first one
-  // and never open again, so switching allowances in step 02 left the editor showing the
-  // previous contract's values while pointing at the new one — and `update rules` then wrote all
-  // four of them onto it and reported success. One dropdown change could silently replace an
-  // allowance's caps and its entire allowlist.
-  const hydratedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!state || !reopened || hydratedFor.current === reopened.contract_id) return;
-    hydratedFor.current = reopened.contract_id;
-    setMaxPerCall(usdc(state.rules.max_per_call));
-    setWindowCap(usdc(state.rules.window_cap));
-    setWindowMinutes(String(Math.round(state.rules.window_ledgers / LEDGERS_PER_MINUTE)));
-    // Only the addresses are on chain. Anything the gateway cannot name is still shown, since it
-    // still gets paid — hiding it would be the more dangerous omission.
-    setAllowed(
-      state.rules.allowlist.map((address) => ({
-        splitter_contract_id: address,
-        name: state.names?.[address] ?? short(address),
-      })),
-    );
-  }, [state, reopened]);
-
-  async function createAgent() {
-    if (!wallet) return;
-    const starting = Number(agentXlm);
-    if (!(starting > 0)) {
-      throw new Error('Give the agent a starting balance in XLM.');
-    }
-    if (starting < 1) {
-      throw new Error('A Stellar account needs at least 1 XLM to exist. Send 1 or more.');
-    }
-    // Your own account has to keep its reserve behind, so the spendable figure is not the
-    // balance on screen. Saying so beats a reverted transaction that mentions neither.
-    if (funds && starting > funds.xlm - 1.5) {
-      throw new Error(
-        `You hold ${funds.xlm.toFixed(2)} XLM and must keep about 1.5 in reserve, so you can ` +
-          `send at most ${Math.max(0, funds.xlm - 1.5).toFixed(2)}. Fund your wallet at ` +
-          `friendbot.stellar.org, or lower the starting balance.`,
-      );
-    }
-
-    // The key is generated here and the account is brought into existence by the owner's own
-    // transaction. Only set it in state once that succeeds — a keypair with no account behind
-    // it looks identical on screen and fails at the first spend.
-    const kp = Keypair.random();
-    await createAgentAccount(wallet.address, kp.publicKey(), Number(agentXlm).toFixed(7));
-
-    setAgent({ publicKey: kp.publicKey(), secret: kp.secret() });
-    setSecretShown(true);
-    await refreshFunds();
-  }
-
-  /** Checks the wallet can cover a deposit before anyone is asked to sign for it. */
-  function checkDeposit(usdcAmount: number) {
-    if (!(usdcAmount > 0)) {
-      throw new Error('Enter an amount above zero.');
-    }
-    if (!funds) return;
-    if (!funds.hasUsdcTrustline) {
-      throw new Error(
-        'Your wallet has no USDC trustline, so it cannot hold or send USDC. Add one in ' +
-          'Freighter for issuer GBBD47IF…FLA5, then reconnect.',
-      );
-    }
-    if (usdcAmount > funds.usdc) {
-      throw new Error(
-        `Your wallet holds ${funds.usdc.toFixed(2)} USDC and this would send ` +
-          `${usdcAmount.toFixed(2)}. Lower the amount, or top the wallet up first.`,
-      );
-    }
-  }
-
-  async function createAllowance() {
-    if (!wallet || !agent) return;
-    if (allowed.length === 0) {
-      throw new Error('Choose at least one API the agent is allowed to pay.');
-    }
-    const response = await fetch('/api/allowances', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        owner: wallet.address,
-        agent: agent.publicKey,
-        max_per_call: String(Math.round(Number(maxPerCall) * 1e7)),
-        window_cap: String(Math.round(Number(windowCap) * 1e7)),
-        window_ledgers: Math.max(1, Math.round(Number(windowMinutes) * LEDGERS_PER_MINUTE)),
-        allowlist: allowed.map((a) => a.splitter_contract_id),
-      }),
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error ?? 'Could not create the allowance.');
-    setContractId(body.contract_id);
-  }
-
-  const callsPerWindow = Math.floor(Number(windowCap) / Math.max(Number(maxPerCall), 1e-7));
-  const agentAddress = agent?.publicKey ?? reopened?.agent_address ?? null;
-
-  const rulesFields = (
-    <div className="grid gap-4 sm:grid-cols-3">
-      <label className="block">
-        <span className="label block mb-1.5">most per call</span>
-        <input
-          value={maxPerCall}
-          onChange={(e) => setMaxPerCall(e.target.value)}
-          inputMode="decimal"
-          className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
-        />
-      </label>
-      <label className="block">
-        <span className="label block mb-1.5">most per window</span>
-        <input
-          value={windowCap}
-          onChange={(e) => setWindowCap(e.target.value)}
-          inputMode="decimal"
-          className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
-        />
-      </label>
-      <label className="block">
-        <span className="label block mb-1.5">window (minutes)</span>
-        <input
-          value={windowMinutes}
-          onChange={(e) => setWindowMinutes(e.target.value)}
-          inputMode="numeric"
-          className="w-full num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 text-sm"
-        />
-      </label>
-    </div>
-  );
+  const ready = Boolean(address && loaded);
 
   return (
-    <main className="relative z-10">
-      <SiteHeader
-        right={<span className="chip">{wallet ? short(wallet.address) : 'not connected'}</span>}
-      />
+    <div className="min-h-screen">
+      <SiteHeader />
 
-      <div className="mx-auto max-w-[900px] px-6 py-12 space-y-4">
-        <div className="mb-8">
-          <p className="label mb-4">[ FOR AGENT OWNERS · FOUR STEPS ]</p>
-          <h1 className="display max-w-[14ch]">Give your agent a budget.</h1>
-          <p className="mt-6 max-w-[54ch] text-[color:var(--text)] leading-relaxed">
-            Connect a wallet, create an agent, set three rules, add money. About ten minutes, and
-            it assumes you have never touched a blockchain.
-          </p>
-          <p className="mt-4 max-w-[54ch] text-[color:var(--muted)] leading-relaxed">
-            The money stays in a contract you own. Your agent can ask it to pay, and it will
-            refuse anything outside the rules you set. We deploy the contract and pay the fee — we
-            cannot spend from it, change its rules, or stop you emptying it.
-          </p>
+      <main className="mx-auto max-w-[1180px] px-4 sm:px-6 py-10">
+        <div className="flex items-start justify-between gap-4 mb-2 flex-wrap">
+          <p className="label">[ AGENT ]</p>
+
+          {ready && (
+            <button
+              onClick={() => setCreating(true)}
+              className="chip chip-accent px-4 py-2.5 cursor-pointer whitespace-nowrap"
+            >
+              + new agent
+            </button>
+          )}
         </div>
 
-        {(error ?? walletError) && (
-          <div className="panel p-4 border-[color:var(--drained)]">
-            <p className="text-sm" style={{ color: 'var(--drained)' }}>{error ?? walletError}</p>
-          </div>
+        {ready ? (
+          <>
+            <h1 className="text-2xl font-medium mb-1">Your agents</h1>
+            <p className="label mb-6">
+              {agents.length === 0
+                ? 'none yet'
+                : `${agents.length} agent${agents.length === 1 ? '' : 's'}${
+                    funds ? ` · ${funds.usdc.toFixed(2)} USDC in your wallet` : ''
+                  }`}
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl font-medium mb-3">Give an agent a budget, not your wallet.</h1>
+            <p className="text-sm text-[color:var(--muted)] max-w-[52ch] leading-relaxed mb-2">
+              Your agent gets a key that holds no money. It can ask a contract to pay, and the
+              contract decides — so a stolen key, or a prompt telling it to pay somebody else,
+              reaches nothing.
+            </p>
+            <p className="text-sm text-[color:var(--muted)] max-w-[52ch] leading-relaxed">
+              You choose which APIs it may pay. Anything else is refused by the network, not by
+              your agent&rsquo;s own code.
+            </p>
+          </>
         )}
 
-        {/* 1 — connect */}
-        <ConnectStep
-          wallet={wallet}
-          funds={funds}
-          connecting={connecting}
-          restoring={restoring}
-          purpose="This is how you prove the allowance is yours, and the wallet the money comes from. Freighter, on Testnet."
-          onConnect={openWallet}
-        />
+        {error && (
+          <p className="text-sm mb-5 max-w-[70ch]" style={{ color: 'var(--drained)' }}>
+            {error}
+          </p>
+        )}
 
-        {/* 2 — agent */}
-        <Step
-          n={2}
-          state={!wallet ? 'locked' : agentAddress ? 'done' : 'todo'}
-          title="Create an agent account"
-          summary="A key for your agent, generated in this tab and funded from your wallet. It gets no USDC trustline, so it cannot hold money at all — only ask."
-        >
-          {/* Reopening comes first: someone who already has an allowance is here to get back
-              into it, and offering to build another one first is the wrong default. */}
-          {existing.length > 0 && !agent && (
-            <div className="mb-6">
-              <label className="block">
-                <span className="label block mb-1.5">allowance</span>
-                <select
-                  value={reopened?.contract_id ?? ''}
-                  onChange={(e) => {
-                    const row = existing.find((a) => a.contract_id === e.target.value);
-                    setReopened(row ?? null);
-                    setContractId(row?.contract_id ?? '');
-                  }}
-                  className="w-full bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2.5 text-sm cursor-pointer"
-                >
-                  {/* This step creates a Stellar account and nothing else. Not an agent — the
-                      agent is a program the owner writes — and not an allowance, which is step
-                      03. Both are things this button does not do. */}
-                  <option value="">Create a new agent account</option>
-                  {existing.map((row) => (
-                    <option key={row.contract_id} value={row.contract_id}>
-                      {describe(row)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {reopened && (
-                <div className="mt-4 panel p-4">
-                  {/* The complete allowlist, one chip each. The dropdown truncates to stay
-                      readable; this is where the full answer to "what can it pay" lives. */}
-                  <p className="label mb-2">
-                    can pay {reopened.can_pay.length > 0 && `· ${reopened.can_pay.length}`}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 mb-4">
-                    {reopened.can_pay.length > 0 ? (
-                      reopened.can_pay.map((name, i) => (
-                        <span
-                          key={`${name}-${i}`}
-                          className="chip"
-                          style={{ borderColor: 'var(--lavender)', color: 'var(--lavender)' }}
-                        >
-                          {name}
-                        </span>
-                      ))
-                    ) : (
-                      <span
-                        className="chip"
-                        style={{ borderColor: 'var(--drained)', color: 'var(--drained)' }}
-                      >
-                        nothing allowlisted — every payment refused
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap gap-6 mb-3">
-                    <div>
-                      <p className="label mb-1">balance</p>
-                      <p className="num text-sm text-[color:var(--accent)]">
-                        {usdc(reopened.balance ?? '0')} USDC
-                      </p>
-                    </div>
-                    {reopened.rules && (
-                      <div>
-                        <p className="label mb-1">limits</p>
-                        <p className="num text-sm">
-                          {usdc(reopened.rules.max_per_call)} / call ·{' '}
-                          {usdc(reopened.rules.window_cap)} per{' '}
-                          {Math.round(reopened.rules.window_ledgers / LEDGERS_PER_MINUTE)} min
-                        </p>
-                      </div>
-                    )}
-                    <div>
-                      <p className="label mb-1">agent</p>
-                      <p className="num text-sm">{short(reopened.agent_address)}</p>
-                    </div>
-                  </div>
-                  <p className="label mb-1">contract</p>
-                  <Copyable value={reopened.contract_id} label="allowance contract id" />
-                </div>
-              )}
-            </div>
-          )}
-
-          {reopened ? null : (
-            <p className="text-sm text-[color:var(--muted)] mb-4 max-w-[52ch]">
-              Generated in this tab and never sent to us. You create its account from your own
-              wallet — the same way you would on mainnet, where nobody hands out funded accounts.
-              The XLM below covers the agent&rsquo;s transaction fees and is the only asset it
-              ever holds: it gets{' '}
-              <strong className="text-[color:var(--text)]">no USDC trustline</strong>, so it
-              cannot hold the money it spends, only ask for it.
+        {!address ? (
+          <div className="panel p-6 pt-8 max-w-[440px] mt-4">
+            <span className="panel-tag">[ WALLET ]</span>
+            <p className="text-sm text-[color:var(--muted)] mb-5 leading-relaxed">
+              Your wallet owns the contracts and funds them. Only you can add money or take it
+              back. Freighter, on Testnet.
             </p>
-          )}
-          {agentAddress ? (
-            <div className="space-y-3">
-              <div>
-                <p className="label mb-1">public key</p>
-                <Copyable value={agentAddress} label="agent public key" />
-              </div>
-              {agent && secretShown ? (
-                <div className="panel p-4 border-[color:var(--accent-dim)]">
-                  <p className="label mb-1" style={{ color: 'var(--accent)' }}>
-                    secret — shown once
-                  </p>
-                  <p className="num text-sm break-all mb-3">{agent.secret}</p>
-                  <button className="chip cursor-pointer" onClick={() => setSecretShown(false)}>
-                    I have saved it
-                  </button>
-                </div>
-              ) : (
-                <p className="label">
-                  {agent ? 'secret hidden · lost on refresh' : 'created earlier · secret not stored'}
-                </p>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-end gap-3 mb-3">
-                <label className="block">
-                  <span className="label block mb-1.5">starting XLM</span>
-                  <input
-                    value={agentXlm}
-                    onChange={(e) => setAgentXlm(e.target.value)}
-                    inputMode="decimal"
-                    className="num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 w-28 text-sm"
-                  />
-                </label>
-                <button
-                  className="chip chip-accent px-4 py-2.5 cursor-pointer"
-                  disabled={busy !== null}
-                  onClick={() => run('agent', createAgent)}
-                >
-                  {busy === 'agent' ? 'signing…' : 'create and fund agent'}
-                </button>
-              </div>
-              <p className="label">
-                1 XLM is the account reserve · the rest pays the agent&rsquo;s own fees, roughly
-                a thousand purchases
-              </p>
-            </>
-          )}
-        </Step>
-
-        {/* 3 — allowance */}
-        <Step
-          n={3}
-          state={!agentAddress ? 'locked' : contractId ? 'done' : 'todo'}
-          title="Set the rules"
-          summary="A cap per purchase, a cap per rolling window, and the list of APIs that may be paid. Enforced by the network, not by your agent's code."
-        >
-          {contractId ? (
-            <Copyable value={contractId} label="allowance contract id" />
-          ) : (
-            <>
-              <p className="text-sm text-[color:var(--muted)] mb-5 max-w-[52ch]">
-                These are enforced by the network, not by your agent&rsquo;s code. Break one and
-                the money does not move. All three can be changed later without redeploying.
-              </p>
-
-              <div className="mb-5">{rulesFields}</div>
-
-              <p className="label mb-6">
-                = at most {callsPerWindow} calls in any {windowMinutes} minutes, rolling
-              </p>
-
-              <div className="mb-5">
-                <AllowlistInput value={allowed} onChange={setAllowed} example={example} />
-              </div>
-
-              <p className="label mb-5">
-                anything not on this list is refused, however small the amount
-              </p>
-
-              <button
-                className="chip chip-accent px-4 py-2.5 cursor-pointer disabled:opacity-40"
-                disabled={busy !== null || allowed.length === 0}
-                onClick={() => run('allowance', createAllowance)}
-              >
-                {busy === 'allowance' ? 'deploying…' : 'create allowance'}
-              </button>
-            </>
-          )}
-        </Step>
-
-        {/* 4 — fund + dashboard */}
-        <Step
-          n={4}
-          state={contractId ? 'todo' : 'locked'}
-          title="Add money and watch it"
-          summary="Balance, spend against the window cap, and a switch that stops the agent. Read live from the chain."
-        >
-          <div className="flex flex-wrap gap-8 mb-7">
-            <div>
-              <p className="label mb-1">available</p>
-              <p className="num text-3xl text-[color:var(--accent)]">
-                {usdc(state?.balance)}{' '}
-                <span className="text-sm text-[color:var(--faint)]">USDC</span>
-              </p>
-            </div>
-            <div>
-              <p className="label mb-1">spent this window</p>
-              <p className="num text-3xl">
-                {usdc(state?.spent_in_window)}
-                <span className="text-sm text-[color:var(--faint)]">
-                  {' '}/ {usdc(state?.rules.window_cap)}
-                </span>
-              </p>
-            </div>
-            <div>
-              <p className="label mb-1">agent</p>
-              <p
-                className="num text-3xl"
-                style={{ color: state?.revoked ? 'var(--drained)' : 'var(--held)' }}
-              >
-                {state?.revoked ? 'revoked' : 'active'}
-              </p>
-            </div>
-          </div>
-
-          {state && (
-            <div className="h-1 bg-[color:var(--line)] mb-7">
-              <div
-                className="h-full transition-all"
-                style={{
-                  width: `${Math.min(100, (Number(state.spent_in_window) / Number(state.rules.window_cap)) * 100)}%`,
-                  background: Number(state.remaining) === 0 ? 'var(--held)' : 'var(--accent)',
-                }}
-              />
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              inputMode="decimal"
-              className="num bg-[color:var(--panel-2)] border border-[color:var(--line-bright)] px-3 py-2 w-28 text-sm"
-              aria-label="amount in USDC"
-            />
             <button
-              className="chip chip-accent px-4 py-2.5 cursor-pointer"
-              disabled={busy !== null}
-              onClick={() =>
-                run('deposit', async () => {
-                  checkDeposit(Number(amount));
-                  await deposit(
-                    wallet!.address,
-                    contractId,
-                    BigInt(Math.round(Number(amount) * 1e7)),
-                  );
-                  await refresh(contractId);
-                  await refreshFunds();
-                })
-              }
+              onClick={connect}
+              disabled={connecting || restoring}
+              className="chip chip-accent px-4 py-2.5 cursor-pointer disabled:opacity-40"
             >
-              {busy === 'deposit' ? 'signing…' : 'add money'}
+              {restoring ? 'checking…' : connecting ? 'waiting for Freighter…' : 'connect wallet'}
             </button>
-            <button
-              className="chip px-4 py-2.5 cursor-pointer disabled:opacity-40"
-              disabled={busy !== null || Number(state?.balance ?? '0') === 0}
-              onClick={() =>
-                run('withdraw', async () => {
-                  await withdraw(wallet!.address, contractId, BigInt(state?.balance ?? '0'));
-                  await refresh(contractId);
-                  await refreshFunds();
-                })
-              }
-            >
-              {busy === 'withdraw' ? 'signing…' : 'take it all back'}
-            </button>
-            <button
-              className="chip px-4 py-2.5 cursor-pointer disabled:opacity-40"
-              style={{ borderColor: 'var(--drained)', color: 'var(--drained)' }}
-              disabled={busy !== null || state?.revoked}
-              onClick={() =>
-                run('revoke', async () => {
-                  await revoke(wallet!.address, contractId);
-                  await refresh(contractId);
-                })
-              }
-            >
-              {busy === 'revoke' ? 'signing…' : 'stop the agent'}
-            </button>
-          </div>
-
-          <p className="label mt-5">
-            adding money and taking it back are signed by you — we cannot do either
-          </p>
-        </Step>
-
-        {/* 5 — change the rules on a live allowance */}
-        <Step
-          n={5}
-          state={contractId && state ? 'todo' : 'locked'}
-          title="Change the rules later"
-          summary="Tighten or loosen the limits on a running allowance, without redeploying or moving your money."
-        >
-          <p className="text-sm text-[color:var(--muted)] mb-5 max-w-[54ch]">
-            These take effect on the next purchase, without redeploying or moving your money. What
-            has already been spent stays counted — otherwise an agent at its cap could be handed a
-            fresh window by any edit.
-          </p>
-
-          <div className="mb-4">{rulesFields}</div>
-
-          {/* The contract has always accepted a new allowlist — `set_rules` replaces the whole
-              struct — but this step only ever edited the three numbers, so an API could not be
-              added after creation. Same component as step 03, so there is one way to do it. */}
-          <div className="mb-5">
-            <AllowlistInput value={allowed} onChange={setAllowed} example={example} />
-          </div>
-
-          <p className="label mb-5">
-            currently {usdc(state?.rules.max_per_call)} per call ·{' '}
-            {usdc(state?.rules.window_cap)} per{' '}
-            {((state?.rules.window_ledgers ?? 0) / LEDGERS_PER_MINUTE).toFixed(0)} min
-            {Number(windowMinutes) < 10 && (
-              <span style={{ color: 'var(--accent)' }}>
-                {' '}· under 10 minutes and spends expire faster than an agent can make them
-              </span>
+            {walletError && (
+              <p className="text-sm mt-4" style={{ color: 'var(--drained)' }}>
+                {walletError}
+              </p>
             )}
-          </p>
+          </div>
+        ) : !loaded ? (
+          <p className="label mt-4">loading…</p>
+        ) : agents.length === 0 ? (
+          <div className="panel p-6 pt-8 max-w-[560px]">
+            <span className="panel-tag">[ NO AGENTS YET ]</span>
+            <p className="text-sm text-[color:var(--muted)] max-w-[48ch] leading-relaxed">
+              Making one takes a minute. It needs a name, a little XLM for its own transaction
+              fees, and at least one API it is allowed to pay.
+            </p>
+          </div>
+        ) : (
+          <AgentTable agents={agents} onOpen={(agent) => setOpenId(agent.contract_id)} />
+        )}
+      </main>
 
-          <button
-            className="chip chip-accent px-4 py-2.5 cursor-pointer"
-            disabled={busy !== null}
-            onClick={() =>
-              run('rules', async () => {
-                await setRules(wallet!.address, contractId, {
-                  maxPerCall: BigInt(Math.round(Number(maxPerCall) * 1e7)),
-                  windowCap: BigInt(Math.round(Number(windowCap) * 1e7)),
-                  windowLedgers: Math.max(
-                    1,
-                    Math.round(Number(windowMinutes) * LEDGERS_PER_MINUTE),
-                  ),
+      {creating && address && (
+        <CreateAgent
+          xlmAvailable={funds?.xlm ?? 0}
+          busy={busy === 'create'}
+          onClose={() => setCreating(false)}
+          onCreate={({ name, agentXlm, allowed, windowCap, windowMinutes }) =>
+            run('create', async () => {
+              const agent = Keypair.random();
+
+              // The agent's account must exist before a contract can name it, and only the
+              // owner's wallet can create one.
+              await createAgentAccount(address, agent.publicKey(), agentXlm);
+
+              const response = await fetch('/api/allowances', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                  owner: address,
+                  agent: agent.publicKey(),
+                  name,
                   allowlist: allowed.map((a) => a.splitter_contract_id),
+                  ...(windowCap
+                    ? { window_cap: stroops(windowCap).toString(), window_minutes: windowMinutes }
+                    : {}),
+                }),
+              });
+              const created = await response.json();
+              if (!response.ok) throw new Error(created.error ?? 'Could not create it.');
+
+              setCreating(false);
+              // Shown once. This is the only copy — we never had it and cannot produce it again.
+              setJustCreated({ name, secret: agent.secret(), contractId: created.contract_id });
+            })
+          }
+        />
+      )}
+
+      {justCreated && <AgentCreated details={justCreated} onClose={() => setJustCreated(null)} />}
+
+      {open && address && (
+        <AgentDetail
+          // Keyed, so switching agents remounts with that agent's rules rather than carrying the
+          // previous one's across — the bug the developer tab had before it was a table.
+          key={open.contract_id}
+          agent={open}
+          owner={address}
+          busy={busy}
+          onClose={() => setOpenId(null)}
+          run={run}
+        />
+      )}
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- create
+
+function CreateAgent({
+  xlmAvailable,
+  busy,
+  onClose,
+  onCreate,
+}: {
+  xlmAvailable: number;
+  busy: boolean;
+  onClose: () => void;
+  onCreate: (fields: {
+    name: string;
+    agentXlm: string;
+    allowed: Allowed[];
+    windowCap: string;
+    windowMinutes: number;
+  }) => void;
+}) {
+  const [name, setName] = useState('');
+  const [agentXlm, setAgentXlm] = useState('5');
+  const [allowed, setAllowed] = useState<Allowed[]>([]);
+  const [limited, setLimited] = useState(false);
+  const [windowCap, setWindowCap] = useState('0.50');
+  const [windowMinutes, setWindowMinutes] = useState('15');
+
+  // Your own account has to keep its reserve behind, so the spendable figure is not the balance
+  // on screen. Saying so beats a reverted transaction that mentions neither.
+  const enough = Number(agentXlm) >= 1 && Number(agentXlm) <= xlmAvailable - 1.5;
+
+  return (
+    <Overlay
+      title="New agent"
+      note="A key that holds no money, and a contract that does. You own the contract; the agent can only ask it."
+      onClose={onClose}
+    >
+      <Field
+        label="name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="research"
+        hint="what you will call it here · unique among your agents"
+      />
+
+      <Field
+        label="XLM for its transaction fees"
+        value={agentXlm}
+        onChange={(e) => setAgentXlm(e.target.value)}
+        inputMode="decimal"
+        hint={`its own, not money it can spend · you hold ${xlmAvailable.toFixed(2)} and must keep about 1.5 back`}
+      />
+
+      <div className="mb-5">
+        <AllowlistInput value={allowed} onChange={setAllowed} example={null} />
+      </div>
+
+      {/* Optional, and last, because it is the last of the four things protecting you. The agent
+          holding no money at all is the first. */}
+      <div className="border-t border-[color:var(--line)] pt-4 mb-5">
+        <label className="flex items-center gap-2 cursor-pointer mb-3">
+          <input type="checkbox" checked={limited} onChange={(e) => setLimited(e.target.checked)} />
+          <span className="label">also cap how fast it can spend</span>
+        </label>
+
+        {limited ? (
+          <div className="flex gap-3">
+            <Field
+              label="at most (USDC)"
+              value={windowCap}
+              onChange={(e) => setWindowCap(e.target.value)}
+              inputMode="decimal"
+            />
+            <Field
+              label="per (minutes)"
+              value={windowMinutes}
+              onChange={(e) => setWindowMinutes(e.target.value)}
+              inputMode="numeric"
+            />
+          </div>
+        ) : (
+          <p className="label leading-relaxed">
+            no rate limit · what you put in the contract is the most it can ever spend
+          </p>
+        )}
+      </div>
+
+      <button
+        onClick={() =>
+          onCreate({
+            name,
+            agentXlm,
+            allowed,
+            windowCap: limited ? windowCap : '',
+            windowMinutes: Number(windowMinutes),
+          })
+        }
+        disabled={busy || !name.trim() || allowed.length === 0 || !enough}
+        className="chip chip-accent px-4 py-2.5 cursor-pointer disabled:opacity-40"
+      >
+        {busy ? 'creating…' : 'create it'}
+      </button>
+
+      {!enough && (
+        <p className="label mt-3" style={{ color: 'var(--drained)' }}>
+          give it at least 1 XLM, and no more than you can spare
+        </p>
+      )}
+    </Overlay>
+  );
+}
+
+function AgentCreated({ details, onClose }: { details: NewAgent; onClose: () => void }) {
+  return (
+    <Overlay
+      title={`${details.name} is ready`}
+      note="This key is shown once. It is the only copy — we never had it and cannot produce it again."
+      onClose={onClose}
+    >
+      <p className="label mb-2">the agent&rsquo;s secret key</p>
+      <div className="mb-5">
+        <Copyable value={details.secret} label="agent secret" />
+      </div>
+
+      <p className="text-sm text-[color:var(--muted)] leading-relaxed mb-5 max-w-[46ch]">
+        Give it to your agent as <span className="num text-[color:var(--text)]">AGENT_SECRET</span>.
+        It holds no money and cannot move any, so losing it costs you nothing beyond having to
+        make another agent.
+      </p>
+
+      <button onClick={onClose} className="chip chip-accent px-4 py-2.5 cursor-pointer">
+        saved it
+      </button>
+    </Overlay>
+  );
+}
+
+// --------------------------------------------------------------------------- one agent
+
+function AgentDetail({
+  agent,
+  owner,
+  busy,
+  onClose,
+  run,
+}: {
+  agent: AgentRow;
+  owner: string;
+  busy: string | null;
+  onClose: () => void;
+  run: (label: string, fn: () => Promise<unknown>) => Promise<void>;
+}) {
+  const [name, setName] = useState(agent.name ?? '');
+  const [amount, setAmount] = useState('2.00');
+  // The chain stores addresses; the list endpoint has already resolved their names. Computed at
+  // mount rather than in an effect: the component is keyed on the agent, so switching one
+  // remounts this and the initialiser runs again with the right rules.
+  const [allowed, setAllowed] = useState<Allowed[]>(() =>
+    (agent.rules?.allowlist ?? []).map((address, index) => ({
+      splitter_contract_id: address,
+      name: agent.can_pay[index] ?? `${address.slice(0, 6)}…${address.slice(-4)}`,
+    })),
+  );
+  const [limited, setLimited] = useState(!isUnlimited(agent.rules?.window_cap));
+  const [windowCap, setWindowCap] = useState(
+    agent.rules && !isUnlimited(agent.rules.window_cap)
+      ? (Number(agent.rules.window_cap) / 1e7).toFixed(2)
+      : '0.50',
+  );
+  const [windowMinutes, setWindowMinutes] = useState(
+    agent.rules ? String(Math.round(agent.rules.window_ledgers / LEDGERS_PER_MINUTE)) : '15',
+  );
+  const [confirmStop, setConfirmStop] = useState(false);
+
+  // Nothing to synchronise: the component is keyed on the agent, so switching one remounts this
+  // with the right rules and the initialiser runs again.
+  
+
+  const balance = agent.balance === null ? 0 : Number(agent.balance) / 1e7;
+  const stopped = agent.revoked === true;
+
+  return (
+    <Overlay title={agent.name ?? 'agent'} onClose={onClose}>
+      {/* ------------------------------------------------------------ money */}
+      <p className="label mb-1">credits in the contract</p>
+      <p className="num text-3xl mb-1" style={{ color: 'var(--accent)' }}>
+        {balance.toFixed(2)} <span className="text-sm text-[color:var(--faint)]">USDC</span>
+      </p>
+      <p className="label mb-4">
+        {agent.xlm === null
+          ? 'the agent account does not exist yet'
+          : `the agent holds ${agent.xlm.toFixed(2)} XLM for its own fees`}
+      </p>
+
+      <div className="flex gap-3 items-end mb-2">
+        <Field
+          label="amount (USDC)"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          inputMode="decimal"
+        />
+        <button
+          onClick={() => run('deposit', () => deposit(owner, agent.contract_id, stroops(amount)))}
+          disabled={busy !== null}
+          className="chip chip-accent px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40 whitespace-nowrap"
+        >
+          {busy === 'deposit' ? 'signing…' : 'add'}
+        </button>
+        <button
+          onClick={() => run('withdraw', () => withdraw(owner, agent.contract_id, stroops(amount)))}
+          disabled={busy !== null || balance === 0}
+          className="chip px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40 whitespace-nowrap"
+        >
+          {busy === 'withdraw' ? 'signing…' : 'take back'}
+        </button>
+      </div>
+      <p className="label mb-6">both are signed by you — we can do neither</p>
+
+      {/* ------------------------------------------------------------- name */}
+      <div className="border-t border-[color:var(--line)] pt-4">
+        <div className="flex gap-3 items-end">
+          <Field label="name" value={name} onChange={(e) => setName(e.target.value)} />
+          <button
+            onClick={() =>
+              run('rename', async () => {
+                const proof = await proveAddress(owner);
+                const response = await fetch(`/api/allowances/${agent.contract_id}`, {
+                  method: 'PATCH',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ ...proof, name }),
                 });
-                await refresh(contractId);
+                if (!response.ok) throw new Error((await response.json()).error);
               })
             }
+            disabled={busy !== null || name.trim() === (agent.name ?? '')}
+            className="chip px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40"
           >
-            {busy === 'rules' ? 'signing…' : 'update rules'}
+            {busy === 'rename' ? 'signing…' : 'rename'}
           </button>
-        </Step>
-
-        {/* 6 — what the agent actually does with any of this */}
-        <Step
-          n={6}
-          state={contractId ? 'todo' : 'locked'}
-          title="Point your agent at it"
-          summary="Three calls: get quoted a price, ask the contract to pay it, come back with the payment."
-        >
-          <p className="text-sm text-[color:var(--muted)] mb-5 max-w-[54ch]">
-            Your agent holds only its own key. It never sees a balance and cannot move money —
-            it asks, and the contract answers. The allowance is found from the agent&rsquo;s key,
-            so there is no contract id to hard-code.
-          </p>
-
-          <div className="mb-4">
-            <AgentSnippet allowanceId={contractId} />
-          </div>
-
-          <p className="text-sm text-[color:var(--muted)] max-w-[54ch]">
-            Save it as <span className="num text-[color:var(--text)]">buy.mjs</span>, set{' '}
-            <span className="num text-[color:var(--text)]">AGENT_SECRET</span> to the key from
-            step 02, and run it against any URL on your allowlist above:{' '}
-            <span className="num text-[color:var(--text)]">node buy.mjs &lt;paid-url&gt;</span>. It
-            buys once and prints what came back. A purchase that breaks a rule prints the rule
-            instead, and costs nothing — the rules run during simulation, before anything reaches
-            the network.
-          </p>
-          <p className="label mt-3 leading-relaxed">
-            <span className="num">examples/runner</span> in the repository is this file&rsquo;s
-            project already set up — dependencies installed, nothing to configure but the secret
-          </p>
-        </Step>
+        </div>
       </div>
-    </main>
+
+      {/* ------------------------------------------------------- what it buys */}
+      <div className="border-t border-[color:var(--line)] pt-4 mb-4">
+        <AllowlistInput value={allowed} onChange={setAllowed} example={null} />
+      </div>
+
+      {/* --------------------------------------------------------- rate limit */}
+      <div className="border-t border-[color:var(--line)] pt-4 mb-4">
+        <label className="flex items-center gap-2 cursor-pointer mb-3">
+          <input type="checkbox" checked={limited} onChange={(e) => setLimited(e.target.checked)} />
+          <span className="label">cap how fast it can spend</span>
+        </label>
+
+        {limited ? (
+          <div className="flex gap-3">
+            <Field
+              label="at most (USDC)"
+              value={windowCap}
+              onChange={(e) => setWindowCap(e.target.value)}
+              inputMode="decimal"
+            />
+            <Field
+              label="per (minutes)"
+              value={windowMinutes}
+              onChange={(e) => setWindowMinutes(e.target.value)}
+              inputMode="numeric"
+            />
+          </div>
+        ) : (
+          <p className="label mb-4 leading-relaxed">
+            no rate limit · the {balance.toFixed(2)} USDC in the contract is the most it can spend
+          </p>
+        )}
+
+        {/* One signature covers both, because the contract takes its rules as a single struct —
+            sending them separately would mean two prompts to change one thing. */}
+        <button
+          onClick={() =>
+            run('rules', () =>
+              setRules(owner, agent.contract_id, {
+                // One cap, not two: a single call may spend whatever the window allows, no more.
+                maxPerCall: limited ? stroops(windowCap) : NO_RATE_LIMIT,
+                windowCap: limited ? stroops(windowCap) : NO_RATE_LIMIT,
+                windowLedgers: limited
+                  ? Math.max(1, Math.round(Number(windowMinutes) * LEDGERS_PER_MINUTE))
+                  : DEFAULT_WINDOW_LEDGERS,
+                allowlist: allowed.map((a) => a.splitter_contract_id),
+              }),
+            )
+          }
+          disabled={busy !== null || allowed.length === 0}
+          className="chip chip-accent px-4 py-2.5 cursor-pointer disabled:opacity-40"
+        >
+          {busy === 'rules' ? 'signing…' : 'save APIs and limit'}
+        </button>
+        {allowed.length === 0 && (
+          <p className="label mt-2" style={{ color: 'var(--drained)' }}>
+            with nothing allowlisted the contract refuses every payment
+          </p>
+        )}
+      </div>
+
+      {/* ---------------------------------------------------------- the code */}
+      <details className="border-t border-[color:var(--line)] pt-4 mb-4">
+        <summary className="label cursor-pointer">the code your agent runs</summary>
+        <div className="mt-3">
+          <AgentSnippet allowanceId={agent.contract_id} />
+        </div>
+      </details>
+
+      {/* -------------------------------------------------------------- stop */}
+      <div className="border-t border-[color:var(--line)] pt-4 flex items-center gap-3 flex-wrap">
+        <button
+          onClick={() =>
+            confirmStop ? run('revoke', () => revoke(owner, agent.contract_id)) : setConfirmStop(true)
+          }
+          disabled={busy !== null || stopped}
+          className="chip px-4 py-2.5 cursor-pointer disabled:opacity-40"
+          style={{ borderColor: 'var(--drained)', color: 'var(--drained)' }}
+        >
+          {stopped ? 'stopped' : confirmStop ? 'yes, stop it' : 'stop the agent'}
+        </button>
+        <span className="label" style={{ color: 'var(--drained)' }}>
+          {stopped
+            ? 'it can no longer spend · your money is still yours to take back'
+            : confirmStop
+              ? 'it stops spending immediately · your money stays where it is'
+              : ''}
+        </span>
+      </div>
+    </Overlay>
   );
 }

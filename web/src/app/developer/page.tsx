@@ -49,10 +49,28 @@ export default function DeveloperPage() {
     setKnownHandle(true);
   }, []);
 
+  // Settled inside the promises rather than in the effect body, and dropped if the wallet
+  // changes while they are in flight.
   useEffect(() => {
     if (!address) return;
-    load(address).catch(() => setKnownHandle(true));
-  }, [address, load]);
+    let current = true;
+    Promise.all([
+      fetch(`/api/apis?developer=${address}`).then((r) => r.json()),
+      fetch(`/api/developers?address=${address}`).then((r) => r.json()),
+    ])
+      .then(([listed, developer]) => {
+        if (!current) return;
+        setApis(listed.apis ?? []);
+        setHandle(developer.username ?? null);
+        setKnownHandle(true);
+      })
+      .catch(() => {
+        if (current) setKnownHandle(true);
+      });
+    return () => {
+      current = false;
+    };
+  }, [address]);
 
   /** Every write is signed. There is no session, so proof travels with the action. */
   const signed = async (label: string, run: (proof: Awaited<ReturnType<typeof proveAddress>>) => Promise<void>) => {
