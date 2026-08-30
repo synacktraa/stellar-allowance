@@ -104,7 +104,7 @@ describe('buying with the client SDK', { timeout: 6 * 60_000 }, () => {
 
   let allowed;
   let forbidden;
-  let allowance;
+  let client;
 
   before(async () => {
     await requireServer();
@@ -121,7 +121,7 @@ describe('buying with the client SDK', { timeout: 6 * 60_000 }, () => {
       xlmToAgent: 50_000_000n, // 5 XLM, for the agent's own fees
     });
 
-    allowance = new Allowance(agent.secret());
+    client = new Allowance(agent.secret());
   });
 
   after(async () => {
@@ -130,12 +130,12 @@ describe('buying with the client SDK', { timeout: 6 * 60_000 }, () => {
   });
 
   it('knows its own address without being told', () => {
-    assert.equal(allowance.address, agent.publicKey());
+    assert.equal(client.address, agent.publicKey());
   });
 
   it('buys a call from one secret key and nothing else', async () => {
     // No contract id anywhere. The agent knows its key; the allowance is found from it.
-    const response = await allowance.fetch(allowed.paid_url);
+    const response = await client.fetch(allowed.paid_url);
 
     // Read once. A Response body is a stream, so consuming it for an assertion message and then
     // again for the assertion itself fails on the second read.
@@ -148,7 +148,7 @@ describe('buying with the client SDK', { timeout: 6 * 60_000 }, () => {
     // The prompt-injection case, and the reason this product exists. The agent is asking
     // politely and correctly; the contract is what says no.
     await assert.rejects(
-      () => allowance.fetch(forbidden.paid_url),
+      () => client.fetch(forbidden.paid_url),
       (error) => {
         assert.ok(error instanceof AllowanceRefused, `expected a refusal, got ${error}`);
         assert.equal(error.rule, 'allowlist');
@@ -159,14 +159,14 @@ describe('buying with the client SDK', { timeout: 6 * 60_000 }, () => {
 
   it('passes through a URL that never asks for payment', async () => {
     // Safe to point at anything. Nothing is signed and no money moves for a 200.
-    const response = await allowance.fetch(`${ORIGIN}/api/allowances/params`);
+    const response = await client.fetch(`${ORIGIN}/api/allowances/params`);
     assert.equal(response.status, 200);
     assert.ok((await response.json()).wasm_hash);
   });
 
   it('will not take a Request object, and says why', async () => {
     await assert.rejects(
-      () => allowance.fetch(new Request(allowed.paid_url)),
+      () => client.fetch(new Request(allowed.paid_url)),
       /body can only be read once/,
     );
   });
@@ -175,7 +175,7 @@ describe('buying with the client SDK', { timeout: 6 * 60_000 }, () => {
     const { max_body_bytes } = await fetch(`${ORIGIN}/api/allowances/params`).then((r) => r.json());
     await assert.rejects(
       () =>
-        allowance.fetch(allowed.paid_url, {
+        client.fetch(allowed.paid_url, {
           method: 'POST',
           body: 'x'.repeat(max_body_bytes + 1),
         }),

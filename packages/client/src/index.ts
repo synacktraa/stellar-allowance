@@ -11,8 +11,8 @@ import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stel
  * ```js
  * import { Allowance } from '@stellar-allowance/client';
  *
- * const allowance = new Allowance();   // reads STELLAR_ALLOWANCE_SECRET
- * const res = await allowance.fetch('https://…/api/pay/abc123?text=hello');
+ * const client = new Allowance();   // reads STELLAR_ALLOWANCE_SECRET
+ * const res = await client.fetch('https://…/api/pay/abc123?text=hello');
  * ```
  *
  * `fetch` here is the ordinary one, with the 402 handled in the middle. Same arguments, same

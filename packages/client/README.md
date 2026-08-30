@@ -14,9 +14,9 @@ npm i @stellar-allowance/client
 ```js
 import { Allowance } from '@stellar-allowance/client';
 
-const allowance = new Allowance();   // reads STELLAR_ALLOWANCE_SECRET
+const client = new Allowance();   // reads STELLAR_ALLOWANCE_SECRET
 
-const res = await allowance.fetch('https://…/api/pay/abc123?text=hello');
+const res = await client.fetch('https://…/api/pay/abc123?text=hello');
 const data = await res.json();
 ```
 
@@ -35,9 +35,9 @@ Same arguments, same `Response` back. A URL that never asks for payment is passe
 through, and nothing is signed.
 
 ```js
-await allowance.fetch(url);                                    // GET
-await allowance.fetch(url, { method: 'POST', body });          // POST
-await allowance.fetch(url, { method: 'DELETE' });              // anything else
+await client.fetch(url);                                    // GET
+await client.fetch(url, { method: 'POST', body });          // POST
+await client.fetch(url, { method: 'DELETE' });              // anything else
 ```
 
 ```js
@@ -53,7 +53,7 @@ rule stopped it.
 import { Allowance, AllowanceRefused } from '@stellar-allowance/client';
 
 try {
-  await allowance.fetch(url);
+  await client.fetch(url);
 } catch (error) {
   if (error instanceof AllowanceRefused) {
     console.error(error.rule, '—', error.message);
