@@ -6,6 +6,8 @@
  * Stellar SDK and a stack trace about XDR.
  */
 
+import { Asset } from '@stellar/stellar-sdk';
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -22,6 +24,15 @@ export const env = {
   horizonUrl: () => required('HORIZON_URL'),
   networkPassphrase: () => required('STELLAR_NETWORK_PASSPHRASE'),
   usdcSac: () => required('USDC_SAC'),
+
+  /**
+   * The native XLM asset contract, derived rather than configured.
+   *
+   * An allowance funds its agent's account by calling this, and it is a deterministic function
+   * of the network — so making it an environment variable would only create a way for it to be
+   * wrong on one deployment and right on another.
+   */
+  nativeSac: () => Asset.native().contractId(required('STELLAR_NETWORK_PASSPHRASE')),
 
   platformAddress: () => required('PLATFORM_ADDRESS'),
   platformSecret: () => required('PLATFORM_SECRET'),
