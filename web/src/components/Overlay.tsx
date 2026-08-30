@@ -16,16 +16,26 @@ import { useEffect, useRef } from 'react';
 export function Overlay({
   title,
   note,
+  error,
   onClose,
   children,
 }: {
   title: string;
   /** One line under the title, when the dialog needs a sentence rather than a form. */
   note?: string;
+  /**
+   * Whatever just failed, shown *inside* the dialog.
+   *
+   * It used to be rendered on the page behind this one, which meant a refused Freighter prompt
+   * looked like nothing at all had happened: the button simply stopped saying "signing…". The
+   * commonest failure in the whole app was also the most invisible.
+   */
+  error?: string | null;
   onClose: () => void;
   children: React.ReactNode;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  const problem = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -46,6 +56,12 @@ export function Overlay({
       document.body.style.overflow = previous;
     };
   }, [onClose]);
+
+  // A long dialog can put its action well above the fold, so the message about that action has
+  // to come to the reader rather than wait to be scrolled to.
+  useEffect(() => {
+    if (error) problem.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [error]);
 
   return (
     <div
@@ -81,6 +97,17 @@ export function Overlay({
         )}
 
         <div className={note ? '' : 'mt-5'}>{children}</div>
+
+        {error && (
+          <p
+            ref={problem}
+            role="alert"
+            className="text-sm mt-5 pt-4 border-t border-[color:var(--line)] leading-relaxed"
+            style={{ color: 'var(--drained)' }}
+          >
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );

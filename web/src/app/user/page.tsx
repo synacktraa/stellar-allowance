@@ -250,6 +250,7 @@ export default function UserPage() {
           name={pending.draft.name}
           secret={pending.agent.secret()}
           busy={busy === 'create'}
+          error={error}
           onCancel={() => setPending(null)}
           onContinue={() => createIt(pending)}
         />
@@ -263,6 +264,7 @@ export default function UserPage() {
           allowance={open}
           owner={address}
           busy={busy}
+          error={error}
           onClose={() => setOpenId(null)}
           run={run}
         />
@@ -406,12 +408,14 @@ function RevealSecret({
   name,
   secret,
   busy,
+  error,
   onCancel,
   onContinue,
 }: {
   name: string;
   secret: string;
   busy: boolean;
+  error: string | null;
   onCancel: () => void;
   onContinue: () => void;
 }) {
@@ -421,6 +425,7 @@ function RevealSecret({
     <Overlay
       title={`the key for ${name}`}
       note="Shown once. It is the only copy — we never had it and cannot produce it again."
+      error={error}
       onClose={busy ? () => {} : onCancel}
     >
       <p className="label mb-2">the agent&rsquo;s secret key</p>
@@ -448,8 +453,9 @@ function RevealSecret({
       </button>
 
       <p className="label mt-3 leading-relaxed">
-        one signature · creates the contract, puts the credits in, and funds the agent&rsquo;s
-        account
+        {error
+          ? 'nothing was created · this is still the key, so try again or close and start over'
+          : 'one signature · creates the contract, puts the credits in, and funds the agent’s account'}
       </p>
     </Overlay>
   );
@@ -524,12 +530,14 @@ function AllowanceDetail({
   allowance,
   owner,
   busy,
+  error,
   onClose,
   run,
 }: {
   allowance: AllowanceRow;
   owner: string;
   busy: string | null;
+  error: string | null;
   onClose: () => void;
   run: (label: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
@@ -583,7 +591,7 @@ function AllowanceDetail({
     });
 
   return (
-    <Overlay title={allowance.name ?? 'allowance'} onClose={onClose}>
+    <Overlay title={allowance.name ?? 'allowance'} error={error} onClose={onClose}>
       {/* ------------------------------------------------------------ money */}
       <p className="label mb-1">credits in the contract</p>
       <p className="num text-3xl mb-1" style={{ color: 'var(--accent)' }}>
