@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { db } from '@/lib/supabase';
+import { MAX_BODY_BYTES } from '@/lib/limits';
 import { newReference } from '@/lib/reference';
 import { verifyPayment } from '@/lib/verify';
 import { env } from '@/lib/env';
@@ -22,13 +23,26 @@ import { env } from '@/lib/env';
  * The quote is deliberately *not* bound to the body. The price is per call, not per byte, so a
  * quote taken for one body and spent on another costs the developer nothing. That changes the
  * day pricing is metered, and then the body's hash belongs in the challenge.
+ *
+ * **Why the body is not simply left off the first call.** Because the quote does not depend on
+ * it, the client could send nothing and save an upload. What that would cost is this size check,
+ * which currently happens *before* anybody pays — omit the body and an oversized one is only
+ * caught on the paid call, which is money spent on a request that then bounces.
+ *
+ * The alternative is a separate endpoint that issues the reference without the body — an
+ * *invoice*, since what it returns is an amount, a recipient, a reference and an expiry. The
+ * client would then send the body exactly once, and a streaming body would become possible at
+ * all rather than needing to be replayable.
+ *
+ * Worth doing when either of two things is true: pricing becomes metered, so the quote genuinely
+ * cannot be taken without the body; or bodies get large enough that uploading each one twice is
+ * a real cost. Neither holds at 4.5 MB against an API that sells text. Until then the client SDK
+ * checks the size before asking, so the double send costs an upload and nothing else.
  */
 
 const CHALLENGE_TTL_SECONDS = 300;
 
-// Far more than a request to a paid API should ever need, and small enough that nobody can
-// make the gateway hold a large buffer for the price of an unpaid request.
-const MAX_BODY_BYTES = 64 * 1024;
+
 
 type Api = {
   id: string;
@@ -52,8 +66,12 @@ async function handle(request: NextRequest, apiId: string, method: 'GET' | 'POST
   let payload: string | null = null;
   if (method === 'POST') {
     payload = await request.text();
-    if (payload.length > MAX_BODY_BYTES) {
-      return problem(413, 'too-large', `Body is larger than ${MAX_BODY_BYTES} bytes.`);
+    // Bytes, not characters. `String.length` counts UTF-16 code units, so measuring it let a
+    // body of CJK or emoji through at three to four times the stated limit while the error
+    // still said "bytes".
+    const bytes = Buffer.byteLength(payload, 'utf8');
+    if (bytes > MAX_BODY_BYTES) {
+      return problem(413, 'too-large', `Body is ${bytes} bytes; the limit is ${MAX_BODY_BYTES}.`);
     }
   }
 
