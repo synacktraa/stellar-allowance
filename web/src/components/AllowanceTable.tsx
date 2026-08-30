@@ -83,6 +83,11 @@ export function AllowanceTable({
             // XLM is a fee balance, not spending money. Low means the agent stops working, and
             // that failure reads as a refusal unless it is called out here.
             const dry = allowance.xlm !== null && allowance.xlm < 1;
+            // Creating one without credits is allowed — set it up now, fund it Monday. What is
+            // not allowed is for it to look finished: an empty allowance fails at its first
+            // purchase, with an error nobody connects back to a deposit they meant to make.
+            // Not shown on a stopped row, where it is not the thing to fix.
+            const empty = !stopped && Number(allowance.balance ?? 0) === 0;
 
             return (
               <tr
@@ -100,6 +105,14 @@ export function AllowanceTable({
                       stopped
                     </span>
                   )}
+                  {empty && (
+                    <span
+                      className="chip ml-2 px-1.5 py-0.5 align-middle"
+                      style={{ borderColor: 'var(--held)', color: 'var(--held)' }}
+                    >
+                      needs funding
+                    </span>
+                  )}
                 </td>
 
                 <td
@@ -112,7 +125,7 @@ export function AllowanceTable({
 
                 <td
                   className="px-4 py-3 num text-right whitespace-nowrap"
-                  style={{ ...faded, color: 'var(--accent)' }}
+                  style={{ ...faded, color: empty ? 'var(--held)' : 'var(--accent)' }}
                 >
                   {usdc(allowance.balance)}
                 </td>
