@@ -22,7 +22,7 @@ Three roles, and they never overlap:
 
 | Role | Can | Cannot |
 |---|---|---|
-| **owner** | `write`, `withdraw`, `revoke` | spend |
+| **owner** | `write`, `withdraw`, `revoke` / `resume` | spend |
 | **agent** | request a spend | withdraw, change rules |
 | **contract** | move its own USDC | act without being invoked |
 
@@ -165,10 +165,18 @@ Replacing the rules deliberately leaves the spend window untouched. If a rule ch
 window, an agent sitting at its cap could be handed a fresh one by any edit — including an edit
 that *lowers* the cap, which is exactly when you least want it.
 
-### `revoke()`
+### `revoke()` / `resume()`
 
 Sets one flag. Deliberately moves no money, so it cannot fail for balance reasons — which is what
 you want from an emergency brake.
+
+**And it is reversible.** A brake you cannot release is not a brake; it is a demolition. Without
+`resume`, undoing a stop meant creating another allowance, handing the agent another key and
+moving the money across — three steps to reverse one click made in a moment of doubt.
+
+No security is given up. Only the owner can stop it and only the owner can start it, and every
+spend is checked against the rules either way, so a resumed allowance is no more permissive than
+it was. The spend window survives the round trip, so stop-and-start is not a way to clear a cap.
 
 ### `withdraw(amount)`
 
@@ -409,7 +417,7 @@ before any flush, flushing an empty contract, re-initialisation by a third party
 100%.
 
 ```bash
-cargo test          # 28 tests across both contracts, no network required
+cargo test          # 30 tests across both contracts, no network required
 ```
 
 ### What the gateway sells

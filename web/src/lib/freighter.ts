@@ -59,7 +59,7 @@ export async function proveAddress(address: string): Promise<Proof> {
     networkPassphrase: PASSPHRASE,
     address,
   });
-  if (result.error) throw new Error(String(result.error));
+  if (result.error) throw signingError(result.error);
 
   return { address, nonce, signed: result.signedTxXdr };
 }
@@ -149,6 +149,50 @@ export async function connect(): Promise<Wallet> {
   return { address: address.address, network: network.network };
 }
 
+/**
+ * Whatever Freighter just said, as a sentence.
+ *
+ * It reports failures as an object about as often as a string, and `new Error(someObject)`
+ * stringifies to the literal text "[object Object]" — which is what a declined signature used to
+ * show the user, in red, with no other explanation.
+ */
+function freighterMessage(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object') {
+    const shaped = error as { message?: unknown };
+    if (typeof shaped.message === 'string' && shaped.message !== '') return shaped.message;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return 'Freighter refused, without saying why.';
+    }
+  }
+  return String(error);
+}
+
+/**
+ * Declining a prompt is the commonest thing that happens here, and it is not a fault. Freighter
+ * words it differently across versions, so this matches the family rather than one string.
+ */
+function signingError(error: unknown): Error {
+  const message = freighterMessage(error);
+  if (/reject|declin|denied|cancel/i.test(message)) {
+    return new Error('You declined the signature in Freighter. Nothing was sent.');
+  }
+  return new Error(message);
+}
+
+/**
+ * The inclusion fee bid, in stroops.
+ *
+ * Deliberately small, because **this is the number Freighter shows the user.** Soroban adds the
+ * measured resource fee to it during simulation, and charges only what the transaction actually
+ * uses — but the wallet displays the total bid. Bidding 2 XLM made creating an allowance look
+ * like it cost 2.02 XLM when the ledger charged 0.02, which is a frightening number to show
+ * somebody for no benefit. 10,000 stroops is a hundred times the network minimum.
+ */
+const INCLUSION_FEE = '10000';
+
 /** Signs in Freighter, submits, and waits for the ledger to close. */
 async function signAndSubmit(
   address: string,
@@ -161,7 +205,7 @@ async function signAndSubmit(
     networkPassphrase: PASSPHRASE,
     address,
   });
-  if (signed.error) throw new Error(signed.error);
+  if (signed.error) throw signingError(signed.error);
 
   const sent = await server.sendTransaction(
     TransactionBuilder.fromXDR(signed.signedTxXdr, PASSPHRASE),
@@ -198,7 +242,7 @@ async function ownerCall(
   const account = await server.getAccount(address);
 
   const built = new TransactionBuilder(account, {
-    fee: '2000000',
+    fee: INCLUSION_FEE,
     networkPassphrase: PASSPHRASE,
   })
     .addOperation(new Contract(contractId).call(method, ...args))
@@ -266,7 +310,7 @@ export async function deployAllowance(
   const account = await server.getAccount(address);
 
   const built = new TransactionBuilder(account, {
-    fee: '20000000',
+    fee: INCLUSION_FEE,
     networkPassphrase: PASSPHRASE,
   })
     .addOperation(
@@ -342,4 +386,15 @@ export function withdraw(address: string, contractId: string, stroops: bigint) {
  */
 export function revoke(address: string, contractId: string) {
   return ownerCall(address, contractId, 'revoke', []);
+}
+
+/**
+ * Lets it spend again.
+ *
+ * A brake you cannot release is not a brake. Without this, undoing a stop meant creating a new
+ * allowance, handing the agent a new key and moving the money across — three steps to reverse
+ * one click.
+ */
+export function resume(address: string, contractId: string) {
+  return ownerCall(address, contractId, 'resume', []);
 }

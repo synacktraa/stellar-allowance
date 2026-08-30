@@ -101,6 +101,13 @@ pub struct AgentRevoked {
     pub owner: Address,
 }
 
+#[contractevent]
+#[derive(Clone)]
+pub struct AgentResumed {
+    #[topic]
+    pub owner: Address,
+}
+
 #[contract]
 pub struct Allowance;
 
@@ -332,10 +339,30 @@ impl Allowance {
 
     /// Immediate, total stop. Moves no money, so it cannot fail for balance reasons —
     /// which is exactly what you want from an emergency brake.
+    ///
+    /// Reversible by `resume`, and deliberately so. A brake you cannot release is not a brake;
+    /// it is a demolition. Recovering from one would mean creating another allowance, handing
+    /// the agent another key, and moving the money across — three steps to undo a click made in
+    /// a moment of doubt.
     pub fn revoke(env: Env) -> Result<(), AllowanceError> {
         let owner = require_owner(&env)?;
         env.storage().instance().set(&DataKey::Revoked, &true);
         AgentRevoked { owner }.publish(&env);
+        Ok(())
+    }
+
+    /// Lets the agent spend again, under whatever the rules now say.
+    ///
+    /// No security is given up by allowing this. Only the owner can stop it and only the owner
+    /// can start it again, and the rules are checked on every spend either way — so a resumed
+    /// allowance is no more permissive than it was before it was stopped.
+    ///
+    /// The spend window is untouched, exactly as a rule change leaves it. An agent that hit its
+    /// cap, was stopped, and is started again does not get a fresh window out of the round trip.
+    pub fn resume(env: Env) -> Result<(), AllowanceError> {
+        let owner = require_owner(&env)?;
+        env.storage().instance().set(&DataKey::Revoked, &false);
+        AgentResumed { owner }.publish(&env);
         Ok(())
     }
 

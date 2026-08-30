@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Keypair } from '@stellar/stellar-sdk';
 import { useWallet } from '@/lib/useWallet';
-import { deployAllowance, proveAddress, revoke, withdraw, write, type RuleSet } from '@/lib/freighter';
+import {
+  deployAllowance,
+  proveAddress,
+  resume,
+  revoke,
+  withdraw,
+  write,
+  type RuleSet,
+} from '@/lib/freighter';
 import { DEFAULT_WINDOW_LEDGERS, LEDGERS_PER_MINUTE, NO_RATE_LIMIT, isUnlimited } from '@/lib/rules';
 import { SiteHeader } from '@/components/SiteHeader';
 import { Overlay, Field } from '@/components/Overlay';
@@ -737,27 +745,46 @@ function AllowanceDetail({
         <p className="label">it comes back to your wallet · there is nowhere else it can go</p>
       </div>
 
-      {/* -------------------------------------------------------------- stop */}
+      {/* ------------------------------------------------------- stop / start */}
+      {/* A brake you cannot release is not a brake. Stopping is one click plus a confirm;
+          starting again is one click, because the dangerous direction is the one worth slowing
+          down and this one only restores what the rules already allowed. */}
       <div className="border-t border-[color:var(--line)] pt-4 flex items-center gap-3 flex-wrap">
-        <button
-          onClick={() =>
-            confirmStop
-              ? run('revoke', () => revoke(owner, allowance.contract_id))
-              : setConfirmStop(true)
-          }
-          disabled={busy !== null || stopped}
-          className="chip px-4 py-2.5 cursor-pointer disabled:opacity-40"
-          style={{ borderColor: 'var(--drained)', color: 'var(--drained)' }}
-        >
-          {stopped ? 'stopped' : confirmStop ? 'yes, stop it' : 'stop this allowance'}
-        </button>
-        <span className="label" style={{ color: 'var(--drained)' }}>
-          {stopped
-            ? 'it can no longer spend · your money is still yours to take back'
-            : confirmStop
-              ? 'it stops spending immediately · your money stays where it is'
-              : 'the emergency brake · moves no money, so it cannot fail'}
-        </span>
+        {stopped ? (
+          <>
+            <button
+              onClick={() => run('resume', () => resume(owner, allowance.contract_id))}
+              disabled={busy !== null}
+              className="chip px-4 py-2.5 cursor-pointer disabled:opacity-40"
+            >
+              {busy === 'resume' ? 'signing…' : 'start it again'}
+            </button>
+            <span className="label" style={{ color: 'var(--drained)' }}>
+              stopped · it can spend nothing until you start it, and the rules still apply
+              afterwards
+            </span>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() =>
+                confirmStop
+                  ? run('revoke', () => revoke(owner, allowance.contract_id))
+                  : setConfirmStop(true)
+              }
+              disabled={busy !== null}
+              className="chip px-4 py-2.5 cursor-pointer disabled:opacity-40"
+              style={{ borderColor: 'var(--drained)', color: 'var(--drained)' }}
+            >
+              {busy === 'revoke' ? 'signing…' : confirmStop ? 'yes, stop it' : 'stop this allowance'}
+            </button>
+            <span className="label" style={{ color: 'var(--drained)' }}>
+              {confirmStop
+                ? 'it stops spending immediately · your money stays where it is, and you can start it again'
+                : 'the emergency brake · moves no money, so it cannot fail'}
+            </span>
+          </>
+        )}
       </div>
     </Overlay>
   );

@@ -363,6 +363,49 @@ fn revoked_agent_cannot_spend() {
     assert_eq!(err, AllowanceError::Revoked);
 }
 
+/// A brake you cannot release is not a brake. Undoing a stop must not require making a whole new
+/// allowance, handing the agent a new key, and moving the money across.
+#[test]
+fn a_stopped_allowance_can_be_started_again() {
+    let ctx = funded(10_000_000, 6_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    client.revoke();
+    assert!(client.revoked());
+    assert_eq!(
+        client.try_spend(&ctx.seller, &1, &symbol_short!("r1")).unwrap_err().unwrap(),
+        AllowanceError::Revoked,
+    );
+
+    client.resume();
+
+    assert!(!client.revoked());
+    client.spend(&ctx.seller, &1_000_000, &symbol_short!("r2"));
+    assert_eq!(TokenClient::new(&ctx.env, &ctx.token).balance(&ctx.seller), 1_000_000);
+}
+
+/// Stopping and starting is not a way to clear the window. An agent sitting at its cap that gets
+/// stopped and started again is still sitting at its cap.
+#[test]
+fn resuming_does_not_reset_the_spend_window() {
+    let ctx = funded(20_000_000, 12_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    for _ in 0..5 {
+        client.spend(&ctx.seller, &1_000_000, &symbol_short!("ref"));
+    }
+    assert_eq!(client.spent_in_window(), 5_000_000);
+
+    client.revoke();
+    client.resume();
+
+    assert_eq!(client.spent_in_window(), 5_000_000, "the window survives the round trip");
+    assert_eq!(
+        client.try_spend(&ctx.seller, &1_000_000, &symbol_short!("r6")).unwrap_err().unwrap(),
+        AllowanceError::ExceedsWindow,
+    );
+}
+
 /// Test 8b — revoking must not strand the money. The owner can still withdraw.
 #[test]
 fn owner_can_still_withdraw_after_revoke() {

@@ -65,7 +65,8 @@ __constructor(env, owner, token, native, agent, rules, usdc_in, xlm_to_agent)
 
 write(env, rules: Option<Rules>, usdc_in: i128, xlm_to_agent: i128)
 withdraw(env, amount: i128)
-revoke(env)
+revoke(env) / resume(env)
+owner(env) / agent(env)                    // public, so the ownership claim is checkable
 spend(env, to, amount, reference)          // the agent's only call, unchanged
 ```
 
@@ -114,10 +115,15 @@ destination. Fixed, the worst this path can do is return the owner their own mon
 Given up deliberately: an owner who removes their USDC trustline while the contract holds a
 balance cannot withdraw. Self-inflicted, and re-adding the trustline is one free transaction.
 
-### `revoke` stays separate
+### `revoke` stays separate, and gains `resume`
 
 It moves no money and therefore cannot fail for balance reasons, which is what an emergency brake
 needs. It should also never require finding it inside a form.
+
+Stopping had no way back, found in the click-through. A brake you cannot release is not a brake —
+recovering meant a new allowance, a new agent key and moving the money across. `resume` restores
+only what the rules already allowed, and leaves the spend window alone so the round trip cannot
+be used to clear a cap.
 
 ### `deposit` and `set_rules` are deleted
 
