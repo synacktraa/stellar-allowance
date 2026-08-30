@@ -381,6 +381,26 @@ impl Allowance {
             .get(&DataKey::Rules)
             .ok_or(AllowanceError::NotInitialized)
     }
+
+    /// Who owns this allowance.
+    ///
+    /// Public on purpose. The claim this product makes is that one named person controls this
+    /// money and the platform cannot touch it — and a claim nobody can check from outside is
+    /// not worth much. Anyone holding a contract id can settle it here.
+    pub fn owner(env: Env) -> Result<Address, AllowanceError> {
+        env.storage()
+            .instance()
+            .get(&DataKey::Owner)
+            .ok_or(AllowanceError::NotInitialized)
+    }
+
+    /// The one key permitted to ask this contract to spend. Set at construction, never after.
+    pub fn agent(env: Env) -> Result<Address, AllowanceError> {
+        env.storage()
+            .instance()
+            .get(&DataKey::Agent)
+            .ok_or(AllowanceError::NotInitialized)
+    }
 }
 
 fn require_owner(env: &Env) -> Result<Address, AllowanceError> {

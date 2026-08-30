@@ -137,6 +137,18 @@ fn constructor_refuses_a_negative_xlm_amount() {
     deploy(10_000_000, 0, -1);
 }
 
+/// Anyone can ask an allowance who owns it and which key it trusts. Without this the product's
+/// central claim — one person controls this money, the platform cannot — is unverifiable from
+/// outside, and the API could not check that a contract being registered is really the caller's.
+#[test]
+fn owner_and_agent_are_readable_by_anyone() {
+    let ctx = funded(10_000_000, 4_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    assert_eq!(client.owner(), ctx.owner);
+    assert_eq!(client.agent(), ctx.agent);
+}
+
 /// Test 1 — money in, money out.
 ///
 /// This runs before any rule logic on purpose. A contract that accepts deposits but cannot
