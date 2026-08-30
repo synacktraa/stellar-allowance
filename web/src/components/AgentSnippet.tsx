@@ -94,7 +94,7 @@ export async function buy(url) {
 /** The contract's error codes, in words. */
 function why(detail) {
   if (/#4/.test(detail))  return 'agent revoked';
-  if (/#5/.test(detail))  return 'over the per-call cap';
+  if (/#5/.test(detail))  return 'one call worth more than the rate limit allows';
   if (/#6/.test(detail))  return 'recipient not on the allowlist';
   if (/#7/.test(detail))  return 'over the window cap';
   if (/#10/.test(detail)) return 'the allowance is empty';

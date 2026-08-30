@@ -45,7 +45,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<'/api/allowan
 
     // The allowlist is addresses, because that is what the contract stores. Nobody can read one.
     // Naming them here rather than in the page keeps a single source for it — the list endpoint
-    // already did this, and step 05 polls this one, so the two used to disagree.
+    // already did this, and the allowance dialog polls this one, so the two used to disagree.
     const names: Record<string, string> = {};
     if (config.allowlist.length > 0) {
       const { data: apis } = await db()
