@@ -1,5 +1,5 @@
 /**
- * Agent accounts, as the user tab now describes them.
+ * Allowances, as the user tab now describes them.
  *
  * Two changes of shape here, both deliberate. There is no per-call cap any more — it was the
  * rule most likely to break a working setup for a reason the owner did not control, and a single
@@ -31,7 +31,7 @@ const patch = (path, body) =>
     body: JSON.stringify(body),
   });
 
-describe('creating an agent account', { timeout: 4 * 60_000 }, () => {
+describe('creating an allowance', { timeout: 4 * 60_000 }, () => {
   const owner = Keypair.random();
   let splitter;
   let created;
@@ -105,7 +105,7 @@ describe('creating an agent account', { timeout: 4 * 60_000 }, () => {
   });
 });
 
-describe('renaming an agent account', { timeout: 2 * 60_000 }, () => {
+describe('renaming an allowance', { timeout: 2 * 60_000 }, () => {
   const owner = Keypair.random();
   const stranger = Keypair.random();
   let contractId;
