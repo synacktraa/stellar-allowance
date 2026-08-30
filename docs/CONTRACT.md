@@ -22,9 +22,12 @@ Three roles, and they never overlap:
 
 | Role | Can | Cannot |
 |---|---|---|
-| **owner** | deposit, withdraw, revoke | spend |
+| **owner** | `write`, `withdraw`, `revoke` | spend |
 | **agent** | request a spend | withdraw, change rules |
 | **contract** | move its own USDC | act without being invoked |
+
+Money leaves through exactly two functions — `withdraw` and `spend` — and that is checkable from
+the function list alone, which is the point of keeping the surface this small.
 
 ---
 
@@ -34,12 +37,15 @@ Two storage types, chosen deliberately.
 
 ```rust
 enum DataKey {
-    Owner, Agent, Token, Rules, Revoked,   // instance
-    Window,                                 // persistent
+    Owner, Agent, Token, Native, Rules, Revoked,   // instance
+    Window,                                         // persistent
 }
 ```
 
-**Instance storage** holds config — everything set once at `init` and rarely touched. It shares
+`Native` is the native XLM asset contract. A contract can only move a token by calling a token
+contract, and no host function returns the native one, so it is stored rather than derived.
+
+**Instance storage** holds config — everything set at construction and rarely touched. It shares
 one ledger entry with the contract, so it lives and dies with the contract.
 
 **Persistent storage** holds the spend window, which changes on every call. It's a separate entry
@@ -77,30 +83,61 @@ history, and cost would grow with usage.
 
 ## 3. The functions
 
-### `init(owner, token, agent, rules)`
+### `__constructor(owner, token, native, agent, rules, usdc_in, xlm_to_agent)`
 
-Sets everything once. Guarded so it can't be called twice:
+Sets everything, **and moves the money**, in the transaction that creates the contract.
+
+There is no `init`, and no guard against re-initialising, because a constructor cannot be called
+twice. The owner deploys their own allowance, so their one signature covers the deploy, the
+constructor, and both nested SAC transfers through the auth tree.
+
+That last part is why this shape exists. Stellar allows a transaction carrying a Soroban call to
+carry **nothing else**, so creating the contract and funding it can never be two operations in one
+transaction. They can be one operation, because a deploy runs its constructor inside the same
+invocation:
 
 ```rust
-if env.storage().instance().has(&DataKey::Owner) {
-    return Err(AllowanceError::AlreadyInitialized);
-}
 owner.require_auth();
+// …store owner, token, native, agent, rules…
+if usdc_in > 0 { token.transfer(&owner, &current_contract, &usdc_in); }
+if xlm_to_agent > 0 { native.transfer(&owner, &agent, &xlm_to_agent); }
 ```
 
-Without that guard anyone could re-initialise and make themselves the owner.
+The XLM leg goes straight from owner to agent — this contract never holds XLM — and **creates the
+agent's Stellar account if it does not exist**. That is verified on testnet, not inferred: the
+local test harness substitutes a stand-in asset which need not behave the same way.
 
-### `deposit(from, amount)`
+The agent is set here and nowhere else. No function can change it, which is a stronger guarantee
+than a runtime guard and a shorter thing to audit.
+
+Both amounts may be zero. Setting one up now and funding it later is a supported state; the
+interface discourages it rather than the contract forbidding it.
+
+### `write(rules, usdc_in, xlm_to_agent)`
+
+Everything the owner changes afterwards, in one invocation and therefore one signature. It
+replaces `deposit` and `set_rules`: changing a rate limit while adding credits used to be two
+confirmations.
 
 ```rust
 let owner = require_owner(&env)?;
-if from != owner { return Err(...); }
-token::TokenClient::new(&env, &token_address)
-    .transfer(&from, &env.current_contract_address(), &amount);
+if let Some(rules) = rules { /* replace */ }
+if usdc_in > 0 { /* owner -> contract */ }
+if xlm_to_agent > 0 { /* owner -> agent */ }
 ```
 
-The owner signs once. Their signature covers both the outer `deposit` call **and** the nested SAC
-`transfer` — one auth tree, one Freighter popup.
+**`rules: None` means leave them alone, never clear them.** The caller sends a diff of what was
+actually touched, so a save that only added credits must not arrive carrying an allowlist and
+overwrite the real one.
+
+**`write(None, 0, 0)` is a legal no-op.** That diff is legitimately empty when the owner changed
+only the name — which this contract does not store.
+
+The owner is loaded from storage, not passed. `deposit` used to take a `from` purely to check it
+against the owner already in storage: an argument that can be wrong for no benefit.
+
+Rules are applied before money moves, so a rejected rule change cannot leave funds sitting against
+rules that were never applied.
 
 ### `spend(to, amount, reference)` — the whole product
 
@@ -124,25 +161,35 @@ write is rolled back. There is no partial state.
 `reference` is the challenge id the gateway put in its 402. It goes into the event so the gateway
 can later read it back off the chain and prove *this* payment settles *that* request.
 
-### `set_rules(rules)`
-
-Replaces the rules. Owner only.
-
-It deliberately leaves the spend window untouched. If a rule change reset the window, an agent
-sitting at its cap could be handed a fresh one by any edit — including an edit that *lowers* the
-cap, which is exactly when you least want it.
+Replacing the rules deliberately leaves the spend window untouched. If a rule change reset the
+window, an agent sitting at its cap could be handed a fresh one by any edit — including an edit
+that *lowers* the cap, which is exactly when you least want it.
 
 ### `revoke()`
 
 Sets one flag. Deliberately moves no money, so it cannot fail for balance reasons — which is what
 you want from an emergency brake.
 
-### `withdraw(to, amount)`
+### `withdraw(amount)`
 
 No rules apply. The rules constrain the agent; the owner owns the money.
 
+**There is no destination parameter.** It goes to the stored owner, always. Freighter renders a
+Soroban invocation as a contract call rather than a legible payment — it does not say "sending
+100 USDC to G…" — so a signature over a caller-supplied destination was never meaningful review of
+that destination. Fixed, the worst this path can do is give the owner their own money back.
+
+What that gives up: an owner who removes their USDC trustline while this holds a balance cannot
+withdraw. Self-inflicted, and re-adding the trustline is one free transaction.
+
 **This was the first test written**, before any rule logic. A contract that accepts deposits and
 can't return them is a shredder, and it's the one bug with no recovery path.
+
+### `owner()` / `agent()`
+
+Read-only, and public on purpose. The claim this product makes is that one named person controls
+this money and the platform cannot — and a claim nobody can check from outside is not worth much.
+Anyone holding a contract id can settle it here.
 
 ### `remaining()` / `spent_in_window()`
 
@@ -227,7 +274,8 @@ One per registered API. The gateway's 402 names the splitter as the recipient, s
 payment lands in a contract instead of an account the platform controls.
 
 ```rust
-init(developer, platform, token, fee_bps)   // fixed at creation, cannot be called twice
+__constructor(developer, platform, token, fee_bps)   // fixed at creation, and a
+                                                     // constructor cannot run twice
 flush() -> (i128, i128)                     // pays out the whole balance, 90/10
 balance() / config()
 ```
@@ -284,14 +332,24 @@ let env = Env::default();
 env.mock_all_auths();
 env.ledger().set_sequence_number(1_000_000);
 
-let token = env.register_stellar_asset_contract_v2(token_admin);
-let contract = env.register(Allowance, ());
-let client = AllowanceClient::new(&env, &contract);
+let token  = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+let native = env.register_stellar_asset_contract_v2(token_admin).address();
 
-StellarAssetClient::new(&env, &token.address()).mint(&owner, &10_000_000);
+let contract = env.register(
+    Allowance,
+    (owner, token, native, agent, rules, usdc_in, xlm_to_agent),
+);
+let client = AllowanceClient::new(&env, &contract);
 ```
 
-Four lines give you a working USDC stand-in with no network, no funding, no trustlines.
+Two stand-in assets, because the constructor moves both: USDC into the contract, XLM to the agent.
+No network, no funding, no trustlines.
+
+> **What this harness cannot prove.** `register_stellar_asset_contract_v2` need not model account
+> creation the way the real native SAC does, so a passing Rust test is *not* evidence that the
+> constructor can fund a brand-new agent account. That is established on testnet instead —
+> transaction `531bf252c5fd229ec6cc54cb90b5195da547174b7c7bb5d5568399da730dfeb4` deployed an
+> allowance naming an address with no account and left it holding 5 XLM.
 `AllowanceClient` is generated by `#[contractimpl]` — you never write it.
 
 - `mock_all_auths()` makes every `require_auth()` pass. Fine for logic tests; use `mock_auths()`
@@ -308,21 +366,34 @@ client.try_spend(...).unwrap_err().unwrap()   // gives you the typed error
 Use `try_*` whenever you're asserting a *refusal*, so you check it failed for the right reason
 rather than any reason.
 
-### The eleven allowance tests
+### The twenty-one allowance tests
 
 | | Asserts |
 |---|---|
-| 1 | deposit then withdraw returns every unit ← written first |
-| 3 | spend under all limits pays the seller |
-| 4 | over `max_per_call` → `ExceedsPerCall`, and **nothing moves** |
-| 5 | unlisted recipient → `RecipientNotAllowed` |
-| 6 | 5 calls fit, the 6th → `ExceedsWindow` ← the demo |
-| 7 | advance 61 ledgers, window clears, spending resumes |
-| 8 | revoked agent → `Revoked` |
-| 8b | owner can still withdraw after revoke (money isn't stranded) |
-| 9 | views return the same answer twice (reads don't write) |
-| 10 | owner can change rules; the old recipient stops working |
-| 11 | changing rules preserves spend history |
+| | **creating** |
+| | one deploy leaves USDC here and XLM in the agent's account |
+| | zero amounts are legal — created, unfunded, rules set |
+| | a negative amount panics (a constructor cannot return an error) |
+| | `owner()` and `agent()` are readable by anyone |
+| | **writing** |
+| | `rules: None` leaves the existing ones untouched ← the diff depends on it |
+| | `write(None, 0, 0)` is a no-op and does not error ← Save depends on it |
+| | one write changes rules and moves both assets |
+| | a negative amount is refused and nothing moves |
+| | **money** |
+| | deposit then withdraw returns every unit ← written first |
+| | `withdraw` goes to the owner, with no destination given |
+| | **spending** |
+| | spend under all limits pays the seller |
+| | over `max_per_call` → `ExceedsPerCall`, and **nothing moves** |
+| | unlisted recipient → `RecipientNotAllowed` |
+| | 5 calls fit, the 6th → `ExceedsWindow` ← the demo |
+| | advance 61 ledgers, window clears, spending resumes |
+| | revoked agent → `Revoked` |
+| | owner can still withdraw after revoke (money isn't stranded) |
+| | views return the same answer twice (reads don't write) |
+| | owner can change rules; the old recipient stops working |
+| | changing rules preserves spend history |
 
 Every refusal test asserts the balance too. "It returned an error" is not the same as "no money
 moved", and only one of those is the actual requirement.
@@ -338,7 +409,7 @@ before any flush, flushing an empty contract, re-initialisation by a third party
 100%.
 
 ```bash
-cargo test          # 18 tests across both contracts, no network required
+cargo test          # 28 tests across both contracts, no network required
 ```
 
 ### What the gateway sells
@@ -371,50 +442,65 @@ between quote and payment left the buyer paid and undelivered. See `testing.md`.
 
 ```bash
 stellar contract build
-# → target/wasm32v1-none/release/stellar_allowance.wasm (9.5 KB)
+# → target/wasm32v1-none/release/stellar_allowance.wasm (12.5 KB)
 
-stellar contract deploy \
+stellar contract upload \
   --wasm target/wasm32v1-none/release/stellar_allowance.wasm \
-  --source-account owner --network testnet --alias allowance
+  --source-account platform --network testnet
 ```
 
-Deploy uploads the wasm **and** creates an instance. For many users you upload once and deploy
-instances from the same wasm hash — that's why per-user mandates are cheap.
+Uploading and instantiating are separate. The binary goes up **once**; every allowance is an
+instance created from the same hash, which is what makes a contract per user affordable.
 
-### init
+### Creating one
 
 ```bash
-stellar contract invoke --id <C...> --source-account owner --network testnet -- \
-  init --owner <G...> --token <USDC_SAC> --agent <G...> --rules-file-path rules.json
+stellar contract deploy \
+  --wasm-hash <64 hex> --source-account owner --network testnet -- \
+  --owner <G...> --token <USDC_SAC> --native <XLM_SAC> --agent <G...> \
+  --rules-file-path rules.json --usdc_in 20000000 --xlm_to_agent 50000000
 ```
+
+Everything after the second `--` goes to the constructor, which runs inside this same invocation.
+So this one command, signed once by the **owner**, creates the contract, names the agent, sets the
+rules, moves 2 USDC in and funds the agent's account with 5 XLM.
+
+`--source-account owner`, not platform: whoever deploys is whoever the constructor asks to
+authorise the transfers, and they must be the account named as `--owner`.
 
 > **BOM trap.** PowerShell's `Out-File -Encoding utf8` writes a UTF-8 BOM (`EF BB BF`). The CLI's
 > JSON parser fails on it and reports "check for missing quotes around strings", which sends you
 > hunting a syntax error that doesn't exist. Write JSON with
 > `[System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding($false)))`.
 
-### deposit and spend
+### write and spend
 
 ```bash
+# add credits, leaving the rules alone (--rules omitted is None)
 stellar contract invoke --id <C...> --source-account owner  --network testnet -- \
-  deposit --from <G...> --amount 20000000        # 2 USDC — 7 decimals
+  write --usdc_in 20000000 --xlm_to_agent 0          # 2 USDC — 7 decimals
+
+# replace the rules, moving nothing
+stellar contract invoke --id <C...> --source-account owner  --network testnet -- \
+  write --rules-file-path rules.json --usdc_in 0 --xlm_to_agent 0
 
 stellar contract invoke --id <C...> --source-account agent --network testnet -- \
   spend --to <G...> --amount 1000000 --reference call1
+
+stellar contract invoke --id <C...> --source-account owner  --network testnet -- \
+  withdraw --amount 20000000                          # no destination: it goes to the owner
 ```
 
-Note the `--source-account` differs: **owner** deposits, **agent** spends. That difference is what
-`require_auth` is checking.
+Note the `--source-account` differs: **owner** writes and withdraws, **agent** spends. That
+difference is what `require_auth` is checking.
 
 ### The splitter
 
 ```bash
 stellar contract deploy \
   --wasm target/wasm32v1-none/release/stellar_allowance_splitter.wasm \
-  --source-account platform --network testnet --alias splitter
-
-stellar contract invoke --id <C...> --source-account platform --network testnet -- \
-  init --developer <G...> --platform <G...> --token <USDC_SAC> --fee_bps 1000
+  --source-account platform --network testnet --alias splitter -- \
+  --developer <G...> --platform <G...> --token <USDC_SAC> --fee_bps 1000
 
 stellar contract invoke --id <C...> --source-account agent --network testnet -- flush
 ```
