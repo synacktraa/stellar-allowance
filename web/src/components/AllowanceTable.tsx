@@ -35,6 +35,13 @@ export type AllowanceRow = {
   } | null;
   /** The names of the APIs it may pay, already resolved. */
   can_pay: string[];
+  /**
+   * Whether this contract is running the binary we currently deploy.
+   *
+   * A deployed contract keeps the code it was made with, so an older allowance may not have
+   * functions the interface offers. False means: do not offer them for this row.
+   */
+  current?: boolean;
 };
 
 const usdc = (stroops: string | null) => (stroops === null ? '—' : (Number(stroops) / 1e7).toFixed(2));

@@ -2,7 +2,7 @@
 import { Horizon, StrKey } from '@stellar/stellar-sdk';
 import { db } from '@/lib/supabase';
 import { env } from '@/lib/env';
-import { read } from '@/lib/stellar';
+import { onCurrentWasm, read } from '@/lib/stellar';
 
 /**
  * Recording an allowance the owner has already deployed.
@@ -194,8 +194,13 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // A contract keeps the code it was deployed with. An allowance made before a change does not
+  // have the functions added since, and the interface must not offer them for it.
+  const current = await onCurrentWasm(rows.map((row) => row.contract_id));
+
   const allowances = detailed.map((row) => ({
     ...row,
+    current: current.has(row.contract_id),
     // Anything without a name is an address allowlisted directly rather than picked from the
     // directory — still worth listing, since it still gets paid.
     can_pay: (row.rules?.allowlist ?? []).map(

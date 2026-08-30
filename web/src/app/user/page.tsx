@@ -559,6 +559,10 @@ function AllowanceDetail({
   const balance = allowance.balance === null ? 0 : Number(allowance.balance) / 1e7;
   const stopped = allowance.revoked === true;
   const lowOnFees = allowance.xlm !== null && allowance.xlm < 1;
+  // A contract keeps the code it was deployed with, so one made before `resume` existed does not
+  // have it. Offering the button anyway fails at the wallet with "trying to invoke non-existent
+  // contract function" — which reads as a broken app rather than an old contract.
+  const canResume = allowance.current !== false;
 
   const changes = diff(allowance, form);
   const renamed = form.name.trim() !== (allowance.name ?? '');
@@ -750,7 +754,7 @@ function AllowanceDetail({
           starting again is one click, because the dangerous direction is the one worth slowing
           down and this one only restores what the rules already allowed. */}
       <div className="border-t border-[color:var(--line)] pt-4 flex items-center gap-3 flex-wrap">
-        {stopped ? (
+        {stopped && canResume ? (
           <>
             <button
               onClick={() => run('resume', () => resume(owner, allowance.contract_id))}
@@ -764,6 +768,13 @@ function AllowanceDetail({
               afterwards
             </span>
           </>
+        ) : stopped ? (
+          <span className="label leading-relaxed" style={{ color: 'var(--drained)' }}>
+            stopped, and this one cannot be started again — it was created before the contract
+            could be restarted, and a deployed contract keeps the code it was made with. Take the
+            credits back with the button above and make a new allowance; the agent will need the
+            new key.
+          </span>
         ) : (
           <>
             <button
