@@ -2,7 +2,6 @@
 
 import {
   Address,
-  Asset,
   Contract,
   Operation,
   Transaction,
@@ -60,7 +59,7 @@ export async function proveAddress(address: string): Promise<Proof> {
     networkPassphrase: PASSPHRASE,
     address,
   });
-  if (result.error) throw new Error(String(result.error));
+  if (result.error) throw signingError(result.error);
 
   return { address, nonce, signed: result.signedTxXdr };
 }
@@ -150,6 +149,50 @@ export async function connect(): Promise<Wallet> {
   return { address: address.address, network: network.network };
 }
 
+/**
+ * Whatever Freighter just said, as a sentence.
+ *
+ * It reports failures as an object about as often as a string, and `new Error(someObject)`
+ * stringifies to the literal text "[object Object]" — which is what a declined signature used to
+ * show the user, in red, with no other explanation.
+ */
+function freighterMessage(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object') {
+    const shaped = error as { message?: unknown };
+    if (typeof shaped.message === 'string' && shaped.message !== '') return shaped.message;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return 'Freighter refused, without saying why.';
+    }
+  }
+  return String(error);
+}
+
+/**
+ * Declining a prompt is the commonest thing that happens here, and it is not a fault. Freighter
+ * words it differently across versions, so this matches the family rather than one string.
+ */
+function signingError(error: unknown): Error {
+  const message = freighterMessage(error);
+  if (/reject|declin|denied|cancel/i.test(message)) {
+    return new Error('You declined the signature in Freighter. Nothing was sent.');
+  }
+  return new Error(message);
+}
+
+/**
+ * The inclusion fee bid, in stroops.
+ *
+ * Deliberately small, because **this is the number Freighter shows the user.** Soroban adds the
+ * measured resource fee to it during simulation, and charges only what the transaction actually
+ * uses — but the wallet displays the total bid. Bidding 2 XLM made creating an allowance look
+ * like it cost 2.02 XLM when the ledger charged 0.02, which is a frightening number to show
+ * somebody for no benefit. 10,000 stroops is a hundred times the network minimum.
+ */
+const INCLUSION_FEE = '10000';
+
 /** Signs in Freighter, submits, and waits for the ledger to close. */
 async function signAndSubmit(
   address: string,
@@ -162,7 +205,7 @@ async function signAndSubmit(
     networkPassphrase: PASSPHRASE,
     address,
   });
-  if (signed.error) throw new Error(signed.error);
+  if (signed.error) throw signingError(signed.error);
 
   const sent = await server.sendTransaction(
     TransactionBuilder.fromXDR(signed.signedTxXdr, PASSPHRASE),
@@ -199,7 +242,7 @@ async function ownerCall(
   const account = await server.getAccount(address);
 
   const built = new TransactionBuilder(account, {
-    fee: '2000000',
+    fee: INCLUSION_FEE,
     networkPassphrase: PASSPHRASE,
   })
     .addOperation(new Contract(contractId).call(method, ...args))
@@ -210,124 +253,148 @@ async function ownerCall(
   return signAndSubmit(address, prepared, method);
 }
 
+/** The four numbers and the list that decide what an agent may do. */
+export type RuleSet = {
+  maxPerCall: bigint;
+  windowLedgers: number;
+  windowCap: bigint;
+  allowlist: string[];
+};
+
+function rulesScVal(rules: RuleSet): xdr.ScVal {
+  return nativeToScVal(
+    {
+      max_per_call: rules.maxPerCall,
+      window_ledgers: rules.windowLedgers,
+      window_cap: rules.windowCap,
+      allowlist: rules.allowlist.map((a) => Address.fromString(a)),
+    },
+    {
+      type: {
+        max_per_call: ['symbol', 'i128'],
+        window_ledgers: ['symbol', 'u32'],
+        window_cap: ['symbol', 'i128'],
+        allowlist: ['symbol', null],
+      },
+    },
+  );
+}
+
+/** Soroban `Option<T>`: a present value, or void for `None`. */
+function option<T>(value: T | undefined, encode: (v: T) => xdr.ScVal): xdr.ScVal {
+  return value === undefined ? xdr.ScVal.scvVoid() : encode(value);
+}
+
 /**
- * Brings the agent's account into existence, paid for out of the owner's wallet.
+ * Creates an allowance and funds it, in one signature.
  *
- * A faucet would be one line here, and would be a testnet-shaped hole in the product: on
- * mainnet nobody hands you a funded account, so the owner has to create the agent's. Doing it
- * the real way now means this step does not have to be rewritten to ship, and the owner sees
- * the true cost of running an agent — this XLM pays for the agent's own transaction fees, and
- * is the only asset it will ever hold.
+ * The owner deploys it themselves. That is not a detail — it is the whole reason this is one
+ * confirmation rather than two. A deploy runs the contract's constructor inside the same
+ * invocation, and Stellar allows a transaction carrying a Soroban call to carry nothing else,
+ * so this is the only shape in which creating, naming the agent, setting the rules, moving the
+ * USDC and funding the agent's account can happen together.
  *
- * `createAccount` is a classic operation, so it needs no simulation: there is no contract to
- * run and no storage footprint to discover.
+ * The agent's account does not need to exist first. The constructor sends it XLM through the
+ * native asset contract, which brings the account into being — verified on testnet, because the
+ * local test harness uses a stand-in asset that need not behave the same way.
+ *
+ * Returns the new contract id, read back from the transaction rather than predicted: the address
+ * depends on a random salt, and guessing it client-side would be a second place to be wrong.
  */
-export async function createAgentAccount(
+export async function deployAllowance(
   address: string,
-  agentPublicKey: string,
-  startingBalanceXlm: string,
+  params: { wasm_hash: string; token: string; native: string },
+  setup: { agent: string; rules: RuleSet; usdcIn: bigint; xlmToAgent: bigint },
 ): Promise<string> {
   const server = new rpc.Server(RPC_URL);
   const account = await server.getAccount(address);
 
   const built = new TransactionBuilder(account, {
-    fee: '100000',
+    fee: INCLUSION_FEE,
     networkPassphrase: PASSPHRASE,
   })
     .addOperation(
-      Operation.createAccount({
-        destination: agentPublicKey,
-        startingBalance: startingBalanceXlm,
+      Operation.createCustomContract({
+        address: Address.fromString(address),
+        wasmHash: Buffer.from(params.wasm_hash, 'hex'),
+        // A fresh salt, so two allowances created with identical settings still get distinct
+        // addresses rather than colliding.
+        salt: Buffer.from(crypto.getRandomValues(new Uint8Array(32))),
+        constructorArgs: [
+          nativeToScVal(address, { type: 'address' }),
+          nativeToScVal(params.token, { type: 'address' }),
+          nativeToScVal(params.native, { type: 'address' }),
+          nativeToScVal(setup.agent, { type: 'address' }),
+          rulesScVal(setup.rules),
+          nativeToScVal(setup.usdcIn, { type: 'i128' }),
+          nativeToScVal(setup.xlmToAgent, { type: 'i128' }),
+        ],
       }),
     )
     .setTimeout(120)
     .build();
 
-  return signAndSubmit(address, built, 'Funding the agent');
+  const prepared = await server.prepareTransaction(built);
+  const hash = await signAndSubmit(address, prepared, 'Creating the allowance');
+
+  const result = await server.getTransaction(hash);
+  if (result.status !== rpc.Api.GetTransactionStatus.SUCCESS || !result.returnValue) {
+    throw new Error('The allowance was created but its address could not be read.');
+  }
+  return Address.fromScAddress(result.returnValue.address()).toString();
 }
 
 /**
- * Tops up an agent's XLM, for its own transaction fees.
+ * Everything the owner changes afterwards, in one signature.
  *
- * A plain payment, not a contract call: this is the agent's *account*, not its allowance. It
- * pays for submitting transactions and nothing else — the agent still cannot spend a cent of
- * USDC without asking the contract.
+ * Undefined means *leave it alone* and is sent as Soroban's `None`. That distinction carries
+ * real weight: a save that only added credits must not arrive carrying an allowlist, or it would
+ * overwrite the real one with whatever the form happened to be holding.
  *
- * There is deliberately no matching way to take it back. The XLM belongs to the agent's account,
- * and only the agent's own key can move it — which is the same property that makes the agent
- * safe to hand a key to. Send it what it needs rather than a float.
+ * Amounts are additive. `usdcIn` adds to the balance; it does not set it.
  */
-export async function sendAgentXlm(address: string, agentPublicKey: string, amountXlm: string) {
-  const server = new rpc.Server(RPC_URL);
-  const account = await server.getAccount(address);
-
-  const built = new TransactionBuilder(account, {
-    fee: '100000',
-    networkPassphrase: PASSPHRASE,
-  })
-    .addOperation(
-      Operation.payment({
-        destination: agentPublicKey,
-        asset: Asset.native(),
-        amount: amountXlm,
-      }),
-    )
-    .setTimeout(120)
-    .build();
-
-  return signAndSubmit(address, built, 'Sending XLM to the agent');
-}
-
-export function deposit(address: string, contractId: string, stroops: bigint) {
-  return ownerCall(address, contractId, 'deposit', [
-    nativeToScVal(address, { type: 'address' }),
-    nativeToScVal(stroops, { type: 'i128' }),
+export function write(
+  address: string,
+  contractId: string,
+  changes: { rules?: RuleSet; usdcIn?: bigint; xlmToAgent?: bigint },
+) {
+  return ownerCall(address, contractId, 'write', [
+    option(changes.rules, rulesScVal),
+    nativeToScVal(changes.usdcIn ?? 0n, { type: 'i128' }),
+    nativeToScVal(changes.xlmToAgent ?? 0n, { type: 'i128' }),
   ]);
 }
 
+/**
+ * Takes USDC back out, to the owner.
+ *
+ * There is no destination to pass. Freighter renders a Soroban call as a contract invocation
+ * rather than a legible payment, so signing one was never meaningful review of where the money
+ * was going — and this is one of only two ways money leaves the contract.
+ */
 export function withdraw(address: string, contractId: string, stroops: bigint) {
   return ownerCall(address, contractId, 'withdraw', [
-    nativeToScVal(address, { type: 'address' }),
     nativeToScVal(stroops, { type: 'i128' }),
   ]);
 }
 
+/**
+ * Stops the agent spending. Immediate and total.
+ *
+ * Moves no money, so it cannot fail for balance reasons — which is what you want from the
+ * control you reach for when something has gone wrong.
+ */
 export function revoke(address: string, contractId: string) {
   return ownerCall(address, contractId, 'revoke', []);
 }
 
 /**
- * Replaces the rules on a live allowance.
+ * Lets it spend again.
  *
- * The spend window is deliberately not reset by this. If it were, an agent sitting at its cap
- * could be handed a fresh one by any edit — including an edit that lowers the cap.
+ * A brake you cannot release is not a brake. Without this, undoing a stop meant creating a new
+ * allowance, handing the agent a new key and moving the money across — three steps to reverse
+ * one click.
  */
-export function setRules(
-  address: string,
-  contractId: string,
-  rules: {
-    maxPerCall: bigint;
-    windowLedgers: number;
-    windowCap: bigint;
-    allowlist: string[];
-  },
-) {
-  return ownerCall(address, contractId, 'set_rules', [
-    nativeToScVal(
-      {
-        max_per_call: rules.maxPerCall,
-        window_ledgers: rules.windowLedgers,
-        window_cap: rules.windowCap,
-        allowlist: rules.allowlist.map((a) => Address.fromString(a)),
-      },
-      {
-        type: {
-          max_per_call: ['symbol', 'i128'],
-          window_ledgers: ['symbol', 'u32'],
-          window_cap: ['symbol', 'i128'],
-          allowlist: ['symbol', null],
-        },
-      },
-    ),
-  ]);
+export function resume(address: string, contractId: string) {
+  return ownerCall(address, contractId, 'resume', []);
 }

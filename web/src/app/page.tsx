@@ -12,10 +12,11 @@ import { SiteHeader } from '@/components/SiteHeader';
  * the nearest form that is true. Both are noted at the point they appear, so a future editor can
  * see why the wording differs from the brief rather than assuming it drifted:
  *
- *   §4   the three rules ARE changeable, by the owner alone (`set_rules`, owner-gated). What
- *        cannot be changed is a splitter's fee split, and that claim is kept as written. The
- *        reassurance the spec wants is still true and still load-bearing — it belongs to the
- *        agent, not to time.
+ *   §4   the rules ARE changeable, by the owner alone (`write`, owner-gated). What cannot be
+ *        changed is a splitter's fee split — and, since the allowance contract was rewritten,
+ *        the agent an allowance names, which is fixed at construction. Those claims are kept as
+ *        written. The reassurance the spec wants is still true and still load-bearing — it
+ *        belongs to the agent, not to time.
  *   §5   an API needs no changes, which is said plainly. An agent does need code: 402 → ask the
  *        contract → repeat with the payment.
  *

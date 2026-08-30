@@ -1,36 +1,42 @@
 ﻿import type { NextRequest } from 'next/server';
-import { Address, Horizon, StrKey, nativeToScVal } from '@stellar/stellar-sdk';
+import { Horizon, StrKey } from '@stellar/stellar-sdk';
 import { db } from '@/lib/supabase';
-import { deployInstance } from '@/lib/deploy';
 import { env } from '@/lib/env';
-import { arg, read } from '@/lib/stellar';
-import { DEFAULT_WINDOW_LEDGERS, LEDGERS_PER_MINUTE, NO_RATE_LIMIT } from '@/lib/rules';
+import { onCurrentWasm, read } from '@/lib/stellar';
 
 /**
- * Creating an allowance.
+ * Recording an allowance the owner has already deployed.
  *
- * The platform deploys and pays, and the constructor names the user as owner in the same
- * transaction. The user never has to acquire XLM before they can own anything, and still owns
- * the result outright: we cannot spend from it, change its rules, or take it back.
+ * This used to deploy the contract itself, on the platform's account and at the platform's
+ * expense. It no longer does. The owner's wallet builds and signs the deploy, because a deploy
+ * runs its constructor in the same invocation — which is what lets one confirmation create the
+ * contract, name the agent, set the rules, move the USDC in and fund the agent's account. When
+ * the platform deployed first, funding it was necessarily a second confirmation, and the second
+ * one is the one people forget.
  *
- * This is why the contract has a constructor rather than an `init` function. A separate call
- * would need the owner's signature to prove they wanted to be the owner, which puts the XLM
- * barrier straight back, and would leave the contract briefly unowned in between.
+ * So the contract already exists by the time this is called, and every fact about it is already
+ * on the chain. What is stored here is only the human part — a name — plus the index that makes
+ * `?owner=` and `?agent=` lookups possible without scanning the ledger.
  *
- * Every later owner action — deposit, set_rules, revoke, withdraw — is signed by the user in
- * their own wallet. The platform can only create it.
+ * **It is verified before it is believed.** The contract is asked who owns it and which agent it
+ * names, and both must match what the caller claims. Without that, anyone could post any string
+ * and attach rows to other people's addresses.
+ *
+ * Deliberately unsigned. Requiring a challenge signature would mean a second Freighter prompt
+ * during creation, which is the exact thing this change exists to remove — and it is safe to
+ * skip precisely because **nothing in this request is the caller's to choose**. The owner, the
+ * agent and the contract are all checked against the chain, and the name is assigned here. A
+ * racing attacker could only create the identical row the owner was about to.
+ *
+ * The name is therefore a placeholder. Renaming is a separate, signed request, which is where
+ * a caller-chosen string belongs.
  */
-
 export const maxDuration = 60;
 
 type Body = {
   owner?: string;
   agent?: string;
-  name?: string;
-  /** Absent means no rate limit, and then the balance in the contract is the limit. */
-  window_cap?: string;
-  window_minutes?: number;
-  allowlist?: string[];
+  contract_id?: string;
 };
 
 export async function POST(request: NextRequest) {
@@ -38,6 +44,7 @@ export async function POST(request: NextRequest) {
 
   const owner = body.owner?.trim();
   const agent = body.agent?.trim();
+  const contractId = body.contract_id?.trim();
 
   if (!owner || !StrKey.isValidEd25519PublicKey(owner)) {
     return Response.json({ error: 'owner must be a Stellar account address' }, { status: 400 });
@@ -45,88 +52,71 @@ export async function POST(request: NextRequest) {
   if (!agent || !StrKey.isValidEd25519PublicKey(agent)) {
     return Response.json({ error: 'agent must be a Stellar account address' }, { status: 400 });
   }
-
-  const name = body.name?.trim();
-  if (!name || !/^[A-Za-z0-9][A-Za-z0-9 _-]{0,31}$/.test(name)) {
-    return Response.json(
-      { error: 'name must be 1-32 characters: letters, digits, spaces, underscore or hyphen.' },
-      { status: 400 },
-    );
+  if (!contractId || !StrKey.isValidContract(contractId)) {
+    return Response.json({ error: 'contract_id must be a contract address' }, { status: 400 });
   }
-
-  // An empty allowlist refuses everything, so an agent created without one is dead on arrival —
-  // and deciding who may be paid is the protection this product leads with.
-  const allowlist = (body.allowlist ?? []).filter((a) => a.startsWith('C'));
-  if (allowlist.length === 0) {
-    return Response.json(
-      { error: 'Choose at least one API this agent may pay.' },
-      { status: 400 },
-    );
-  }
-
-  // No rate limit unless one is asked for. The contract needs a number either way, so "none" is
-  // a cap nothing reaches rather than a special case in the contract.
-  const windowCap = body.window_cap ? BigInt(body.window_cap) : NO_RATE_LIMIT;
-  const windowLedgers = body.window_minutes
-    ? Math.max(1, Math.round(Number(body.window_minutes) * LEDGERS_PER_MINUTE))
-    : DEFAULT_WINDOW_LEDGERS;
-
-  // The per-call cap is not a separate idea any more: a single call may spend whatever the
-  // window allows, and no more.
-  const maxPerCall = windowCap;
-
-  if (windowCap <= 0n) {
-    return Response.json({ error: 'the cap must be positive' }, { status: 400 });
-  }
-
+  // Ask the contract itself. Anything the caller says about it is a claim until this agrees.
+  let claimedBy: string;
+  let names: string;
   try {
-    // Deploy and configure in one transaction. The owner is set atomically, so there is no
-    // moment where the contract exists unowned, and the owner never needs XLM to claim it.
-    const contractId = await deployInstance(env.allowanceWasmHash(), [
-      arg.address(owner),
-      arg.address(env.usdcSac()),
-      arg.address(agent),
-      nativeToScVal(
-        {
-          max_per_call: maxPerCall,
-          window_ledgers: windowLedgers,
-          window_cap: windowCap,
-          allowlist: allowlist.map((a) => Address.fromString(a)),
-        },
-        {
-          type: {
-            max_per_call: ['symbol', 'i128'],
-            window_ledgers: ['symbol', 'u32'],
-            window_cap: ['symbol', 'i128'],
-            allowlist: ['symbol', null],
-          },
-        },
-      ),
+    const [onChainOwner, onChainAgent] = await Promise.all([
+      read(contractId, 'owner'),
+      read(contractId, 'agent'),
     ]);
-
-    const { error } = await db().from('allowances').insert({
-      contract_id: contractId,
-      owner_address: owner,
-      agent_address: agent,
-      name,
-    });
-
-    if (error) {
-      // The contract is deployed and owned either way — losing the row would be worse than a
-      // duplicate name, so this reports rather than unwinding anything.
-      return Response.json(
-        { contract_id: contractId, owner, agent, warning: `You already have an agent called ${name}.` },
-        { status: 201 },
-      );
-    }
-
-    return Response.json({ contract_id: contractId, owner, agent, name }, { status: 201 });
-  } catch (cause) {
+    claimedBy = String(onChainOwner);
+    names = String(onChainAgent);
+  } catch {
     return Response.json(
-      { error: cause instanceof Error ? cause.message : String(cause) },
-      { status: 502 },
+      { error: 'No allowance at that address. Was the deploy submitted?' },
+      { status: 404 },
     );
   }
+
+  if (claimedBy !== owner) {
+    return Response.json({ error: 'That allowance belongs to somebody else.' }, { status: 403 });
+  }
+  if (names !== agent) {
+    return Response.json(
+      { error: 'That allowance names a different agent.' },
+      { status: 400 },
+    );
+  }
+
+  const name = await placeholderName(owner);
+
+  const { error } = await db().from('allowances').insert({
+    contract_id: contractId,
+    owner_address: owner,
+    agent_address: agent,
+    name,
+  });
+
+  if (error) {
+    // Already recorded. The contract exists and is theirs either way, so this is not a failure
+    // worth showing anyone — it is the second click of a button that already worked.
+    return Response.json({ contract_id: contractId, owner, agent, recorded: false }, { status: 200 });
+  }
+
+  return Response.json({ contract_id: contractId, owner, agent, name }, { status: 201 });
+}
+
+/**
+ * The lowest `allowance-N` this owner is not already using.
+ *
+ * Names are unique per owner, so this cannot simply count rows: an owner who renamed their first
+ * allowance to `allowance-2` would collide with the next one created. Asking which are taken is
+ * one query and has no such gap.
+ */
+async function placeholderName(owner: string): Promise<string> {
+  const { data } = await db().from('allowances').select('name').eq('owner_address', owner);
+  const taken = new Set((data ?? []).map((row) => row.name));
+
+  for (let n = 1; n <= taken.size + 1; n += 1) {
+    const candidate = `allowance-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  // Unreachable: n only has to exceed the number of taken names to find a gap.
+  return `allowance-${taken.size + 1}`;
 }
 
 /**
@@ -204,8 +194,13 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // A contract keeps the code it was deployed with. An allowance made before a change does not
+  // have the functions added since, and the interface must not offer them for it.
+  const current = await onCurrentWasm(rows.map((row) => row.contract_id));
+
   const allowances = detailed.map((row) => ({
     ...row,
+    current: current.has(row.contract_id),
     // Anything without a name is an address allowlisted directly rather than picked from the
     // directory — still worth listing, since it still gets paid.
     can_pay: (row.rules?.allowlist ?? []).map(

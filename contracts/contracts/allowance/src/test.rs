@@ -12,20 +12,27 @@ struct Ctx {
     env: Env,
     contract: Address,
     token: Address,
+    /// Stand-in for the native XLM asset contract, which the constructor and `write` use to
+    /// fund the agent's account.
+    native: Address,
     owner: Address,
     agent: Address,
     seller: Address,
 }
 
-/// Deposits `amount` from the owner so the contract has something to spend.
-fn funded(owner_funds: i128, deposit: i128) -> Ctx {
-    let ctx = setup(owner_funds);
-    AllowanceClient::new(&ctx.env, &ctx.contract).deposit(&ctx.owner, &deposit);
-    ctx
+/// The rules every test starts from: 0.1 USDC a call, 0.5 across a 60-ledger window, one seller.
+fn rules(env: &Env, seller: &Address) -> Rules {
+    Rules {
+        max_per_call: 1_000_000,
+        window_ledgers: 60,
+        window_cap: 5_000_000,
+        allowlist: vec![env, seller.clone()],
+    }
 }
 
-/// Deploys a fresh allowance with a stand-in USDC and mints `owner_funds` to the owner.
-fn setup(owner_funds: i128) -> Ctx {
+/// Deploys an allowance the way an owner now does it: one action that creates the contract and
+/// funds it. `usdc_in` and `xlm_to_agent` are what the constructor moves.
+fn deploy(owner_funds: i128, usdc_in: i128, xlm_to_agent: i128) -> Ctx {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -38,28 +45,108 @@ fn setup(owner_funds: i128) -> Ctx {
     let seller = Address::generate(&env);
     let token_admin = Address::generate(&env);
 
-    let token = env.register_stellar_asset_contract_v2(token_admin);
-    let token_address = token.address();
+    let token_address = env
+        .register_stellar_asset_contract_v2(token_admin.clone())
+        .address();
+    let native_address = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address();
 
-    // Constructor arguments, so the contract is never unowned.
+    StellarAssetClient::new(&env, &token_address).mint(&owner, &owner_funds);
+    StellarAssetClient::new(&env, &native_address).mint(&owner, &1_000_000_000);
+
     let contract = env.register(
         Allowance,
         (
             owner.clone(),
             token_address.clone(),
+            native_address.clone(),
             agent.clone(),
-            Rules {
-                max_per_call: 1_000_000, // 0.1 USDC
-                window_ledgers: 60,
-                window_cap: 5_000_000,   // 0.5 USDC
-                allowlist: vec![&env, seller.clone()],
-            },
+            rules(&env, &seller),
+            usdc_in,
+            xlm_to_agent,
         ),
     );
 
-    StellarAssetClient::new(&env, &token_address).mint(&owner, &owner_funds);
+    Ctx {
+        env,
+        contract,
+        token: token_address,
+        native: native_address,
+        owner,
+        agent,
+        seller,
+    }
+}
 
-    Ctx { env, contract, token: token_address, owner, agent, seller }
+/// An allowance created but not funded. Legal — "set it up now, fund it Monday".
+fn setup(owner_funds: i128) -> Ctx {
+    deploy(owner_funds, 0, 0)
+}
+
+/// The state every rule test wants: created with money already in it.
+fn funded(owner_funds: i128, deposit: i128) -> Ctx {
+    deploy(owner_funds, deposit, 0)
+}
+
+/// The whole point of the design: one deploy leaves the contract holding USDC and the agent's
+/// account holding the XLM it needs for its own fees. Two assets, two destinations, one action.
+#[test]
+fn constructor_pulls_usdc_and_funds_the_agent() {
+    let ctx = deploy(10_000_000, 4_000_000, 50_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+    let usdc = TokenClient::new(&ctx.env, &ctx.token);
+    let native = TokenClient::new(&ctx.env, &ctx.native);
+
+    assert_eq!(client.balance(), 4_000_000, "contract holds the USDC");
+    assert_eq!(usdc.balance(&ctx.owner), 6_000_000, "owner was debited the USDC");
+    assert_eq!(native.balance(&ctx.agent), 50_000_000, "agent holds the XLM");
+    assert_eq!(
+        native.balance(&ctx.contract),
+        0,
+        "XLM passes to the agent; the contract never holds any"
+    );
+}
+
+/// Both amounts may be zero. The UI discourages an unfunded allowance; the contract permits it.
+#[test]
+fn constructor_with_zero_amounts_creates_an_empty_allowance() {
+    let ctx = setup(10_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    assert_eq!(client.balance(), 0);
+    assert_eq!(
+        TokenClient::new(&ctx.env, &ctx.token).balance(&ctx.owner),
+        10_000_000,
+        "nothing moved"
+    );
+    assert_eq!(client.config().window_cap, 5_000_000, "but the rules are set");
+}
+
+/// A constructor cannot return an error, so a negative amount has to panic. Letting one through
+/// would reverse a transfer's direction without saying so.
+#[test]
+#[should_panic]
+fn constructor_refuses_a_negative_deposit() {
+    deploy(10_000_000, -1, 0);
+}
+
+#[test]
+#[should_panic]
+fn constructor_refuses_a_negative_xlm_amount() {
+    deploy(10_000_000, 0, -1);
+}
+
+/// Anyone can ask an allowance who owns it and which key it trusts. Without this the product's
+/// central claim — one person controls this money, the platform cannot — is unverifiable from
+/// outside, and the API could not check that a contract being registered is really the caller's.
+#[test]
+fn owner_and_agent_are_readable_by_anyone() {
+    let ctx = funded(10_000_000, 4_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    assert_eq!(client.owner(), ctx.owner);
+    assert_eq!(client.agent(), ctx.agent);
 }
 
 /// Test 1 — money in, money out.
@@ -72,12 +159,12 @@ fn deposit_then_withdraw_returns_the_funds() {
     let client = AllowanceClient::new(&ctx.env, &ctx.contract);
     let token = TokenClient::new(&ctx.env, &ctx.token);
 
-    client.deposit(&ctx.owner, &4_000_000);
+    client.write(&None, &4_000_000, &0);
 
     assert_eq!(client.balance(), 4_000_000, "contract should hold the deposit");
     assert_eq!(token.balance(&ctx.owner), 6_000_000, "owner should be debited");
 
-    client.withdraw(&ctx.owner, &4_000_000);
+    client.withdraw(&4_000_000);
 
     assert_eq!(client.balance(), 0, "contract should be empty after withdraw");
     assert_eq!(
@@ -85,6 +172,89 @@ fn deposit_then_withdraw_returns_the_funds() {
         10_000_000,
         "owner should have every unit back"
     );
+}
+
+/// The destination is not a parameter, so there is nowhere else for it to go.
+#[test]
+fn withdraw_always_goes_to_the_owner() {
+    let ctx = funded(10_000_000, 4_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+    let token = TokenClient::new(&ctx.env, &ctx.token);
+
+    client.withdraw(&4_000_000);
+
+    assert_eq!(client.balance(), 0);
+    assert_eq!(token.balance(&ctx.owner), 10_000_000, "every unit back to the owner");
+}
+
+/// `None` means leave them alone. Save sends a diff, so an edit that only added credits must
+/// not arrive carrying an allowlist and quietly replace the real one.
+#[test]
+fn none_rules_leave_the_existing_ones_untouched() {
+    let ctx = funded(10_000_000, 4_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    client.write(&None, &1_000_000, &0);
+
+    let after = client.config();
+    assert_eq!(after.allowlist.len(), 1, "allowlist survives a deposit-only write");
+    assert_eq!(after.allowlist.get(0).unwrap(), ctx.seller);
+    assert_eq!(after.window_cap, 5_000_000);
+}
+
+/// Save computes a diff and may find nothing on-chain to send — the owner changed only the
+/// name. That must not be an error, or the button breaks for the commonest edit there is.
+#[test]
+fn an_empty_write_is_a_no_op() {
+    let ctx = funded(10_000_000, 4_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    client.write(&None, &0, &0);
+
+    assert_eq!(client.balance(), 4_000_000, "nothing moved");
+    assert_eq!(client.config().window_cap, 5_000_000, "nothing changed");
+}
+
+/// One confirmation, three changes: new rules, more credits, more fees for the agent.
+#[test]
+fn write_changes_rules_and_moves_both_assets_together() {
+    let ctx = funded(20_000_000, 4_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+    let native = TokenClient::new(&ctx.env, &ctx.native);
+    let new_seller = Address::generate(&ctx.env);
+
+    client.write(
+        &Some(Rules {
+            max_per_call: 2_000_000,
+            window_ledgers: 120,
+            window_cap: 8_000_000,
+            allowlist: vec![&ctx.env, new_seller.clone()],
+        }),
+        &3_000_000,
+        &20_000_000,
+    );
+
+    assert_eq!(client.balance(), 7_000_000, "credits added to what was there");
+    assert_eq!(native.balance(&ctx.agent), 20_000_000, "agent topped up");
+    assert_eq!(client.config().window_cap, 8_000_000, "rules replaced");
+    client.spend(&new_seller, &2_000_000, &symbol_short!("r1"));
+}
+
+/// A negative amount is a client bug. Refusing it is what stops it becoming a withdrawal.
+#[test]
+fn write_refuses_negative_amounts() {
+    let ctx = funded(10_000_000, 4_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    assert_eq!(
+        client.try_write(&None, &-1, &0).unwrap_err().unwrap(),
+        AllowanceError::InvalidAmount
+    );
+    assert_eq!(
+        client.try_write(&None, &0, &-1).unwrap_err().unwrap(),
+        AllowanceError::InvalidAmount
+    );
+    assert_eq!(client.balance(), 4_000_000, "nothing moved");
 }
 
 /// Test 3 — the happy path. Under every limit, to an allowlisted address.
@@ -193,6 +363,49 @@ fn revoked_agent_cannot_spend() {
     assert_eq!(err, AllowanceError::Revoked);
 }
 
+/// A brake you cannot release is not a brake. Undoing a stop must not require making a whole new
+/// allowance, handing the agent a new key, and moving the money across.
+#[test]
+fn a_stopped_allowance_can_be_started_again() {
+    let ctx = funded(10_000_000, 6_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    client.revoke();
+    assert!(client.revoked());
+    assert_eq!(
+        client.try_spend(&ctx.seller, &1, &symbol_short!("r1")).unwrap_err().unwrap(),
+        AllowanceError::Revoked,
+    );
+
+    client.resume();
+
+    assert!(!client.revoked());
+    client.spend(&ctx.seller, &1_000_000, &symbol_short!("r2"));
+    assert_eq!(TokenClient::new(&ctx.env, &ctx.token).balance(&ctx.seller), 1_000_000);
+}
+
+/// Stopping and starting is not a way to clear the window. An agent sitting at its cap that gets
+/// stopped and started again is still sitting at its cap.
+#[test]
+fn resuming_does_not_reset_the_spend_window() {
+    let ctx = funded(20_000_000, 12_000_000);
+    let client = AllowanceClient::new(&ctx.env, &ctx.contract);
+
+    for _ in 0..5 {
+        client.spend(&ctx.seller, &1_000_000, &symbol_short!("ref"));
+    }
+    assert_eq!(client.spent_in_window(), 5_000_000);
+
+    client.revoke();
+    client.resume();
+
+    assert_eq!(client.spent_in_window(), 5_000_000, "the window survives the round trip");
+    assert_eq!(
+        client.try_spend(&ctx.seller, &1_000_000, &symbol_short!("r6")).unwrap_err().unwrap(),
+        AllowanceError::ExceedsWindow,
+    );
+}
+
 /// Test 8b — revoking must not strand the money. The owner can still withdraw.
 #[test]
 fn owner_can_still_withdraw_after_revoke() {
@@ -201,7 +414,7 @@ fn owner_can_still_withdraw_after_revoke() {
     let token = TokenClient::new(&ctx.env, &ctx.token);
 
     client.revoke();
-    client.withdraw(&ctx.owner, &6_000_000);
+    client.withdraw(&6_000_000);
 
     assert_eq!(token.balance(&ctx.owner), 10_000_000);
 }
@@ -219,12 +432,16 @@ fn owner_can_change_the_rules() {
         .try_spend(&new_seller, &1_000_000, &symbol_short!("r1"))
         .is_err());
 
-    client.set_rules(&Rules {
-        max_per_call: 2_000_000,
-        window_ledgers: 60,
-        window_cap: 5_000_000,
-        allowlist: vec![&ctx.env, new_seller.clone()],
-    });
+    client.write(
+        &Some(Rules {
+            max_per_call: 2_000_000,
+            window_ledgers: 60,
+            window_cap: 5_000_000,
+            allowlist: vec![&ctx.env, new_seller.clone()],
+        }),
+        &0,
+        &0,
+    );
 
     client.spend(&new_seller, &2_000_000, &symbol_short!("r2"));
     assert_eq!(
@@ -250,12 +467,16 @@ fn changing_rules_preserves_spend_history() {
     client.spend(&ctx.seller, &1_000_000, &symbol_short!("r1"));
     assert_eq!(client.spent_in_window(), 1_000_000);
 
-    client.set_rules(&Rules {
-        max_per_call: 1_000_000,
-        window_ledgers: 60,
-        window_cap: 3_000_000,
-        allowlist: vec![&ctx.env, ctx.seller.clone()],
-    });
+    client.write(
+        &Some(Rules {
+            max_per_call: 1_000_000,
+            window_ledgers: 60,
+            window_cap: 3_000_000,
+            allowlist: vec![&ctx.env, ctx.seller.clone()],
+        }),
+        &0,
+        &0,
+    );
 
     assert_eq!(client.spent_in_window(), 1_000_000, "history survives a rule change");
     assert_eq!(client.remaining(), 2_000_000, "new cap of 3M minus 1M already spent");

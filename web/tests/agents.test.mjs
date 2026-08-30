@@ -1,11 +1,13 @@
 /**
  * Allowances, as the user tab now describes them.
  *
- * Two changes of shape here, both deliberate. There is no per-call cap any more — it was the
- * rule most likely to break a working setup for a reason the owner did not control, and a single
- * call can spend at most what the window allows anyway. And the rate limit itself is optional,
- * because it is the last of this product's protections rather than the first: when there is none,
- * the balance in the contract is the limit.
+ * The shape that matters here: the owner deploys their own contract. A deploy runs its
+ * constructor in the same invocation, so one signature creates the allowance, names its agent,
+ * sets the rules, moves USDC in and funds the agent's account. The platform no longer deploys
+ * anything, and this API no longer creates — it *records*, and only what the chain confirms.
+ *
+ * These tests therefore deploy for real. An owner is funded by friendbot and deploys with no
+ * USDC, which is legal and keeps the suite from needing a funded USDC balance per run.
  *
  *   npm run dev        (in another terminal)
  *   npm test
@@ -13,10 +15,23 @@
 
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { Keypair } from '@stellar/stellar-sdk';
+import {
+  Address,
+  Asset,
+  Keypair,
+  Operation,
+  TransactionBuilder,
+  nativeToScVal,
+  rpc,
+  StrKey,
+  xdr,
+} from '@stellar/stellar-sdk';
+import { randomBytes } from 'node:crypto';
 import { ORIGIN, db, prove, requireServer } from './helpers.mjs';
 
 const NO_RATE_LIMIT = 10n ** 18n;
+const PASSPHRASE = process.env.STELLAR_NETWORK_PASSPHRASE;
+const server = new rpc.Server(process.env.STELLAR_RPC_URL);
 
 const post = (path, body) =>
   fetch(`${ORIGIN}${path}`, {
@@ -31,10 +46,104 @@ const patch = (path, body) =>
     body: JSON.stringify(body),
   });
 
-describe('creating an allowance', { timeout: 4 * 60_000 }, () => {
-  const owner = Keypair.random();
+/** A brand-new account with XLM and nothing else. */
+async function fundedAccount() {
+  const keypair = Keypair.random();
+  const response = await fetch(
+    `https://friendbot.stellar.org?addr=${encodeURIComponent(keypair.publicKey())}`,
+  );
+  if (!response.ok) throw new Error(`friendbot refused: ${response.status}`);
+  return keypair;
+}
+
+/**
+ * Deploys an allowance the way the browser now will: one signed transaction that creates the
+ * contract and runs its constructor.
+ *
+ * `usdcIn` defaults to zero so a test owner needs only XLM. That is a real supported state —
+ * an allowance set up now and funded later.
+ */
+async function deployAllowance(owner, { agent, allowlist, usdcIn = 0n, xlmToAgent = 20_000_000n }) {
+  const params = await fetch(`${ORIGIN}/api/allowances/params`).then((r) => r.json());
+  const addr = (a) => nativeToScVal(a, { type: 'address' });
+
+  const rules = nativeToScVal(
+    {
+      max_per_call: NO_RATE_LIMIT,
+      window_ledgers: 17280,
+      window_cap: NO_RATE_LIMIT,
+      allowlist: allowlist.map((a) => Address.fromString(a)),
+    },
+    {
+      type: {
+        max_per_call: ['symbol', 'i128'],
+        window_ledgers: ['symbol', 'u32'],
+        window_cap: ['symbol', 'i128'],
+        allowlist: ['symbol', null],
+      },
+    },
+  );
+
+  const account = await server.getAccount(owner.publicKey());
+  const tx = new TransactionBuilder(account, { fee: '20000000', networkPassphrase: PASSPHRASE })
+    .addOperation(
+      Operation.createCustomContract({
+        address: Address.fromString(owner.publicKey()),
+        wasmHash: Buffer.from(params.wasm_hash, 'hex'),
+        salt: randomBytes(32),
+        constructorArgs: [
+          addr(owner.publicKey()),
+          addr(params.token),
+          addr(params.native),
+          addr(agent),
+          rules,
+          nativeToScVal(usdcIn, { type: 'i128' }),
+          nativeToScVal(xlmToAgent, { type: 'i128' }),
+        ],
+      }),
+    )
+    .setTimeout(90)
+    .build();
+
+  const prepared = await server.prepareTransaction(tx);
+  prepared.sign(owner);
+  const sent = await server.sendTransaction(prepared);
+
+  let result = await server.getTransaction(sent.hash);
+  const deadline = Date.now() + 90_000;
+  while (result.status === 'NOT_FOUND' && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1000));
+    result = await server.getTransaction(sent.hash);
+  }
+  if (result.status !== 'SUCCESS') throw new Error(`deploy failed: ${result.status}`);
+
+  return Address.fromScAddress(xdr.ScVal.fromXDR(result.returnValue.toXDR()).address()).toString();
+}
+
+describe('what a client needs to deploy', () => {
+  before(requireServer);
+
+  it('serves the wasm hash and both asset contracts', async () => {
+    const response = await fetch(`${ORIGIN}/api/allowances/params`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+
+    assert.match(body.wasm_hash, /^[0-9a-f]{64}$/, 'a sha256 of the binary');
+    assert.ok(body.token.startsWith('C'), 'USDC asset contract');
+    assert.ok(body.native.startsWith('C'), 'native asset contract');
+    assert.equal(
+      body.native,
+      Asset.native().contractId(PASSPHRASE),
+      'derived from the network, not configured separately',
+    );
+  });
+});
+
+describe('recording an allowance', { timeout: 5 * 60_000 }, () => {
+  let owner;
+  let agent;
   let splitter;
-  let created;
+  let contractId;
 
   before(async () => {
     await requireServer();
@@ -46,67 +155,79 @@ describe('creating an allowance', { timeout: 4 * 60_000 }, () => {
       .limit(1)
       .single();
     splitter = data.splitter_contract_id;
+
+    owner = await fundedAccount();
+    agent = Keypair.random();
+    contractId = await deployAllowance(owner, { agent: agent.publicKey(), allowlist: [splitter] });
   });
 
   const body = (extra = {}) => ({
     owner: owner.publicKey(),
-    agent: Keypair.random().publicKey(),
-    name: 'research',
-    allowlist: [splitter],
+    agent: agent.publicKey(),
+    contract_id: contractId,
     ...extra,
   });
 
-  it('needs a name', async () => {
-    const response = await post('/api/allowances', body({ name: '' }));
+  it('ignores a name the caller tries to supply', async () => {
+    // Nothing in this request is the caller's to choose, which is why it needs no signature.
+    // A name from the caller would be the one exception, and the only thing worth racing the
+    // real owner to plant.
+    const response = await post('/api/allowances', body({ name: 'chosen by an attacker' }));
+    assert.equal(response.status, 201);
+    assert.match((await response.json()).name, /^allowance-\d+$/);
+  });
+
+  it('refuses a contract address that is not one', async () => {
+    const response = await post('/api/allowances', body({ contract_id: 'CNONSENSE' }));
+    assert.equal(response.status, 400, 'malformed, refused before the chain is consulted');
+  });
+
+  it('refuses a well-formed contract that does not exist', async () => {
+    // Correct checksum, nothing behind it. This is the case that has to reach the chain to be
+    // caught, which is the check that stops anyone claiming an address they invented.
+    const nowhere = StrKey.encodeContract(randomBytes(32));
+    const response = await post('/api/allowances', body({ contract_id: nowhere }));
+    assert.equal(response.status, 404);
+  });
+
+  it('refuses a contract owned by somebody else', async () => {
+    const response = await post('/api/allowances', body({ owner: Keypair.random().publicKey() }));
+    assert.equal(response.status, 403, 'the chain says who owns it, not the caller');
+  });
+
+  it('refuses a claim about a different agent', async () => {
+    const response = await post('/api/allowances', body({ agent: Keypair.random().publicKey() }));
     assert.equal(response.status, 400);
   });
 
-  it('needs at least one API it may pay', async () => {
-    // An empty allowlist refuses everything, so this would be dead on arrival — and choosing who
-    // may be paid is the protection the product leads with.
-    const response = await post('/api/allowances', body({ allowlist: [] }));
-    assert.equal(response.status, 400);
-    assert.match((await response.json()).error, /at least one API/);
+  it('is recorded once, and saying so twice is not an error', async () => {
+    const again = await post('/api/allowances', body());
+    assert.equal(again.status, 200, 'already recorded, which is not a failure');
+    assert.equal((await again.json()).recorded, false);
   });
 
-  it('has no rate limit unless one is asked for', { timeout: 2 * 60_000 }, async () => {
-    const response = await post('/api/allowances', body());
-    created = await response.json();
-    assert.equal(response.status, 201, JSON.stringify(created));
+  it('lists it with its name, its rules and the agent XLM the constructor sent', async () => {
+    const response = await fetch(`${ORIGIN}/api/allowances?owner=${owner.publicKey()}`);
+    const { allowances } = await response.json();
+    const row = allowances.find((a) => a.contract_id === contractId);
 
-    const detail = await fetch(`${ORIGIN}/api/allowances/${created.contract_id}`).then((r) => r.json());
-    assert.ok(BigInt(detail.rules.window_cap) >= NO_RATE_LIMIT, 'expected no rate limit');
-    // And the per-call cap is not a second, smaller limit hiding behind it.
-    assert.equal(detail.rules.max_per_call, detail.rules.window_cap);
+    assert.ok(row, 'the allowance should be listed');
+    assert.match(row.name, /^allowance-\d+$/, 'a placeholder, renamed later');
+    assert.equal(row.balance, '0', 'deployed unfunded, which is legal');
+    assert.equal(row.xlm, 2, 'the constructor created and funded the agent account');
+    assert.deepEqual(row.rules.allowlist, [splitter]);
   });
 
-  it('lists it with its name and the agent’s XLM', async () => {
-    const { allowances } = await fetch(`${ORIGIN}/api/allowances?owner=${owner.publicKey()}`).then((r) => r.json());
-    const row = allowances.find((a) => a.contract_id === created.contract_id);
-
-    assert.ok(row, 'the new agent was not listed');
-    assert.equal(row.name, 'research');
-    // Null is a real answer: the agent account may not have been funded into existence yet.
-    assert.ok(row.xlm === null || typeof row.xlm === 'number');
-    assert.deepEqual(row.can_pay.length, 1);
-  });
-
-  it('takes a rate limit when one is given', { timeout: 2 * 60_000 }, async () => {
-    const response = await post(
-      '/api/allowances',
-      body({ name: 'capped', window_cap: '5000000', window_minutes: 15 }),
-    );
-    const capped = await response.json();
-    assert.equal(response.status, 201, JSON.stringify(capped));
-
-    const detail = await fetch(`${ORIGIN}/api/allowances/${capped.contract_id}`).then((r) => r.json());
-    assert.equal(detail.rules.window_cap, '5000000');
-    assert.equal(detail.rules.window_ledgers, 180);
+  it('finds it by the agent key alone, which is all an agent knows', async () => {
+    const response = await fetch(`${ORIGIN}/api/allowances?agent=${agent.publicKey()}`);
+    const { allowances } = await response.json();
+    assert.equal(allowances.length, 1);
+    assert.equal(allowances[0].contract_id, contractId);
   });
 });
 
 describe('renaming an allowance', { timeout: 2 * 60_000 }, () => {
-  const owner = Keypair.random();
+  let owner;
   const stranger = Keypair.random();
   let contractId;
 
@@ -120,13 +241,18 @@ describe('renaming an allowance', { timeout: 2 * 60_000 }, () => {
       .limit(1)
       .single();
 
-    const created = await post('/api/allowances', {
-      owner: owner.publicKey(),
-      agent: Keypair.random().publicKey(),
-      name: 'first',
+    const funded = await fundedAccount();
+    owner = funded;
+    const agent = Keypair.random();
+    contractId = await deployAllowance(owner, {
+      agent: agent.publicKey(),
       allowlist: [data.splitter_contract_id],
-    }).then((r) => r.json());
-    contractId = created.contract_id;
+    });
+    await post('/api/allowances', {
+      owner: owner.publicKey(),
+      agent: agent.publicKey(),
+      contract_id: contractId,
+    });
   });
 
   it('will not rename without a signature', async () => {

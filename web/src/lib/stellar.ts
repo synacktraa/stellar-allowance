@@ -1,4 +1,5 @@
 import {
+  Address,
   Contract,
   Keypair,
   TransactionBuilder,
@@ -21,6 +22,49 @@ export function toUsdc(stroops: bigint | string | number): string {
 
 export function server(): rpc.Server {
   return new rpc.Server(env.rpcUrl());
+}
+
+/**
+ * Which of these contracts are running the binary we currently deploy.
+ *
+ * **A deployed contract keeps the code it was created with.** There is no migration and no
+ * upgrade path, so an allowance made before a change simply does not have the functions added
+ * since — and an interface that offers one anyway produces "trying to invoke non-existent
+ * contract function" in front of somebody who pressed a button we drew for them.
+ *
+ * One batched ledger read for the whole list. Anything unreadable is reported as *not* current,
+ * because the only thing this is used for is deciding whether to offer a newer function, and
+ * guessing yes is the answer that breaks.
+ */
+export async function onCurrentWasm(contractIds: string[]): Promise<Set<string>> {
+  if (contractIds.length === 0) return new Set();
+
+  const current = env.allowanceWasmHash().toLowerCase();
+  const keys = contractIds.map((id) =>
+    xdr.LedgerKey.contractData(
+      new xdr.LedgerKeyContractData({
+        contract: Address.fromString(id).toScAddress(),
+        key: xdr.ScVal.scvLedgerKeyContractInstance(),
+        durability: xdr.ContractDataDurability.persistent(),
+      }),
+    ),
+  );
+
+  try {
+    const { entries } = await server().getLedgerEntries(...keys);
+    const matching = new Set<string>();
+
+    for (const entry of entries) {
+      const data = entry.val.contractData();
+      const executable = data.val().instance().executable();
+      if (executable.switch().name !== 'contractExecutableWasm') continue;
+      if (executable.wasmHash().toString('hex').toLowerCase() !== current) continue;
+      matching.add(Address.fromScAddress(data.contract()).toString());
+    }
+    return matching;
+  } catch {
+    return new Set();
+  }
 }
 
 export function platformKeypair(): Keypair {
