@@ -1,0 +1,38 @@
+{
+  "name": "@stellar-allowance/client",
+  "version": "0.1.0",
+  "description": "Let an AI agent pay for API calls without giving it your wallet.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": ["stellar", "soroban", "agent", "x402", "402", "payments"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/synacktraa/stellar-allowance.git",
+    "directory": "packages/client"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^16.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test \"tests/*.test.mjs\""
+  }
+}
