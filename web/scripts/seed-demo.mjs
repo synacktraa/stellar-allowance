@@ -16,6 +16,7 @@
  * Safe to re-run: it reuses an existing demo API and allowance rather than making more.
  */
 
+import { randomBytes } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +31,7 @@ import {
   TransactionBuilder,
   nativeToScVal,
   rpc,
+  xdr,
 } from '@stellar/stellar-sdk';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -89,7 +91,60 @@ async function submit(operation, signer) {
   if (result.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
     throw new Error(`reverted: ${sent.hash}`);
   }
+  return result;
 }
+
+/** Whether a contract is running the rewritten allowance, which has `owner` and `write`. */
+async function speaksCurrentContract(contractId) {
+  try {
+    const account = await server.getAccount(platform);
+    const tx = new TransactionBuilder(account, { fee: '100', networkPassphrase: PASSPHRASE })
+      .addOperation(new Contract(contractId).call('owner'))
+      .setTimeout(30)
+      .build();
+    const sim = await server.simulateTransaction(tx);
+    return !rpc.Api.isSimulationError(sim);
+  } catch {
+    return false;
+  }
+}
+
+const addr = (a) => nativeToScVal(a, { type: 'address' });
+const i128 = (n) => nativeToScVal(BigInt(n), { type: 'i128' });
+
+/** The rules struct, as the contract expects it. */
+function rulesScVal({ maxPerCall, windowLedgers, windowCap, allowlist }) {
+  return nativeToScVal(
+    {
+      max_per_call: BigInt(maxPerCall),
+      window_ledgers: windowLedgers,
+      window_cap: BigInt(windowCap),
+      allowlist: allowlist.map((a) => Address.fromString(a)),
+    },
+    {
+      type: {
+        max_per_call: ['symbol', 'i128'],
+        window_ledgers: ['symbol', 'u32'],
+        window_cap: ['symbol', 'i128'],
+        allowlist: ['symbol', null],
+      },
+    },
+  );
+}
+
+/**
+ * `write(rules, usdc_in, xlm_to_agent)` — one call for every change an owner makes.
+ *
+ * `rules` undefined becomes Soroban's `None`, meaning *leave them alone*. Passing the struct
+ * back unchanged would work too, but only as long as nobody edits this and forgets a field.
+ */
+const writeCall = (allowanceId, { rules, usdcIn = 0, xlmToAgent = 0 }) =>
+  new Contract(allowanceId).call(
+    'write',
+    rules === undefined ? xdr.ScVal.scvVoid() : rulesScVal(rules),
+    i128(usdcIn),
+    i128(xlmToAgent),
+  );
 
 async function usdcOf(address) {
   const account = await horizon.loadAccount(address);
@@ -139,27 +194,62 @@ const forAgent = (mine.allowances ?? []).filter((a) => a.agent_address === demoA
 let allowanceId =
   forAgent.find((a) => a.contract_id === known)?.contract_id ?? forAgent[0]?.contract_id;
 
+// An allowance deployed before the contract was rewritten has no `write` and no `owner`, so
+// every call below would fail with an error naming neither this script nor the upgrade. Reusing
+// one is what would make "safe to re-run" quietly untrue across that boundary.
+if (allowanceId && !(await speaksCurrentContract(allowanceId))) {
+  console.log(`allowance  ${allowanceId.slice(0, 8)}… predates the current contract — making a new one`);
+  allowanceId = undefined;
+}
+
 if (allowanceId) {
   console.log(`allowance  reusing  ${allowanceId}`);
 } else {
-  const response = await fetch(`${origin}/api/allowances`, {
+  // The owner deploys it, exactly as a browser now does. The platform no longer creates
+  // allowances, so there is no endpoint that would do this on our behalf.
+  const params = await fetch(`${origin}/api/allowances/params`).then((r) => r.json());
+
+  const created = await submit(
+    Operation.createCustomContract({
+      address: Address.fromString(owner.publicKey()),
+      wasmHash: Buffer.from(params.wasm_hash, 'hex'),
+      salt: randomBytes(32),
+      constructorArgs: [
+        addr(owner.publicKey()),
+        addr(params.token),
+        addr(params.native),
+        addr(demoAgent),
+        rulesScVal({
+          maxPerCall: '1000000', // 0.10 — one purchase
+          windowCap: '5000000', // 0.50 — five, then it refuses
+          // Two minutes. A run of seven attempts takes about fifty seconds, so the cap still
+          // binds within a run, but it has cleared before the next visitor arrives.
+          windowLedgers: 24,
+          allowlist: [api.splitter_contract_id],
+        }),
+        // Funded below, once the owner's USDC balance has been checked. The demo agent's
+        // account already exists, so it needs no XLM here.
+        i128(0),
+        i128(0),
+      ],
+    }),
+    owner,
+  );
+
+  allowanceId = Address.fromScAddress(created.returnValue.address()).toString();
+  console.log(`allowance  created  ${allowanceId}`);
+
+  // Records the row that makes it findable by owner and by agent. Checked against the chain at
+  // the other end, which is why it carries no signature and no name.
+  await fetch(`${origin}/api/allowances`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       owner: owner.publicKey(),
       agent: demoAgent,
-      max_per_call: '1000000', // 0.10 — one purchase
-      window_cap: '5000000', // 0.50 — five, then it refuses
-      // Two minutes. A run of seven attempts takes about fifty seconds, so the cap still binds
-      // within a run, but it has cleared before the next visitor arrives.
-      window_ledgers: 24,
-      allowlist: [api.splitter_contract_id],
+      contract_id: allowanceId,
     }),
   });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? 'could not create the demo allowance');
-  allowanceId = body.contract_id;
-  console.log(`allowance  created  ${allowanceId}`);
 }
 
 // --- 2b. let the allowance actually pay it --------------------------------
@@ -175,27 +265,16 @@ const allowlist = detail.rules?.allowlist ?? [];
 
 if (!allowlist.includes(api.splitter_contract_id)) {
   await submit(
-    new Contract(allowanceId).call(
-      'set_rules',
-      // set_rules replaces the whole struct, so the three numbers have to be sent back
-      // unchanged or this would quietly reset limits nobody asked it to touch.
-      nativeToScVal(
-        {
-          max_per_call: BigInt(detail.rules.max_per_call),
-          window_ledgers: detail.rules.window_ledgers,
-          window_cap: BigInt(detail.rules.window_cap),
-          allowlist: [...allowlist, api.splitter_contract_id].map((a) => Address.fromString(a)),
-        },
-        {
-          type: {
-            max_per_call: ['symbol', 'i128'],
-            window_ledgers: ['symbol', 'u32'],
-            window_cap: ['symbol', 'i128'],
-            allowlist: ['symbol', null],
-          },
-        },
-      ),
-    ),
+    // The rules struct is replaced whole, so the three numbers go back unchanged or this would
+    // quietly reset limits nobody asked it to touch.
+    writeCall(allowanceId, {
+      rules: {
+        maxPerCall: detail.rules.max_per_call,
+        windowLedgers: detail.rules.window_ledgers,
+        windowCap: detail.rules.window_cap,
+        allowlist: [...allowlist, api.splitter_contract_id],
+      },
+    }),
     owner,
   );
   console.log(`allowance  allowlisted ${api.splitter_contract_id.slice(0, 8)}…`);
@@ -227,11 +306,7 @@ Send testnet USDC from https://faucet.circle.com, then run this again:
 
   if (inAllowance < 10_000_000) {
     await submit(
-      new Contract(allowanceId).call(
-        'deposit',
-        nativeToScVal(owner.publicKey(), { type: 'address' }),
-        nativeToScVal(BigInt(12_000_000 - inAllowance), { type: 'i128' }),
-      ),
+      writeCall(allowanceId, { usdcIn: 12_000_000 - inAllowance }),
       owner,
     );
     console.log('allowance  funded to 1.20 USDC');
