@@ -16,7 +16,7 @@ function snippet(allowanceId: string) {
   return `// Save as buy.mjs — the .mjs matters, these are ESM imports.
 //
 //   npm i @stellar/stellar-sdk
-//   AGENT_SECRET=S... node buy.mjs <your-paid-url>
+//   STELLAR_ALLOWANCE_SECRET=S... node buy.mjs <your-paid-url>
 //
 // Or paste it into examples/runner in the repo, where that is already set up.
 //
@@ -25,14 +25,14 @@ import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stel
 const RPC        = 'https://soroban-testnet.stellar.org';
 const PASSPHRASE = 'Test SDF Network ; September 2015';
 const ALLOWANCE  = '${allowanceId}';
-const AGENT      = Keypair.fromSecret(required('AGENT_SECRET'));
+const AGENT      = Keypair.fromSecret(required('STELLAR_ALLOWANCE_SECRET'));
 
 function required(name) {
   const value = process.env[name];
   if (value) return value;
   // Without this, a missing key surfaces as a TypeError from inside the SDK's base32
   // decoder, several frames deep and naming neither the variable nor this file.
-  console.error(name + ' is not set.  usage: AGENT_SECRET=S... node buy.mjs <paid-url>');
+  console.error(name + ' is not set.  usage: STELLAR_ALLOWANCE_SECRET=S... node buy.mjs <paid-url>');
   process.exit(1);
 }
 
@@ -107,7 +107,7 @@ function why(detail) {
 const url = process.argv[2];
 
 if (!url) {
-  console.error('usage: AGENT_SECRET=S... node buy.mjs <paid-url>');
+  console.error('usage: STELLAR_ALLOWANCE_SECRET=S... node buy.mjs <paid-url>');
   process.exit(1);
 }
 

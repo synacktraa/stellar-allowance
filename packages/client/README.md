@@ -14,14 +14,20 @@ npm i @stellar-allowance/client
 ```js
 import { Allowance } from '@stellar-allowance/client';
 
-const allowance = new Allowance(process.env.AGENT_SECRET);
+const allowance = new Allowance();   // reads STELLAR_ALLOWANCE_SECRET
 
 const res = await allowance.fetch('https://…/api/pay/abc123?text=hello');
 const data = await res.json();
 ```
 
-One argument. There is no contract id to configure — the allowance is found from the agent's own
+**No configuration.** There is no contract id to set — the allowance is found from the agent's own
 key, and the network, the RPC and the limits come from whichever gateway issued the URL.
+
+Pass the key directly if you would rather not use the environment:
+
+```js
+new Allowance(mySecret);
+```
 
 ## It is `fetch`
 
@@ -94,7 +100,7 @@ new Allowance(secret, {
 
 ## What the agent needs
 
-- **`AGENT_SECRET`** — its key, `S…`, given to you once when the allowance was created
+- **`STELLAR_ALLOWANCE_SECRET`** — its key, `S…`, given to you once when the allowance was created
 - **a little XLM** in the agent's own account, for transaction fees. Not money it can spend; its
   owner tops this up. Running out looks like a refusal, so check it first when calls stop working.
 

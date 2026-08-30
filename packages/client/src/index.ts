@@ -11,7 +11,7 @@ import { Contract, Keypair, TransactionBuilder, nativeToScVal, rpc } from '@stel
  * ```js
  * import { Allowance } from '@stellar-allowance/client';
  *
- * const allowance = new Allowance(process.env.AGENT_SECRET);
+ * const allowance = new Allowance();   // reads STELLAR_ALLOWANCE_SECRET
  * const res = await allowance.fetch('https://…/api/pay/abc123?text=hello');
  * ```
  *
@@ -135,6 +135,22 @@ const LEDGER_DEADLINE_MS = 45_000;
  */
 const INCLUSION_FEE = '1000000';
 
+/**
+ * The environment variable an agent is expected to hold its key in.
+ *
+ * Namespaced rather than `AGENT_SECRET`, because an agent process holds a lot of secrets and a
+ * generic name is one two libraries can both want. Named for the product the way every other SDK
+ * names its variable — it is the secret this needs from you, not a secret belonging to it.
+ */
+export const SECRET_ENV = 'STELLAR_ALLOWANCE_SECRET';
+
+/** `process.env` where there is one, and nothing where there is not. This package needs no Node. */
+function fromEnvironment(name: string): string | undefined {
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+    ?.env;
+  return env?.[name];
+}
+
 export class Allowance {
   readonly #agent: Keypair;
   readonly #options: AllowanceOptions;
@@ -143,15 +159,24 @@ export class Allowance {
 
   /**
    * @param agentSecret the agent's secret key, `S…`. It holds no money and cannot move any.
+   *   Omit it and `STELLAR_ALLOWANCE_SECRET` is read from the environment.
    */
-  constructor(agentSecret: string, options: AllowanceOptions = {}) {
-    if (typeof agentSecret !== 'string' || !agentSecret.startsWith('S')) {
+  constructor(agentSecret?: string, options: AllowanceOptions = {}) {
+    const secret = agentSecret ?? fromEnvironment(SECRET_ENV);
+
+    if (!secret) {
+      throw new TypeError(
+        `No agent key. Pass one, or set ${SECRET_ENV} — it is shown once, ` +
+          'when the allowance is created.',
+      );
+    }
+    if (typeof secret !== 'string' || !secret.startsWith('S')) {
       throw new TypeError(
         'Expected an agent secret key starting with S. ' +
           'A public key (G…) or a contract id (C…) will not do — this has to sign.',
       );
     }
-    this.#agent = Keypair.fromSecret(agentSecret);
+    this.#agent = Keypair.fromSecret(secret);
     this.#options = options;
   }
 

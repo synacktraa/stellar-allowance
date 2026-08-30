@@ -429,7 +429,7 @@ function RevealSecret({
       </div>
 
       <p className="text-sm text-[color:var(--muted)] leading-relaxed mb-5 max-w-[46ch]">
-        Give it to your agent as <span className="num text-[color:var(--text)]">AGENT_SECRET</span>.
+        Give it to your agent as <span className="num text-[color:var(--text)]">STELLAR_ALLOWANCE_SECRET</span>.
         It holds no money and cannot move any, so losing it costs you nothing beyond having to
         make another allowance.
       </p>

@@ -13,7 +13,7 @@ imports resolve, the SDK installed, and an env file wired up. All done here alre
 your agent runs*, then press copy. Paste it over `buy.mjs`. It already contains that allowance's
 contract id.
 
-**2. Add the agent's secret.** Copy `.env.example` to `.env` and fill in `AGENT_SECRET` — the key
+**2. Add the agent's secret.** Copy `.env.example` to `.env` and fill in `STELLAR_ALLOWANCE_SECRET` — the key
 shown once, when the allowance was created.
 
 > Leave a newline at the end of `.env`. Node's `--env-file` drops the last line if the file does

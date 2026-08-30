@@ -10,7 +10,14 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { AllowanceRefused, chooseAllowance, originOf, refusalFrom } from '../dist/index.js';
+import {
+  Allowance,
+  AllowanceRefused,
+  SECRET_ENV,
+  chooseAllowance,
+  originOf,
+  refusalFrom,
+} from '../dist/index.js';
 
 describe('finding the gateway', () => {
   it('takes the origin of the paid URL', () => {
@@ -97,5 +104,37 @@ describe('AllowanceRefused', () => {
     assert.ok(error instanceof Error);
     assert.equal(error.name, 'AllowanceRefused');
     assert.equal(error.rule, 'allowlist');
+  });
+});
+
+describe('constructing one', () => {
+  const KEY = 'SBWHX65UZRNJBXZ473WXS75TN4UZ6TQLF2MZRX7X4G236HW7EOZS42S4';
+
+  it('takes the key directly', () => {
+    assert.equal(new Allowance(KEY).address.startsWith('G'), true);
+  });
+
+  it('falls back to STELLAR_ALLOWANCE_SECRET', () => {
+    // The point of a namespaced name: the common case needs no argument at all.
+    assert.equal(SECRET_ENV, 'STELLAR_ALLOWANCE_SECRET');
+    process.env[SECRET_ENV] = KEY;
+    try {
+      assert.equal(new Allowance().address, new Allowance(KEY).address);
+    } finally {
+      delete process.env[SECRET_ENV];
+    }
+  });
+
+  it('says what is missing when there is no key anywhere', () => {
+    delete process.env[SECRET_ENV];
+    assert.throws(() => new Allowance(), /STELLAR_ALLOWANCE_SECRET/);
+  });
+
+  it('refuses a public key, which is the easy mistake', () => {
+    // G… is what you see in the UI and in a block explorer. S… is the one shown once.
+    assert.throws(
+      () => new Allowance('GBHOCFBQLQZHJRFTD5RBKHY4JEHXQIEOVULIT5XYRYT2ZSG66F22UZZ4'),
+      /has to sign/,
+    );
   });
 });
