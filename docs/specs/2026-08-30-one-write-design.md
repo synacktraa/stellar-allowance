@@ -27,10 +27,18 @@ to track, and nothing to clean up.
 
 ## Two facts established by spike, not assumed
 
-**A constructor can move the deployer's money.** A throwaway contract whose constructor calls
-`from.require_auth()` and then transfers tokens was built, uploaded, and deployed on testnet. The
-transfer happened during construction: the contract held the tokens afterwards. This is what the
-whole design rests on, and it is not inferred from documentation.
+**A constructor can move the deployer's money.** First proved with a throwaway probe contract,
+then with the real one: a single signed transaction deployed an allowance, pulled 0.10 USDC into
+it, and funded a **brand-new agent account that did not exist beforehand**, all in one operation.
+
+```
+agent account exists beforehand: false
+status       : SUCCESS
+contract USDC   : 1000000n (matches)
+agent XLM       : 5.0000000 (account created by the constructor)
+```
+
+This is what the whole design rests on, and it is measured rather than inferred.
 
 **The native SAC creates accounts.** A `transfer` through the native asset contract to a freshly
 generated, never-funded address succeeded, and the account existed afterwards with a real sequence
@@ -39,10 +47,11 @@ never have shared a transaction with a Soroban call.
 
 Two supporting measurements:
 
-- **An owner-paid deploy costs 0.0087772 XLM.** The owner already sends 5 XLM to fund the agent in
-  the same action, so the deploy is 0.18% of what they were spending anyway. The constructor
-  docblock's claim that platform-paid deployment removes an XLM barrier describes a barrier that
-  is not there.
+- **The whole thing costs the owner 0.0198032 XLM in fees.** Measured from a settled transaction,
+  not simulated: one deploy that also created a brand-new agent account and moved USDC. The owner
+  sends 5 XLM to the agent in that same action, so fees are 0.4% of what they were spending
+  anyway. The constructor docblock's claim that platform-paid deployment removes an XLM barrier
+  describes a barrier that is not there.
 - **Resources are not a constraint.** A USDC transfer, an XLM transfer, and a rules write sum to
   1,118,226 instructions against a 400,000,000 per-transaction limit — 0.28%, and pessimistic,
   since one invocation pays contract-load overhead once rather than three times.
@@ -256,7 +265,7 @@ Then fix every existing caller in `test.rs`: `withdraw(&owner, &n)` becomes `wit
 `deposit(&owner, &n)` becomes `write(&None, &n, &0)`, and `set_rules(&r)` becomes
 `write(&Some(r), &0, &0)`.
 
-Verify: `cd contracts && cargo test` — **18 existing plus 8 new, 0 failures.**
+Verify: `cd contracts && cargo test` — **11 existing plus 9 new, 0 failures.**
 
 ### 4 — Build and deploy the WASM
 
@@ -327,7 +336,11 @@ with a single `write`. Re-seed, then buy one call through the gateway to confirm
 
 ## Known risk
 
-Rust tests use `register_stellar_asset_contract_v2` as a stand-in for XLM, and it may not model
-account creation the way the real native SAC does. A passing Rust test is therefore **not** proof
-that the constructor can fund a brand-new agent account on the real network. The testnet spike is
-the evidence for that claim; task 9's click-through is what confirms it end to end.
+**Closed.** Rust tests use `register_stellar_asset_contract_v2` as a stand-in for XLM, which may
+not model account creation the way the real native SAC does — so a passing Rust test was never
+proof for the real network. Settled directly: the real contract, deployed by a real account,
+created a never-before-existing agent account and moved USDC in the same operation
+(`531bf252c5fd229ec6cc54cb90b5195da547174b7c7bb5d5568399da730dfeb4`).
+
+What task 9's click-through still confirms is the *browser* path — that Freighter signs this
+transaction shape and the UI submits it correctly. The contract itself is proven.
