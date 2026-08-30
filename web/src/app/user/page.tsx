@@ -717,7 +717,7 @@ function AllowanceDetail({
       <details className="border-t border-[color:var(--line)] pt-4 mb-4">
         <summary className="label cursor-pointer">the code your agent runs</summary>
         <div className="mt-3">
-          <AgentSnippet allowanceId={allowance.contract_id} />
+          <AgentSnippet />
         </div>
       </details>
 
