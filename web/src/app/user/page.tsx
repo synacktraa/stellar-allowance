@@ -15,13 +15,13 @@ import {
 import { DEFAULT_WINDOW_LEDGERS, LEDGERS_PER_MINUTE, NO_RATE_LIMIT, isUnlimited } from '@/lib/rules';
 import { SiteHeader } from '@/components/SiteHeader';
 import { Overlay, Field } from '@/components/Overlay';
-import { AgentTable, type AgentRow } from '@/components/AgentTable';
+import { AllowanceTable, type AllowanceRow } from '@/components/AllowanceTable';
 import { AllowlistInput, type Allowed } from '@/components/AllowlistInput';
 import { AgentSnippet } from '@/components/AgentSnippet';
 import { Copyable } from '@/components/Copyable';
 
 /**
- * The agents you have given a budget to.
+ * The allowances you have given out.
  *
  * This was six numbered steps, which is the right shape for the first ten minutes and the wrong
  * one forever after. Somebody coming back wants to top one up or change what it may buy, and had
@@ -35,24 +35,24 @@ import { Copyable } from '@/components/Copyable';
 
 const stroops = (amount: string) => BigInt(Math.round(Number(amount) * 1e7));
 
-type NewAgent = { name: string; secret: string; contractId: string };
+type NewAllowance = { name: string; secret: string; contractId: string };
 
 export default function UserPage() {
   const { wallet, funds, connecting, restoring, error: walletError, connect, refresh } = useWallet();
 
-  const [agents, setAgents] = useState<AgentRow[]>([]);
+  const [allowances, setAllowances] = useState<AllowanceRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [justCreated, setJustCreated] = useState<NewAgent | null>(null);
+  const [justCreated, setJustCreated] = useState<NewAllowance | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const address = wallet?.address ?? null;
 
   const load = useCallback(async (owner: string) => {
     const body = await fetch(`/api/allowances?owner=${owner}`).then((r) => r.json());
-    setAgents(body.allowances ?? []);
+    setAllowances(body.allowances ?? []);
     setLoaded(true);
   }, []);
 
@@ -65,7 +65,7 @@ export default function UserPage() {
       .then((r) => r.json())
       .then((body) => {
         if (!current) return;
-        setAgents(body.allowances ?? []);
+        setAllowances(body.allowances ?? []);
         setLoaded(true);
       })
       .catch(() => {
@@ -92,7 +92,7 @@ export default function UserPage() {
 
   // Derived, not copied. A dialog holding its own snapshot of a row goes stale the moment an
   // action changes the balance behind it, and syncing that back needed an effect.
-  const open = agents.find((a) => a.contract_id === openId) ?? null;
+  const open = allowances.find((a) => a.contract_id === openId) ?? null;
 
   const ready = Boolean(address && loaded);
 
@@ -102,25 +102,25 @@ export default function UserPage() {
 
       <main className="mx-auto max-w-[1180px] px-4 sm:px-6 py-10">
         <div className="flex items-start justify-between gap-4 mb-2 flex-wrap">
-          <p className="label">[ AGENT ]</p>
+          <p className="label">[ USER ]</p>
 
           {ready && (
             <button
               onClick={() => setCreating(true)}
               className="chip chip-accent px-4 py-2.5 cursor-pointer whitespace-nowrap"
             >
-              + new agent
+              + new allowance
             </button>
           )}
         </div>
 
         {ready ? (
           <>
-            <h1 className="text-2xl font-medium mb-1">Your agents</h1>
+            <h1 className="text-2xl font-medium mb-1">Your allowances</h1>
             <p className="label mb-6">
-              {agents.length === 0
+              {allowances.length === 0
                 ? 'none yet'
-                : `${agents.length} agent${agents.length === 1 ? '' : 's'}${
+                : `${allowances.length} allowance${allowances.length === 1 ? '' : 's'}${
                     funds
                       ? ` · your wallet holds ${funds.usdc.toFixed(2)} USDC and ${funds.xlm.toFixed(2)} XLM`
                       : ''
@@ -170,21 +170,24 @@ export default function UserPage() {
           </div>
         ) : !loaded ? (
           <p className="label mt-4">loading…</p>
-        ) : agents.length === 0 ? (
+        ) : allowances.length === 0 ? (
           <div className="panel p-6 pt-8 max-w-[560px]">
-            <span className="panel-tag">[ NO AGENTS YET ]</span>
+            <span className="panel-tag">[ NO ALLOWANCES YET ]</span>
             <p className="text-sm text-[color:var(--muted)] max-w-[48ch] leading-relaxed">
               Making one takes a minute. It needs a name, a little XLM for its own transaction
               fees, and at least one API it is allowed to pay.
             </p>
           </div>
         ) : (
-          <AgentTable agents={agents} onOpen={(agent) => setOpenId(agent.contract_id)} />
+          <AllowanceTable
+            allowances={allowances}
+            onOpen={(allowance) => setOpenId(allowance.contract_id)}
+          />
         )}
       </main>
 
       {creating && address && (
-        <CreateAgent
+        <CreateAllowance
           xlmAvailable={funds?.xlm ?? 0}
           busy={busy === 'create'}
           onClose={() => setCreating(false)}
@@ -220,14 +223,14 @@ export default function UserPage() {
         />
       )}
 
-      {justCreated && <AgentCreated details={justCreated} onClose={() => setJustCreated(null)} />}
+      {justCreated && <AllowanceCreated details={justCreated} onClose={() => setJustCreated(null)} />}
 
       {open && address && (
-        <AgentDetail
-          // Keyed, so switching agents remounts with that agent's rules rather than carrying the
+        <AllowanceDetail
+          // Keyed, so switching rows remounts with that allowance's rules rather than carrying the
           // previous one's across — the bug the developer tab had before it was a table.
           key={open.contract_id}
-          agent={open}
+          allowance={open}
           owner={address}
           busy={busy}
           onClose={() => setOpenId(null)}
@@ -240,7 +243,7 @@ export default function UserPage() {
 
 // --------------------------------------------------------------------------- create
 
-function CreateAgent({
+function CreateAllowance({
   xlmAvailable,
   busy,
   onClose,
@@ -270,7 +273,7 @@ function CreateAgent({
 
   return (
     <Overlay
-      title="New agent"
+      title="New allowance"
       note="A key that holds no money, and a contract that does. You own the contract; the agent can only ask it."
       onClose={onClose}
     >
@@ -279,7 +282,7 @@ function CreateAgent({
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="research"
-        hint="what you will call it here · unique among your agents"
+        hint="what you will call it here · unique among your allowances"
       />
 
       <Field
@@ -349,7 +352,7 @@ function CreateAgent({
   );
 }
 
-function AgentCreated({ details, onClose }: { details: NewAgent; onClose: () => void }) {
+function AllowanceCreated({ details, onClose }: { details: NewAllowance; onClose: () => void }) {
   return (
     <Overlay
       title={`${details.name} is ready`}
@@ -364,7 +367,7 @@ function AgentCreated({ details, onClose }: { details: NewAgent; onClose: () => 
       <p className="text-sm text-[color:var(--muted)] leading-relaxed mb-5 max-w-[46ch]">
         Give it to your agent as <span className="num text-[color:var(--text)]">AGENT_SECRET</span>.
         It holds no money and cannot move any, so losing it costs you nothing beyond having to
-        make another agent.
+        make another allowance.
       </p>
 
       <button onClick={onClose} className="chip chip-accent px-4 py-2.5 cursor-pointer">
@@ -374,54 +377,54 @@ function AgentCreated({ details, onClose }: { details: NewAgent; onClose: () => 
   );
 }
 
-// --------------------------------------------------------------------------- one agent
+// --------------------------------------------------------------------------- one allowance
 
-function AgentDetail({
-  agent,
+function AllowanceDetail({
+  allowance,
   owner,
   busy,
   onClose,
   run,
 }: {
-  agent: AgentRow;
+  allowance: AllowanceRow;
   owner: string;
   busy: string | null;
   onClose: () => void;
   run: (label: string, fn: () => Promise<unknown>) => Promise<void>;
 }) {
-  const [name, setName] = useState(agent.name ?? '');
+  const [name, setName] = useState(allowance.name ?? '');
   const [amount, setAmount] = useState('2.00');
   const [topUp, setTopUp] = useState('2');
   // The chain stores addresses; the list endpoint has already resolved their names. Computed at
-  // mount rather than in an effect: the component is keyed on the agent, so switching one
+  // mount rather than in an effect: the component is keyed on the allowance, so switching one
   // remounts this and the initialiser runs again with the right rules.
   const [allowed, setAllowed] = useState<Allowed[]>(() =>
-    (agent.rules?.allowlist ?? []).map((address, index) => ({
+    (allowance.rules?.allowlist ?? []).map((address, index) => ({
       splitter_contract_id: address,
-      name: agent.can_pay[index] ?? `${address.slice(0, 6)}…${address.slice(-4)}`,
+      name: allowance.can_pay[index] ?? `${address.slice(0, 6)}…${address.slice(-4)}`,
     })),
   );
-  const [limited, setLimited] = useState(!isUnlimited(agent.rules?.window_cap));
+  const [limited, setLimited] = useState(!isUnlimited(allowance.rules?.window_cap));
   const [windowCap, setWindowCap] = useState(
-    agent.rules && !isUnlimited(agent.rules.window_cap)
-      ? (Number(agent.rules.window_cap) / 1e7).toFixed(2)
+    allowance.rules && !isUnlimited(allowance.rules.window_cap)
+      ? (Number(allowance.rules.window_cap) / 1e7).toFixed(2)
       : '0.50',
   );
   const [windowMinutes, setWindowMinutes] = useState(
-    agent.rules ? String(Math.round(agent.rules.window_ledgers / LEDGERS_PER_MINUTE)) : '15',
+    allowance.rules ? String(Math.round(allowance.rules.window_ledgers / LEDGERS_PER_MINUTE)) : '15',
   );
   const [confirmStop, setConfirmStop] = useState(false);
 
-  // Nothing to synchronise: the component is keyed on the agent, so switching one remounts this
+  // Nothing to synchronise: the component is keyed on the allowance, so switching one remounts this
   // with the right rules and the initialiser runs again.
   
 
-  const balance = agent.balance === null ? 0 : Number(agent.balance) / 1e7;
-  const stopped = agent.revoked === true;
-  const lowOnFees = agent.xlm !== null && agent.xlm < 1;
+  const balance = allowance.balance === null ? 0 : Number(allowance.balance) / 1e7;
+  const stopped = allowance.revoked === true;
+  const lowOnFees = allowance.xlm !== null && allowance.xlm < 1;
 
   return (
-    <Overlay title={agent.name ?? 'agent'} onClose={onClose}>
+    <Overlay title={allowance.name ?? 'agent'} onClose={onClose}>
       {/* ------------------------------------------------------------ money */}
       <p className="label mb-1">credits in the contract</p>
       <p className="num text-3xl mb-1" style={{ color: 'var(--accent)' }}>
@@ -437,14 +440,14 @@ function AgentDetail({
           inputMode="decimal"
         />
         <button
-          onClick={() => run('deposit', () => deposit(owner, agent.contract_id, stroops(amount)))}
+          onClick={() => run('deposit', () => deposit(owner, allowance.contract_id, stroops(amount)))}
           disabled={busy !== null}
           className="chip chip-accent px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40 whitespace-nowrap"
         >
           {busy === 'deposit' ? 'signing…' : 'deposit'}
         </button>
         <button
-          onClick={() => run('withdraw', () => withdraw(owner, agent.contract_id, stroops(amount)))}
+          onClick={() => run('withdraw', () => withdraw(owner, allowance.contract_id, stroops(amount)))}
           disabled={busy !== null || balance === 0}
           className="chip px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40 whitespace-nowrap"
         >
@@ -457,7 +460,7 @@ function AgentDetail({
       <div className="border-t border-[color:var(--line)] pt-4 mb-6">
         <p className="label mb-1">the agent&rsquo;s own XLM, for transaction fees</p>
         <p className="num text-lg mb-3" style={{ color: lowOnFees ? 'var(--drained)' : undefined }}>
-          {agent.xlm === null ? '—' : agent.xlm.toFixed(2)}{' '}
+          {allowance.xlm === null ? '—' : allowance.xlm.toFixed(2)}{' '}
           <span className="text-sm text-[color:var(--faint)]">XLM</span>
           {lowOnFees && (
             <span className="label ml-2" style={{ color: 'var(--drained)' }}>
@@ -474,7 +477,7 @@ function AgentDetail({
             inputMode="decimal"
           />
           <button
-            onClick={() => run('xlm', () => sendAgentXlm(owner, agent.agent_address, topUp))}
+            onClick={() => run('xlm', () => sendAgentXlm(owner, allowance.agent_address, topUp))}
             disabled={busy !== null || !(Number(topUp) > 0)}
             className="chip px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40 whitespace-nowrap"
           >
@@ -497,7 +500,7 @@ function AgentDetail({
             onClick={() =>
               run('rename', async () => {
                 const proof = await proveAddress(owner);
-                const response = await fetch(`/api/allowances/${agent.contract_id}`, {
+                const response = await fetch(`/api/allowances/${allowance.contract_id}`, {
                   method: 'PATCH',
                   headers: { 'content-type': 'application/json' },
                   body: JSON.stringify({ ...proof, name }),
@@ -505,7 +508,7 @@ function AgentDetail({
                 if (!response.ok) throw new Error((await response.json()).error);
               })
             }
-            disabled={busy !== null || name.trim() === (agent.name ?? '')}
+            disabled={busy !== null || name.trim() === (allowance.name ?? '')}
             className="chip px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40"
           >
             {busy === 'rename' ? 'signing…' : 'rename'}
@@ -551,7 +554,7 @@ function AgentDetail({
         <button
           onClick={() =>
             run('rules', () =>
-              setRules(owner, agent.contract_id, {
+              setRules(owner, allowance.contract_id, {
                 // One cap, not two: a single call may spend whatever the window allows, no more.
                 maxPerCall: limited ? stroops(windowCap) : NO_RATE_LIMIT,
                 windowCap: limited ? stroops(windowCap) : NO_RATE_LIMIT,
@@ -578,7 +581,7 @@ function AgentDetail({
       <details className="border-t border-[color:var(--line)] pt-4 mb-4">
         <summary className="label cursor-pointer">the code your agent runs</summary>
         <div className="mt-3">
-          <AgentSnippet allowanceId={agent.contract_id} />
+          <AgentSnippet allowanceId={allowance.contract_id} />
         </div>
       </details>
 
@@ -586,7 +589,7 @@ function AgentDetail({
       <div className="border-t border-[color:var(--line)] pt-4 flex items-center gap-3 flex-wrap">
         <button
           onClick={() =>
-            confirmStop ? run('revoke', () => revoke(owner, agent.contract_id)) : setConfirmStop(true)
+            confirmStop ? run('revoke', () => revoke(owner, allowance.contract_id)) : setConfirmStop(true)
           }
           disabled={busy !== null || stopped}
           className="chip px-4 py-2.5 cursor-pointer disabled:opacity-40"

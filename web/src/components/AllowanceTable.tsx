@@ -3,18 +3,22 @@
 import { isUnlimited, LEDGERS_PER_MINUTE } from '@/lib/rules';
 
 /**
- * The agent accounts an owner has, one row each.
+ * The allowances an owner has, one row each.
  *
- * A row is one agent keypair and the contract that holds its money. Two balances, because they
- * are different things and confusing them wastes an afternoon: **XLM** is the agent's own, for
- * transaction fees, and running out of it stops the agent in a way that looks like a refusal.
- * **Credits** are the USDC in the contract, which the agent can ask to spend and never holds.
+ * A row is an allowance contract and the one agent key permitted to ask it for money. Not the
+ * same thing as the agent: nothing stops two allowances naming the same key, so *allowance* is
+ * what a row can always be truthfully called.
+ *
+ * Two balances, because they are different things and confusing them wastes an afternoon:
+ * **XLM** belongs to the agent, for transaction fees, and running out of it stops the agent in a
+ * way that looks like a refusal. **Credits** are the USDC in the contract, which the agent can
+ * ask to spend and never holds.
  *
  * No contract ids and no public keys. They identify nothing to a person — choosing between two
  * of them is guesswork — and everything that needs one is behind the row.
  */
 
-export type AgentRow = {
+export type AllowanceRow = {
   contract_id: string;
   agent_address: string;
   name: string | null;
@@ -43,19 +47,19 @@ function summarise(names: string[]): string {
   return rest > 0 ? `${shown} +${rest}` : shown;
 }
 
-function rateLimit(rules: AgentRow['rules']): string {
+function rateLimit(rules: AllowanceRow['rules']): string {
   if (!rules) return '—';
   if (isUnlimited(rules.window_cap)) return 'none';
   const minutes = Math.round(rules.window_ledgers / LEDGERS_PER_MINUTE);
   return `${(Number(rules.window_cap) / 1e7).toFixed(2)} / ${minutes} min`;
 }
 
-export function AgentTable({
-  agents,
+export function AllowanceTable({
+  allowances,
   onOpen,
 }: {
-  agents: AgentRow[];
-  onOpen: (agent: AgentRow) => void;
+  allowances: AllowanceRow[];
+  onOpen: (allowance: AllowanceRow) => void;
 }) {
   return (
     <div className="panel overflow-x-auto">
@@ -71,23 +75,23 @@ export function AgentTable({
           </tr>
         </thead>
         <tbody>
-          {agents.map((agent) => {
-            const stopped = agent.revoked === true;
-            // A stopped agent recedes, but its controls do not — turning it back on is the thing
-            // you most likely came to do.
+          {allowances.map((allowance) => {
+            const stopped = allowance.revoked === true;
+            // A stopped allowance recedes, but its controls do not — turning it back on is the
+            // thing you most likely came to do.
             const faded = stopped ? { opacity: 0.5 } : undefined;
             // XLM is a fee balance, not spending money. Low means the agent stops working, and
             // that failure reads as a refusal unless it is called out here.
-            const dry = agent.xlm !== null && agent.xlm < 1;
+            const dry = allowance.xlm !== null && allowance.xlm < 1;
 
             return (
               <tr
-                key={agent.contract_id}
-                onClick={() => onOpen(agent)}
+                key={allowance.contract_id}
+                onClick={() => onOpen(allowance)}
                 className="border-b border-[color:var(--line)] last:border-0 cursor-pointer hover:bg-[color:var(--panel-2)]"
               >
                 <td className="px-4 py-3 whitespace-nowrap" style={faded}>
-                  <span>{agent.name ?? 'unnamed'}</span>
+                  <span>{allowance.name ?? 'unnamed'}</span>
                   {stopped && (
                     <span
                       className="chip ml-2 px-1.5 py-0.5 align-middle"
@@ -103,26 +107,30 @@ export function AgentTable({
                   style={{ ...faded, color: dry ? 'var(--drained)' : undefined }}
                   title={dry ? 'too little XLM to pay transaction fees' : undefined}
                 >
-                  {agent.xlm === null ? '—' : agent.xlm.toFixed(2)}
+                  {allowance.xlm === null ? '—' : allowance.xlm.toFixed(2)}
                 </td>
 
                 <td
                   className="px-4 py-3 num text-right whitespace-nowrap"
                   style={{ ...faded, color: 'var(--accent)' }}
                 >
-                  {usdc(agent.balance)}
+                  {usdc(allowance.balance)}
                 </td>
 
-                <td className="px-4 py-3 max-w-[260px] truncate" style={faded} title={agent.can_pay.join(', ')}>
-                  {summarise(agent.can_pay)}
+                <td
+                  className="px-4 py-3 max-w-[260px] truncate"
+                  style={faded}
+                  title={allowance.can_pay.join(', ')}
+                >
+                  {summarise(allowance.can_pay)}
                 </td>
 
                 <td className="px-4 py-3 num whitespace-nowrap" style={faded}>
-                  {rateLimit(agent.rules)}
+                  {rateLimit(allowance.rules)}
                 </td>
 
                 <td className="px-4 py-3 text-right" onClick={(event) => event.stopPropagation()}>
-                  <button onClick={() => onOpen(agent)} className="chip px-3 py-1.5 cursor-pointer">
+                  <button onClick={() => onOpen(allowance)} className="chip px-3 py-1.5 cursor-pointer">
                     open
                   </button>
                 </td>
