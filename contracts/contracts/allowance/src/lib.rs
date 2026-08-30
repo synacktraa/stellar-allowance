@@ -6,8 +6,8 @@
 //! contract to pay, and every request is checked against the rules before any money moves.
 
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, token, Address, Env, Symbol,
-    Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, token,
+    Address, Env, Symbol, Vec,
 };
 
 /// Hard cap on window history length, so a busy agent cannot grow the entry unboundedly.
@@ -46,6 +46,7 @@ enum DataKey {
     Owner,
     Agent,
     Token,
+    Native,
     Rules,
     Revoked,
     Window,
@@ -105,63 +106,151 @@ pub struct Allowance;
 
 #[contractimpl]
 impl Allowance {
-    /// Runs once, at deployment, as part of the same transaction.
+    /// Runs once, at deployment, and does everything the owner is setting up.
     ///
-    /// A separate `init` would have needed the owner's signature to prove they wanted to be
-    /// the owner — which means the owner needs XLM for fees before they can own anything, and
-    /// that is the barrier this product exists to remove. It would also leave a window between
-    /// deploy and init in which anyone could claim ownership of the empty contract.
+    /// The owner deploys this themselves, so their single signature both creates the contract
+    /// and funds it. Stellar allows a transaction carrying a Soroban call to carry nothing
+    /// else, so creating and funding could never be two operations in one transaction — but
+    /// they can be one operation, because a deploy runs its constructor inside the same
+    /// invocation.
     ///
-    /// A constructor closes both: the platform pays, the owner is set atomically, and there is
-    /// no moment where the contract exists unowned.
-    pub fn __constructor(env: Env, owner: Address, token: Address, agent: Address, rules: Rules) {
+    /// `require_auth` on the owner covers both nested token transfers through the auth tree,
+    /// which is what keeps this to one confirmation.
+    ///
+    /// The agent is set here and nowhere else. No function can change it, which is a stronger
+    /// guarantee than a runtime guard and a shorter thing to audit: every allowlist decision
+    /// this contract makes is on behalf of exactly one key, forever.
+    ///
+    /// `native` is the native XLM asset contract. A contract can only move a token by calling
+    /// a token contract, and no host function returns the native one — so it has to be told,
+    /// once, rather than on every call where it could be passed wrongly.
+    ///
+    /// Both amounts may be zero. Setting up now and funding later is a real workflow; the UI
+    /// discourages it rather than this refusing it.
+    pub fn __constructor(
+        env: Env,
+        owner: Address,
+        token: Address,
+        native: Address,
+        agent: Address,
+        rules: Rules,
+        usdc_in: i128,
+        xlm_to_agent: i128,
+    ) {
+        // A constructor cannot return an error, so this panics. A negative amount is a client
+        // bug, and letting one through would silently reverse a transfer's direction.
+        if usdc_in < 0 || xlm_to_agent < 0 {
+            panic_with_error!(&env, AllowanceError::InvalidAmount);
+        }
+        owner.require_auth();
+
         env.storage().instance().set(&DataKey::Owner, &owner);
         env.storage().instance().set(&DataKey::Token, &token);
+        env.storage().instance().set(&DataKey::Native, &native);
         env.storage().instance().set(&DataKey::Agent, &agent);
         env.storage().instance().set(&DataKey::Rules, &rules);
         env.storage().instance().set(&DataKey::Revoked, &false);
+
+        if usdc_in > 0 {
+            token::TokenClient::new(&env, &token).transfer(
+                &owner,
+                &env.current_contract_address(),
+                &usdc_in,
+            );
+            Deposited { from: owner.clone(), amount: usdc_in }.publish(&env);
+        }
+
+        if xlm_to_agent > 0 {
+            // Straight from the owner to the agent. This contract never holds XLM.
+            token::TokenClient::new(&env, &native).transfer(&owner, &agent, &xlm_to_agent);
+        }
     }
 
-    /// Owner moves USDC into the contract. Owner signs; the auth tree covers the nested
-    /// SAC transfer, so this is a single signature.
-    pub fn deposit(env: Env, from: Address, amount: i128) -> Result<(), AllowanceError> {
-        if amount <= 0 {
+    /// Everything the owner changes afterwards, in one invocation and one signature.
+    ///
+    /// Replaces `deposit` and `set_rules`. Changing a rate limit while adding credits used to
+    /// be two confirmations; it is one. What that leaves is a contract where money departs
+    /// through exactly two named functions — `withdraw` and `spend` — a property an auditor can
+    /// establish from the function list alone.
+    ///
+    /// `rules: None` means *leave them alone*, never *clear them*. The caller sends a diff of
+    /// what the owner actually touched, so an edit that only added credits must not arrive
+    /// carrying an allowlist and overwrite the real one.
+    ///
+    /// `write(None, 0, 0)` is a legal no-op, because that diff is legitimately empty when the
+    /// owner changed only the name — which this contract does not store.
+    ///
+    /// The owner is loaded, not passed. `deposit` used to take a `from` purely to check it
+    /// against the owner already in storage, which is an argument that can be wrong for no
+    /// benefit. The agent is not a parameter at all: it cannot change.
+    ///
+    /// Rules are applied before money moves, so a rejected rule change cannot leave funds
+    /// sitting against rules that were never applied.
+    pub fn write(
+        env: Env,
+        rules: Option<Rules>,
+        usdc_in: i128,
+        xlm_to_agent: i128,
+    ) -> Result<(), AllowanceError> {
+        if usdc_in < 0 || xlm_to_agent < 0 {
             return Err(AllowanceError::InvalidAmount);
         }
         let owner = require_owner(&env)?;
-        if from != owner {
-            return Err(AllowanceError::NotInitialized);
+
+        if let Some(rules) = rules {
+            env.storage().instance().set(&DataKey::Rules, &rules);
         }
 
-        let token_address = token_address(&env)?;
-        token::TokenClient::new(&env, &token_address).transfer(
-            &from,
-            &env.current_contract_address(),
-            &amount,
-        );
+        if usdc_in > 0 {
+            let token_address = token_address(&env)?;
+            token::TokenClient::new(&env, &token_address).transfer(
+                &owner,
+                &env.current_contract_address(),
+                &usdc_in,
+            );
+            Deposited { from: owner.clone(), amount: usdc_in }.publish(&env);
+        }
 
-        Deposited { from, amount }.publish(&env);
+        if xlm_to_agent > 0 {
+            let agent: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::Agent)
+                .ok_or(AllowanceError::NotInitialized)?;
+            let native: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::Native)
+                .ok_or(AllowanceError::NotInitialized)?;
+            token::TokenClient::new(&env, &native).transfer(&owner, &agent, &xlm_to_agent);
+        }
+
         Ok(())
     }
 
     /// Owner reclaims funds. No rules apply — the rules constrain the agent, not the owner.
     ///
+    /// The destination is the stored owner and is deliberately not a parameter. Freighter shows
+    /// a Soroban invocation as a contract call, not as "sending 100 USDC to G…", so a signature
+    /// over a caller-supplied destination would not be meaningful review of that destination.
+    /// Fixed, the worst this path can do is give the owner their own money back.
+    ///
     /// The outbound transfer needs no signature: the contract is the executing contract, so
     /// its own `require_auth` is satisfied by Contract Invoker authorization.
-    pub fn withdraw(env: Env, to: Address, amount: i128) -> Result<(), AllowanceError> {
+    pub fn withdraw(env: Env, amount: i128) -> Result<(), AllowanceError> {
         if amount <= 0 {
             return Err(AllowanceError::InvalidAmount);
         }
-        require_owner(&env)?;
+        let owner = require_owner(&env)?;
 
         let token_address = token_address(&env)?;
         token::TokenClient::new(&env, &token_address).transfer(
             &env.current_contract_address(),
-            &to,
+            &owner,
             &amount,
         );
 
-        Withdrawn { to, amount }.publish(&env);
+        Withdrawn { to: owner, amount }.publish(&env);
         Ok(())
     }
 
@@ -238,16 +327,6 @@ impl Allowance {
         }
         .publish(&env);
 
-        Ok(())
-    }
-
-    /// Replaces the rules. Owner only.
-    ///
-    /// Deliberately leaves the spend window untouched: if a rule change reset it, an agent
-    /// sitting at its cap could be handed a fresh one by any edit.
-    pub fn set_rules(env: Env, rules: Rules) -> Result<(), AllowanceError> {
-        require_owner(&env)?;
-        env.storage().instance().set(&DataKey::Rules, &rules);
         Ok(())
     }
 
