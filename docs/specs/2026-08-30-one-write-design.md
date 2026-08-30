@@ -146,12 +146,18 @@ space would make our events ambiguous about which asset moved.
 
 ## Deployment, and the blank that can be left behind
 
-The constructor keeps `owner` and `token` and **loses `agent` and `rules`**, which move to the
-first `write`.
+The constructor keeps `owner` and `token`, **gains `native`**, and **loses `agent` and `rules`**,
+which move to the first `write`.
 
 ```rust
-__constructor(env, owner: Address, token: Address)
+__constructor(env, owner: Address, token: Address, native: Address)
 ```
+
+`native` is the native XLM Stellar Asset Contract, which `write` needs in order to move XLM to
+the agent. Soroban cannot derive it, and it must not be a `write` parameter — a value passed on
+every call is a value that can be passed wrongly. As a constructor argument it is immutable, set
+once by the platform from `Asset.native().contractId(passphrase)`, and a stand-in can be
+substituted in Rust tests.
 
 The property the current docblock claims — *"there is no moment where the contract exists
 unowned"* — survives exactly as written. That sentence is part of the security story being shown
@@ -286,6 +292,21 @@ with the same Save.
 `web/src/app/api/allowances/route.ts` (creation), `web/src/app/page.tsx` (the landing page's
 references), and `web/scripts/seed-demo.mjs` (which funds the demo allowance). Nothing may be
 left calling a function the deployed contract no longer has.
+
+### The agent's secret is revealed before the signature, not after
+
+Today it is shown after creation succeeds. Under this design the contract is deployed first, so
+a prompt cancelled *after* the key was generated but *before* it was shown would strand a key
+nobody has. Generate the keypair, show it, make the owner acknowledge it, and only then ask for
+the signature.
+
+This also means the reveal dialog is reachable again from an unfinished row, because the key is
+regenerated for the retry rather than recovered — we never had it and still cannot produce it.
+
+### A separate `set_agent` was considered and rejected
+
+A transaction may carry only one Soroban operation, so a second public function is a second
+signature. Keeping the agent as an optional parameter on `write` is what makes creation one prompt.
 
 ### `createAgentAccount` is deleted
 
