@@ -165,13 +165,16 @@ describe('recording an allowance', { timeout: 5 * 60_000 }, () => {
     owner: owner.publicKey(),
     agent: agent.publicKey(),
     contract_id: contractId,
-    name: 'research',
     ...extra,
   });
 
-  it('needs a name', async () => {
-    const response = await post('/api/allowances', body({ name: '' }));
-    assert.equal(response.status, 400);
+  it('ignores a name the caller tries to supply', async () => {
+    // Nothing in this request is the caller's to choose, which is why it needs no signature.
+    // A name from the caller would be the one exception, and the only thing worth racing the
+    // real owner to plant.
+    const response = await post('/api/allowances', body({ name: 'chosen by an attacker' }));
+    assert.equal(response.status, 201);
+    assert.match((await response.json()).name, /^allowance-\d+$/);
   });
 
   it('refuses a contract address that is not one', async () => {
@@ -197,12 +200,10 @@ describe('recording an allowance', { timeout: 5 * 60_000 }, () => {
     assert.equal(response.status, 400);
   });
 
-  it('records one the caller actually owns', async () => {
-    const response = await post('/api/allowances', body());
-    assert.equal(response.status, 201);
-    const created = await response.json();
-    assert.equal(created.contract_id, contractId);
-    assert.equal(created.name, 'research');
+  it('is recorded once, and saying so twice is not an error', async () => {
+    const again = await post('/api/allowances', body());
+    assert.equal(again.status, 200, 'already recorded, which is not a failure');
+    assert.equal((await again.json()).recorded, false);
   });
 
   it('lists it with its name, its rules and the agent XLM the constructor sent', async () => {
@@ -211,7 +212,7 @@ describe('recording an allowance', { timeout: 5 * 60_000 }, () => {
     const row = allowances.find((a) => a.contract_id === contractId);
 
     assert.ok(row, 'the allowance should be listed');
-    assert.equal(row.name, 'research');
+    assert.match(row.name, /^allowance-\d+$/, 'a placeholder, renamed later');
     assert.equal(row.balance, '0', 'deployed unfunded, which is legal');
     assert.equal(row.xlm, 2, 'the constructor created and funded the agent account');
     assert.deepEqual(row.rules.allowlist, [splitter]);
@@ -251,7 +252,6 @@ describe('renaming an allowance', { timeout: 2 * 60_000 }, () => {
       owner: owner.publicKey(),
       agent: agent.publicKey(),
       contract_id: contractId,
-      name: 'first',
     });
   });
 

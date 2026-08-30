@@ -31,7 +31,6 @@ const stroops = (amount: string) => BigInt(Math.round(Number(amount) * 1e7));
 
 /** The form, before any of it has been signed for. */
 type Draft = {
-  name: string;
   agentXlm: string;
   usdcIn: string;
   allowed: Allowed[];
@@ -125,8 +124,10 @@ export default function UserPage() {
         xlmToAgent: stroops(draft.agentXlm),
       });
 
-      // The contract is real and owned by now. This only records the name and the index that
-      // makes it findable — the endpoint checks the chain before believing any of it.
+      // The contract is real and owned by now. This only records the index that makes it
+      // findable, and every field is checked against the chain — which is why it needs no
+      // signature, and why it does not accept a name. The server picks a placeholder; naming it
+      // properly is a separate, signed request.
       await fetch('/api/allowances', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -134,7 +135,6 @@ export default function UserPage() {
           owner: address,
           agent: agent.publicKey(),
           contract_id: contractId,
-          name: draft.name,
         }),
       });
 
@@ -247,7 +247,6 @@ export default function UserPage() {
 
       {pending && (
         <RevealSecret
-          name={pending.draft.name}
           secret={pending.agent.secret()}
           busy={busy === 'create'}
           error={error}
@@ -286,7 +285,6 @@ function CreateAllowance({
   onClose: () => void;
   onReady: (draft: Draft) => void;
 }) {
-  const [name, setName] = useState('');
   const [agentXlm, setAgentXlm] = useState('5');
   // Prefilled, because an allowance with no credits fails at its first purchase with an error
   // nobody connects back to a deposit they meant to make later. Clearable, because setting one
@@ -305,17 +303,9 @@ function CreateAllowance({
   return (
     <Overlay
       title="New allowance"
-      note="One signature creates the contract, funds it, and gives the agent a key that holds no money."
+      note="One signature creates the contract, funds it, and gives the agent a key that holds no money. You can name it once it exists."
       onClose={onClose}
     >
-      <Field
-        label="name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="research"
-        hint="what you will call it here · unique among your allowances"
-      />
-
       <Field
         label="credits to start with (USDC)"
         value={usdcIn}
@@ -369,7 +359,6 @@ function CreateAllowance({
       <button
         onClick={() =>
           onReady({
-            name: name.trim(),
             agentXlm,
             usdcIn,
             allowed,
@@ -377,7 +366,7 @@ function CreateAllowance({
             windowMinutes: Number(windowMinutes),
           })
         }
-        disabled={!name.trim() || allowed.length === 0 || !enoughXlm || !enoughUsdc}
+        disabled={allowed.length === 0 || !enoughXlm || !enoughUsdc}
         className="chip chip-accent px-4 py-2.5 cursor-pointer disabled:opacity-40"
       >
         continue
@@ -405,14 +394,12 @@ function CreateAllowance({
  * refused at the wrong second loses a key that was already generated.
  */
 function RevealSecret({
-  name,
   secret,
   busy,
   error,
   onCancel,
   onContinue,
 }: {
-  name: string;
   secret: string;
   busy: boolean;
   error: string | null;
@@ -423,7 +410,7 @@ function RevealSecret({
 
   return (
     <Overlay
-      title={`the key for ${name}`}
+      title="the agent's key"
       note="Shown once. It is the only copy — we never had it and cannot produce it again."
       error={error}
       onClose={busy ? () => {} : onCancel}
@@ -567,27 +554,24 @@ function AllowanceDetail({
 
   const changes = diff(allowance, form);
   const renamed = form.name.trim() !== (allowance.name ?? '');
-  const dirty = renamed || !nothingOnChain(changes);
 
+  /** Everything that lives on the chain, in one transaction. */
   const save = () =>
     run('save', async () => {
-      // Off chain, so it cannot ride in `write`. Free and instant, but its own signature — which
-      // is why renaming *and* changing a rule costs two.
-      if (renamed) {
-        const proof = await proveAddress(owner);
-        const response = await fetch(`/api/allowances/${allowance.contract_id}`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ ...proof, name: form.name.trim() }),
-        });
-        if (!response.ok) throw new Error((await response.json()).error);
-      }
-
-      if (!nothingOnChain(changes)) {
-        await write(owner, allowance.contract_id, changes);
-      }
-
+      await write(owner, allowance.contract_id, changes);
       setForm((current) => ({ ...current, addUsdc: '', topUpXlm: '' }));
+    });
+
+  /** The name lives here, not on the chain. Signed, but free and instant. */
+  const rename = () =>
+    run('rename', async () => {
+      const proof = await proveAddress(owner);
+      const response = await fetch(`/api/allowances/${allowance.contract_id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...proof, name: form.name.trim() }),
+      });
+      if (!response.ok) throw new Error((await response.json()).error);
     });
 
   return (
@@ -674,32 +658,41 @@ function AllowanceDetail({
       </div>
 
       {/* ------------------------------------------------------------- name */}
+      {/* Its own button, deliberately outside Save. The name lives in the database and the rules
+          live on the chain, so one button covering both would sometimes cost two prompts and
+          sometimes one — and nothing on screen would explain which. Two buttons, one prompt
+          each, is the honest shape. */}
       <div className="border-t border-[color:var(--line)] pt-4">
-        <Field
-          label="name"
-          value={form.name}
-          onChange={(e) => set('name', e.target.value)}
-          hint="stored here, not on the chain · free to change"
-        />
+        <div className="flex gap-3 items-end">
+          <Field
+            label="name"
+            value={form.name}
+            onChange={(e) => set('name', e.target.value)}
+            hint="stored here, not on the chain · costs no fee"
+          />
+          <button
+            onClick={rename}
+            disabled={busy !== null || !renamed || form.name.trim() === ''}
+            className="chip px-3 py-2.5 mb-4 cursor-pointer disabled:opacity-40"
+          >
+            {busy === 'rename' ? 'signing…' : 'rename'}
+          </button>
+        </div>
       </div>
 
       {/* ------------------------------------------------------------- save */}
       <div className="border-t border-[color:var(--line)] pt-4 mb-4">
         <button
           onClick={save}
-          disabled={busy !== null || !dirty || form.allowed.length === 0}
+          disabled={busy !== null || nothingOnChain(changes) || form.allowed.length === 0}
           className="chip chip-accent px-4 py-2.5 cursor-pointer disabled:opacity-40"
         >
           {busy === 'save' ? 'signing…' : 'save changes'}
         </button>
         <p className="label mt-2 leading-relaxed">
-          {!dirty
+          {nothingOnChain(changes)
             ? 'nothing changed yet'
-            : renamed && !nothingOnChain(changes)
-              ? 'two signatures · the name is free, the rest is one transaction'
-              : renamed
-                ? 'one signature · the name is stored here, so nothing goes to the chain'
-                : 'one signature · credits, fees and rules all go together'}
+            : 'one signature · credits, fees and rules all go together'}
         </p>
         {form.allowed.length === 0 && (
           <p className="label mt-2" style={{ color: 'var(--drained)' }}>

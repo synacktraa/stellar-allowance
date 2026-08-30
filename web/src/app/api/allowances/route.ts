@@ -22,11 +22,14 @@ import { read } from '@/lib/stellar';
  * names, and both must match what the caller claims. Without that, anyone could post any string
  * and attach rows to other people's addresses.
  *
- * Deliberately unsigned, though. Requiring a challenge signature would mean a second Freighter
- * prompt during creation, which is the exact thing this change exists to remove. What that
- * leaves open is narrow: someone watching the chain could record a real allowance before its
- * owner does, and choose its name. They cannot touch the money, cannot change the contract, and
- * the owner renames it with one signed request. A label, briefly wrong, is the whole exposure.
+ * Deliberately unsigned. Requiring a challenge signature would mean a second Freighter prompt
+ * during creation, which is the exact thing this change exists to remove — and it is safe to
+ * skip precisely because **nothing in this request is the caller's to choose**. The owner, the
+ * agent and the contract are all checked against the chain, and the name is assigned here. A
+ * racing attacker could only create the identical row the owner was about to.
+ *
+ * The name is therefore a placeholder. Renaming is a separate, signed request, which is where
+ * a caller-chosen string belongs.
  */
 export const maxDuration = 60;
 
@@ -34,7 +37,6 @@ type Body = {
   owner?: string;
   agent?: string;
   contract_id?: string;
-  name?: string;
 };
 
 export async function POST(request: NextRequest) {
@@ -43,7 +45,6 @@ export async function POST(request: NextRequest) {
   const owner = body.owner?.trim();
   const agent = body.agent?.trim();
   const contractId = body.contract_id?.trim();
-  const name = body.name?.trim();
 
   if (!owner || !StrKey.isValidEd25519PublicKey(owner)) {
     return Response.json({ error: 'owner must be a Stellar account address' }, { status: 400 });
@@ -54,13 +55,6 @@ export async function POST(request: NextRequest) {
   if (!contractId || !StrKey.isValidContract(contractId)) {
     return Response.json({ error: 'contract_id must be a contract address' }, { status: 400 });
   }
-  if (!name || !/^[A-Za-z0-9][A-Za-z0-9 _-]{0,31}$/.test(name)) {
-    return Response.json(
-      { error: 'name must be 1-32 characters: letters, digits, spaces, underscore or hyphen.' },
-      { status: 400 },
-    );
-  }
-
   // Ask the contract itself. Anything the caller says about it is a claim until this agrees.
   let claimedBy: string;
   let names: string;
@@ -88,6 +82,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const name = await placeholderName(owner);
+
   const { error } = await db().from('allowances').insert({
     contract_id: contractId,
     owner_address: owner,
@@ -96,20 +92,31 @@ export async function POST(request: NextRequest) {
   });
 
   if (error) {
-    // The contract exists and is theirs either way. Losing the row would be worse than a
-    // duplicate name, so this reports rather than unwinding anything.
-    return Response.json(
-      {
-        contract_id: contractId,
-        owner,
-        agent,
-        warning: `You already have an allowance called ${name}.`,
-      },
-      { status: 201 },
-    );
+    // Already recorded. The contract exists and is theirs either way, so this is not a failure
+    // worth showing anyone — it is the second click of a button that already worked.
+    return Response.json({ contract_id: contractId, owner, agent, recorded: false }, { status: 200 });
   }
 
   return Response.json({ contract_id: contractId, owner, agent, name }, { status: 201 });
+}
+
+/**
+ * The lowest `allowance-N` this owner is not already using.
+ *
+ * Names are unique per owner, so this cannot simply count rows: an owner who renamed their first
+ * allowance to `allowance-2` would collide with the next one created. Asking which are taken is
+ * one query and has no such gap.
+ */
+async function placeholderName(owner: string): Promise<string> {
+  const { data } = await db().from('allowances').select('name').eq('owner_address', owner);
+  const taken = new Set((data ?? []).map((row) => row.name));
+
+  for (let n = 1; n <= taken.size + 1; n += 1) {
+    const candidate = `allowance-${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  // Unreachable: n only has to exceed the number of taken names to find a gap.
+  return `allowance-${taken.size + 1}`;
 }
 
 /**
