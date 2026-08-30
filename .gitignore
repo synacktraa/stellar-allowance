@@ -26,3 +26,6 @@ out/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local dev-server config for the in-app browser preview
+.claude/

@@ -9,11 +9,12 @@ imports resolve, the SDK installed, and an env file wired up. All done here alre
 
 ## Run it
 
-**1. Get the file.** On the Stellar Allowance user tab, step 06, press copy on the code block.
-Paste it over `buy.mjs`. It already contains your allowance's contract id.
+**1. Get the file.** On the Stellar Allowance user tab, open your allowance and expand *the code
+your agent runs*, then press copy. Paste it over `buy.mjs`. It already contains that allowance's
+contract id.
 
 **2. Add the agent's secret.** Copy `.env.example` to `.env` and fill in `AGENT_SECRET` — the key
-shown once in step 02.
+shown once, when the allowance was created.
 
 > Leave a newline at the end of `.env`. Node's `--env-file` drops the last line if the file does
 > not end with one, and the failure looks like the key was never set rather than like a parsing
@@ -25,8 +26,8 @@ shown once in step 02.
 npm start -- <your-paid-url>
 ```
 
-The URL has to be one your allowance is allowed to pay. The user tab lists the allowlist when you
-select an allowance; anything else is refused, however small the amount.
+The URL has to be one your allowance is allowed to pay. Opening the allowance lists what it may
+pay; anything else is refused, however small the amount.
 
 ## What you should see
 
@@ -51,7 +52,7 @@ URL that is *not* on your allowlist is the cheapest way to watch the allowlist w
 | | |
 |---|---|
 | `#4` | agent revoked |
-| `#5` | over the per-call cap |
+| `#5` | one call worth more than the rate limit allows |
 | `#6` | recipient not on the allowlist |
 | `#7` | over the window cap |
 | `#10` | the allowance is empty |

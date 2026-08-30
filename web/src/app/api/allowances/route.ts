@@ -1,9 +1,10 @@
 ﻿import type { NextRequest } from 'next/server';
-import { Address, StrKey, nativeToScVal } from '@stellar/stellar-sdk';
+import { Address, Horizon, StrKey, nativeToScVal } from '@stellar/stellar-sdk';
 import { db } from '@/lib/supabase';
 import { deployInstance } from '@/lib/deploy';
 import { env } from '@/lib/env';
 import { arg, read } from '@/lib/stellar';
+import { DEFAULT_WINDOW_LEDGERS, LEDGERS_PER_MINUTE, NO_RATE_LIMIT } from '@/lib/rules';
 
 /**
  * Creating an allowance.
@@ -25,9 +26,10 @@ export const maxDuration = 60;
 type Body = {
   owner?: string;
   agent?: string;
-  max_per_call?: string;
-  window_ledgers?: number;
+  name?: string;
+  /** Absent means no rate limit, and then the balance in the contract is the limit. */
   window_cap?: string;
+  window_minutes?: number;
   allowlist?: string[];
 };
 
@@ -44,17 +46,37 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'agent must be a Stellar account address' }, { status: 400 });
   }
 
-  const allowlist = (body.allowlist ?? []).filter((a) => a.startsWith('C'));
-  if (allowlist.length === 0) {
-    return Response.json({ error: 'allowlist must contain at least one contract' }, { status: 400 });
+  const name = body.name?.trim();
+  if (!name || !/^[A-Za-z0-9][A-Za-z0-9 _-]{0,31}$/.test(name)) {
+    return Response.json(
+      { error: 'name must be 1-32 characters: letters, digits, spaces, underscore or hyphen.' },
+      { status: 400 },
+    );
   }
 
-  const maxPerCall = BigInt(body.max_per_call ?? '1000000');
-  const windowCap = BigInt(body.window_cap ?? '5000000');
-  const windowLedgers = Number(body.window_ledgers ?? 180);
+  // An empty allowlist refuses everything, so an agent created without one is dead on arrival —
+  // and deciding who may be paid is the protection this product leads with.
+  const allowlist = (body.allowlist ?? []).filter((a) => a.startsWith('C'));
+  if (allowlist.length === 0) {
+    return Response.json(
+      { error: 'Choose at least one API this agent may pay.' },
+      { status: 400 },
+    );
+  }
 
-  if (maxPerCall <= 0n || windowCap <= 0n || windowLedgers <= 0) {
-    return Response.json({ error: 'limits must be positive' }, { status: 400 });
+  // No rate limit unless one is asked for. The contract needs a number either way, so "none" is
+  // a cap nothing reaches rather than a special case in the contract.
+  const windowCap = body.window_cap ? BigInt(body.window_cap) : NO_RATE_LIMIT;
+  const windowLedgers = body.window_minutes
+    ? Math.max(1, Math.round(Number(body.window_minutes) * LEDGERS_PER_MINUTE))
+    : DEFAULT_WINDOW_LEDGERS;
+
+  // The per-call cap is not a separate idea any more: a single call may spend whatever the
+  // window allows, and no more.
+  const maxPerCall = windowCap;
+
+  if (windowCap <= 0n) {
+    return Response.json({ error: 'the cap must be positive' }, { status: 400 });
   }
 
   try {
@@ -82,13 +104,23 @@ export async function POST(request: NextRequest) {
       ),
     ]);
 
-    await db().from('allowances').insert({
+    const { error } = await db().from('allowances').insert({
       contract_id: contractId,
       owner_address: owner,
       agent_address: agent,
+      name,
     });
 
-    return Response.json({ contract_id: contractId, owner, agent }, { status: 201 });
+    if (error) {
+      // The contract is deployed and owned either way — losing the row would be worse than a
+      // duplicate name, so this reports rather than unwinding anything.
+      return Response.json(
+        { contract_id: contractId, owner, agent, warning: `You already have an agent called ${name}.` },
+        { status: 201 },
+      );
+    }
+
+    return Response.json({ contract_id: contractId, owner, agent, name }, { status: 201 });
   } catch (cause) {
     return Response.json(
       { error: cause instanceof Error ? cause.message : String(cause) },
@@ -119,7 +151,7 @@ export async function GET(request: NextRequest) {
 
   const { data } = await db()
     .from('allowances')
-    .select('contract_id, owner_address, agent_address, created_at')
+    .select('contract_id, owner_address, agent_address, name, created_at')
     .eq(owner ? 'owner_address' : 'agent_address', address)
     .order('created_at', { ascending: false });
 
@@ -130,14 +162,19 @@ export async function GET(request: NextRequest) {
   const detailed = await Promise.all(
     rows.map(async (row) => {
       try {
-        const [balance, rules, revoked] = await Promise.all([
+        const [balance, rules, revoked, xlm] = await Promise.all([
           read(row.contract_id, 'balance'),
           read(row.contract_id, 'config'),
           read(row.contract_id, 'revoked'),
+          // The agent's own XLM, which pays its transaction fees. Nothing to do with the money
+          // it can spend — but an agent that runs out of it stops working, and that failure
+          // looks like a refusal unless the number is somewhere visible.
+          agentXlm(row.agent_address),
         ]);
         return {
           ...row,
           balance: String(balance ?? 0),
+          xlm,
           revoked: Boolean(revoked),
           rules: {
             max_per_call: String((rules as Rules).max_per_call),
@@ -147,7 +184,7 @@ export async function GET(request: NextRequest) {
           },
         };
       } catch {
-        return { ...row, balance: null, revoked: null, rules: null };
+        return { ...row, balance: null, xlm: null, revoked: null, rules: null };
       }
     }),
   );
@@ -177,6 +214,17 @@ export async function GET(request: NextRequest) {
   }));
 
   return Response.json({ allowances });
+}
+
+/** Best effort: an agent account that does not exist yet simply has none. */
+async function agentXlm(address: string): Promise<number | null> {
+  try {
+    const account = await new Horizon.Server(env.horizonUrl()).loadAccount(address);
+    const native = account.balances.find((b) => b.asset_type === 'native');
+    return native ? Number(native.balance) : 0;
+  } catch {
+    return null;
+  }
 }
 
 type Rules = {

@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { read } from '@/lib/stellar';
 import { db } from '@/lib/supabase';
+import { verifyProof } from '@/lib/auth';
 
 /**
  * Live state for one allowance, read straight off the chain.
@@ -44,7 +45,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<'/api/allowan
 
     // The allowlist is addresses, because that is what the contract stores. Nobody can read one.
     // Naming them here rather than in the page keeps a single source for it — the list endpoint
-    // already did this, and step 05 polls this one, so the two used to disagree.
+    // already did this, and the allowance dialog polls this one, so the two used to disagree.
     const names: Record<string, string> = {};
     if (config.allowlist.length > 0) {
       const { data: apis } = await db()
@@ -77,4 +78,60 @@ export async function GET(_request: NextRequest, ctx: RouteContext<'/api/allowan
       { status: 502 },
     );
   }
+}
+
+/**
+ * Renaming an agent.
+ *
+ * The name is the only thing about an allowance that lives off chain, so it is the only thing
+ * this route can change. Everything that matters — the rules, the balance, whether the agent is
+ * revoked — is on the contract and moves only with the owner's own signature in their own
+ * wallet. We could not change those if we wanted to.
+ */
+export async function PATCH(request: NextRequest, ctx: RouteContext<'/api/allowances/[contractId]'>) {
+  const { contractId } = await ctx.params;
+
+  let body: { address?: string; nonce?: string; signed?: string; name?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: 'Body must be JSON.' }, { status: 400 });
+  }
+
+  const proof = await verifyProof(body);
+  if (!proof.ok) {
+    return Response.json({ error: `Could not prove that address: ${proof.reason}.` }, { status: 401 });
+  }
+
+  const name = body.name?.trim();
+  if (!name || !/^[A-Za-z0-9][A-Za-z0-9 _-]{0,31}$/.test(name)) {
+    return Response.json(
+      { error: 'name must be 1-32 characters: letters, digits, spaces, underscore or hyphen.' },
+      { status: 400 },
+    );
+  }
+
+  const supabase = db();
+  const { data: allowance } = await supabase
+    .from('allowances')
+    .select('contract_id, owner_address')
+    .eq('contract_id', contractId)
+    .maybeSingle<{ contract_id: string; owner_address: string }>();
+
+  // The same answer for "no such allowance" and "not yours", so this cannot be used to find out
+  // which contracts belong to whom.
+  if (!allowance || allowance.owner_address !== proof.address) {
+    return Response.json({ error: 'No such allowance.' }, { status: 404 });
+  }
+
+  const { error } = await supabase
+    .from('allowances')
+    .update({ name })
+    .eq('contract_id', contractId);
+
+  if (error) {
+    return Response.json({ error: `You already have an agent called ${name}.` }, { status: 409 });
+  }
+
+  return Response.json({ contract_id: contractId, name });
 }
