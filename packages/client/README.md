@@ -35,14 +35,20 @@ Same arguments, same `Response` back. A URL that never asks for payment is passe
 through, and nothing is signed.
 
 ```js
-await client.fetch(url);                                    // GET
-await client.fetch(url, { method: 'POST', body });          // POST
-await client.fetch(url, { method: 'DELETE' });              // anything else
+await client.fetch(url);                              // GET
+await client.fetch(url, { method: 'POST', body });    // POST
 ```
 
 ```js
 res.ok · res.status · res.headers · res.json() · res.text()    // a real Response
 ```
+
+**Gateways currently sell `GET` and `POST`.** Anything else reaches the gateway and comes back
+`405` — this package passes your method through rather than substituting one, so what you asked
+for is what was asked.
+
+The price is asked for with the *same* request you made, not a separate probe. That is why a body
+has to be replayable: the first call is told the price, the second carries the payment.
 
 ## When your rules say no
 
