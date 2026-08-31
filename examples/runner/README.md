@@ -9,11 +9,11 @@ imports resolve, the SDK installed, and an env file wired up. All done here alre
 
 ## Run it
 
-**1. Get the file.** On the Stellar Allowance user tab, open your allowance and expand *the code
-your agent runs*, then press copy. Paste it over `buy.mjs`. It already contains that allowance's
-contract id.
+**1. Get the file.** It is already here — `buy.mjs`, about twenty lines. The same file is on the
+Stellar Allowance user tab, under *the code your agent runs*, if you would rather copy it from
+there. There is no contract id in it: the allowance is found from the agent's own key.
 
-**2. Add the agent's secret.** Copy `.env.example` to `.env` and fill in `AGENT_SECRET` — the key
+**2. Add the agent's secret.** Copy `.env.example` to `.env` and fill in `STELLAR_ALLOWANCE_SECRET` — the key
 shown once, when the allowance was created.
 
 > Leave a newline at the end of `.env`. Node's `--env-file` drops the last line if the file does

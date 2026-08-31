@@ -1,27 +1,33 @@
-/**
- * Replace this whole file.
- *
- * Go to the Stellar Allowance user tab, step 06, and press copy on the code block. It arrives
- * with your allowance's contract id already in it — that is the one value that cannot be copied
- * from anywhere else, which is why this ships empty rather than nearly finished.
- *
- * Then:
- *
- *   1. put your agent's secret in .env    (AGENT_SECRET=S...)
- *   2. npm start -- <your-paid-url>
- *
- * `type: module` is set in package.json, so the ESM imports work from this filename directly.
- * Dependencies are already installed.
- */
+// Save as buy.mjs — the .mjs matters, these are ESM imports.
+//
+//   npm i @stellar-allowance/client
+//   STELLAR_ALLOWANCE_SECRET=S... node buy.mjs <your-paid-url>
+//
+import { Allowance, AllowanceRefused } from '@stellar-allowance/client';
 
-console.log(`
-This file is still the placeholder.
+// One argument, and it is read from the environment. No contract id: the allowance is found
+// from the agent's own key, and everything else comes from the URL you ask it to buy.
+const client = new Allowance();
 
-  1. Copy the buy file from the user tab, step 06 — it already contains
-     your allowance's contract id.
-  2. Paste it over this file.
-  3. Put your agent's secret in .env
-  4. npm start -- <your-paid-url>
-`);
+const url = process.argv[2];
 
-process.exit(1);
+if (!url) {
+  console.error('usage: STELLAR_ALLOWANCE_SECRET=S... node buy.mjs <paid-url>');
+  process.exit(1);
+}
+
+try {
+  // Behaves like fetch. A URL that never asks for payment comes straight back, and nothing
+  // is signed.
+  const response = await client.fetch(url);
+  console.log(response.status, (await response.text()).slice(0, 120));
+} catch (error) {
+  if (error instanceof AllowanceRefused) {
+    // Not a failed request — your own rules working. 'allowlist' means it was asked to pay
+    // somebody you never approved, which is what stops a prompt spending your money.
+    console.error('refused —', error.rule + ':', error.message);
+  } else {
+    console.error(error.message);
+  }
+  process.exit(1);
+}
