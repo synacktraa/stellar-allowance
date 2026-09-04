@@ -45,6 +45,8 @@ pub enum AllowanceError {
     RecipientNotAllowed = 2,
     /// The invocation being authorised is not a shape this contract recognises.
     MalformedCall = 3,
+    /// A transfer of a token this allowance was not set up to spend.
+    WrongAsset = 4,
 }
 
 #[contract]
@@ -108,6 +110,12 @@ impl CustomAccountInterface for Allowance {
             .get(&DataKey::Rules)
             .ok_or(AllowanceError::NotInitialized)?;
 
+        let token: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .ok_or(AllowanceError::NotInitialized)?;
+
         // Every invocation the signature would cover, not just the first. A signature
         // authorises the whole tree, so a rule checked on one entry and skipped on the
         // next is not a rule.
@@ -117,6 +125,12 @@ impl CustomAccountInterface for Allowance {
                 // This contract never creates contracts, so nothing else is legitimate.
                 _ => return Err(AllowanceError::MalformedCall),
             };
+
+            // Which asset is being moved lives here, not in the arguments. Without it an
+            // amount is unitless, and every rule expressed as a number is meaningless.
+            if call.contract != token {
+                return Err(AllowanceError::WrongAsset);
+            }
 
             let to = call
                 .args

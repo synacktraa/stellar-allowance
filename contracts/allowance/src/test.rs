@@ -57,8 +57,13 @@ fn sign_payload(agent: &SigningKey, payload: &BytesN<32>) -> [u8; 64] {
 
 /// One `USDC.transfer(allowance -> to, amount)` invocation, as the host would present it.
 fn transfer(f: &Fixture, to: &Address, amount: i128) -> Context {
+    transfer_of(f, &f.token, to, amount)
+}
+
+/// The same call, but addressed to a token contract of the caller's choosing.
+fn transfer_of(f: &Fixture, token: &Address, to: &Address, amount: i128) -> Context {
     Context::Contract(ContractContext {
-        contract: f.token.clone(),
+        contract: token.clone(),
         fn_name: symbol_short!("transfer"),
         args: vec![
             &f.env,
@@ -169,4 +174,17 @@ fn a_call_not_shaped_like_a_transfer_is_refused_rather_than_aborting() {
         check_auth(&f, contexts),
         Some(AllowanceError::MalformedCall)
     );
+}
+
+/// The asset's identity lives in `call.contract`, nowhere in the arguments. Until it is
+/// checked, `100` is a number with no units — and the agent can authorise a transfer of
+/// any token in existence to an allowlisted seller, including ones the owner never
+/// deposited and never meant to be spendable.
+#[test]
+fn a_transfer_of_some_other_token_is_refused() {
+    let f = setup();
+    let other_token = Address::generate(&f.env);
+    let contexts = vec![&f.env, transfer_of(&f, &other_token, &f.seller, 100)];
+
+    assert_eq!(check_auth(&f, contexts), Some(AllowanceError::WrongAsset));
 }
