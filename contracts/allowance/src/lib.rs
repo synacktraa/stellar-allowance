@@ -127,6 +127,30 @@ impl Allowance {
         }
     }
 
+    /// The owner takes their own money back. `to` falls back to the stored owner.
+    ///
+    /// No rule applies. The window and the allowlist constrain the agent; this is not a
+    /// payment and is measured against nothing.
+    ///
+    /// The outbound transfer needs no signature of its own: this contract is the one
+    /// executing, so its `require_auth` is satisfied by Contract Invoker authorization.
+    /// The signature demanded is the owner's, on the way in.
+    ///
+    /// A caller-supplied destination is only safe because Freighter renders a Parameters
+    /// section and turns an address argument into a readable strkey, so the owner can see
+    /// where the money is going before signing. Amounts render as stroops, so the app has
+    /// to show the human figure before the owner ever reaches the wallet.
+    pub fn withdraw(env: Env, amount: i128, to: Option<Address>) -> Result<(), AllowanceError> {
+        if amount <= 0 {
+            return Err(AllowanceError::InvalidAmount);
+        }
+        let owner = require_owner(&env)?;
+
+        let here = env.current_contract_address();
+        token::TokenClient::new(&env, &token(&env)?).transfer(&here, to.unwrap_or(owner), &amount);
+        Ok(())
+    }
+
     /// Immediate, total stop. Moves no money, so it cannot fail for balance reasons.
     /// Stops the *agent*; the owner can still take their own money out.
     ///
@@ -156,6 +180,13 @@ impl Allowance {
     pub fn enabled(env: Env) -> bool {
         !disabled(&env)
     }
+}
+
+fn token(env: &Env) -> Result<Address, AllowanceError> {
+    env.storage()
+        .instance()
+        .get(&DataKey::Token)
+        .ok_or(AllowanceError::NotInitialized)
 }
 
 fn disabled(env: &Env) -> bool {
@@ -219,11 +250,7 @@ impl CustomAccountInterface for Allowance {
             .get(&DataKey::Rules)
             .ok_or(AllowanceError::NotInitialized)?;
 
-        let token: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Token)
-            .ok_or(AllowanceError::NotInitialized)?;
+        let token = token(&env)?;
 
         let (mut window, slice) = rolled_window(&env, rules.window_ledgers);
         let mut total: i128 = window.slots.iter().sum();

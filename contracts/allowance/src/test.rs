@@ -568,3 +568,24 @@ fn the_constructor_pulls_the_owners_deposit_in() {
 fn a_negative_deposit_is_refused() {
     setup_with_deposit(-1);
 }
+
+/// No rule applies here. The window and the allowlist constrain the *agent*; the owner
+/// taking their own money back is not a payment and is measured against nothing.
+#[test]
+fn the_owner_can_take_their_money_back() {
+    let f = setup_with_deposit(5_000);
+    let usdc = TokenClient::new(&f.env, &f.token);
+
+    AllowanceClient::new(&f.env, &f.allowance).withdraw(&2_000, &None);
+
+    assert_eq!(
+        usdc.balance(&f.allowance),
+        3_000,
+        "the allowance is lighter"
+    );
+    assert_eq!(
+        usdc.balance(&f.owner),
+        OWNER_FUNDS - 5_000 + 2_000,
+        "and it went back to the owner, who was not named in the call"
+    );
+}
