@@ -56,40 +56,41 @@ fn sign_payload(agent: &SigningKey, payload: &BytesN<32>) -> [u8; 64] {
 }
 
 /// One `USDC.transfer(allowance -> to, amount)` invocation, as the host would present it.
-fn transfer_context(f: &Fixture, to: &Address, amount: i128) -> soroban_sdk::Vec<Context> {
-    vec![
-        &f.env,
-        Context::Contract(ContractContext {
-            contract: f.token.clone(),
-            fn_name: symbol_short!("transfer"),
-            args: vec![
-                &f.env,
-                f.allowance.to_val(),
-                to.to_val(),
-                amount.into_val(&f.env),
-            ],
-        }),
-    ]
+fn transfer(f: &Fixture, to: &Address, amount: i128) -> Context {
+    Context::Contract(ContractContext {
+        contract: f.token.clone(),
+        fn_name: symbol_short!("transfer"),
+        args: vec![
+            &f.env,
+            f.allowance.to_val(),
+            to.to_val(),
+            amount.into_val(&f.env),
+        ],
+    })
+}
+
+fn check_auth(f: &Fixture, contexts: soroban_sdk::Vec<Context>) -> Option<AllowanceError> {
+    let payload = BytesN::random(&f.env);
+    let signature = BytesN::from_array(&f.env, &sign_payload(&f.agent, &payload));
+    f.env
+        .try_invoke_contract_check_auth::<AllowanceError>(
+            &f.allowance,
+            &payload,
+            signature.to_val(),
+            &contexts,
+        )
+        .err()
+        // Unwrapping the inner Result is the assertion that matters: `Ok(e)` is a contract
+        // error the library can name, `Err(_)` is a host abort it cannot.
+        .map(|e| e.expect("refused with a host abort, not a contract error"))
 }
 
 #[test]
 fn agent_signature_authorises_a_payment_to_an_allowlisted_seller() {
     let f = setup();
-    let payload = BytesN::random(&f.env);
-    let signature = BytesN::from_array(&f.env, &sign_payload(&f.agent, &payload));
-    let contexts = transfer_context(&f, &f.seller, 100);
+    let contexts = vec![&f.env, transfer(&f, &f.seller, 100)];
 
-    let result = f.env.try_invoke_contract_check_auth::<AllowanceError>(
-        &f.allowance,
-        &payload,
-        signature.to_val(),
-        &contexts,
-    );
-
-    assert!(
-        result.is_ok(),
-        "expected the payment to be authorised, got {result:?}"
-    );
+    assert_eq!(check_auth(&f, contexts), None);
 }
 
 #[test]
@@ -98,7 +99,7 @@ fn a_signature_from_any_other_key_is_refused() {
     let impostor = SigningKey::from_bytes(&[9u8; 32]);
     let payload = BytesN::random(&f.env);
     let signature = BytesN::from_array(&f.env, &sign_payload(&impostor, &payload));
-    let contexts = transfer_context(&f, &f.seller, 100);
+    let contexts = vec![&f.env, transfer(&f, &f.seller, 100)];
 
     let result = f.env.try_invoke_contract_check_auth::<AllowanceError>(
         &f.allowance,
@@ -110,5 +111,62 @@ fn a_signature_from_any_other_key_is_refused() {
     assert!(
         result.is_err(),
         "a forged signature must not authorise a payment"
+    );
+}
+
+#[test]
+fn a_payment_to_an_address_off_the_allowlist_is_refused() {
+    let f = setup();
+    let stranger = Address::generate(&f.env);
+    let contexts = vec![&f.env, transfer(&f, &stranger, 100)];
+
+    assert_eq!(
+        check_auth(&f, contexts),
+        Some(AllowanceError::RecipientNotAllowed)
+    );
+}
+
+/// Regression guard, not a driven cycle: the loop was written before this test existed.
+///
+/// A signature covers the whole invocation tree, so checking only the root would let an
+/// attacker append a second transfer to themselves. What makes this worth pinning is that
+/// x402's `exact` scheme forbids sub-invocations — which makes "the protocol guarantees a
+/// single context" an available, plausible and wrong reason to drop the loop under fee
+/// pressure. The protocol constrains well-behaved clients, not attackers.
+#[test]
+fn a_second_invocation_smuggled_in_behind_a_legitimate_one_is_refused() {
+    let f = setup();
+    let stranger = Address::generate(&f.env);
+    let contexts = vec![
+        &f.env,
+        transfer(&f, &f.seller, 100),
+        transfer(&f, &stranger, 5_000),
+    ];
+
+    assert_eq!(
+        check_auth(&f, contexts),
+        Some(AllowanceError::RecipientNotAllowed)
+    );
+}
+
+/// A call with nothing in the recipient slot must be *refused*, not panicked through.
+/// Asserting a named contract error rather than a host abort is the whole point: the
+/// library can tell a caller why a refusal happened only when it carries a discriminant.
+#[test]
+fn a_call_not_shaped_like_a_transfer_is_refused_rather_than_aborting() {
+    let f = setup();
+    let contexts = vec![
+        &f.env,
+        Context::Contract(ContractContext {
+            contract: f.token.clone(),
+            fn_name: symbol_short!("transfer"),
+            // One argument where a transfer has three.
+            args: vec![&f.env, f.allowance.to_val()],
+        }),
+    ];
+
+    assert_eq!(
+        check_auth(&f, contexts),
+        Some(AllowanceError::MalformedCall)
     );
 }

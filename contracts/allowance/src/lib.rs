@@ -10,7 +10,7 @@ use soroban_sdk::{
     auth::{Context, CustomAccountInterface},
     contract, contracterror, contractimpl, contracttype,
     crypto::Hash,
-    Address, BytesN, Env, Vec,
+    Address, BytesN, Env, TryFromVal, Vec,
 };
 
 /// What the owner sets. Three numbers, not four: the per-call cap collapsed into the
@@ -41,6 +41,10 @@ enum DataKey {
 #[repr(u32)]
 pub enum AllowanceError {
     NotInitialized = 1,
+    /// The agent asked to pay someone the owner never approved.
+    RecipientNotAllowed = 2,
+    /// The invocation being authorised is not a shape this contract recognises.
+    MalformedCall = 3,
 }
 
 #[contract]
@@ -87,7 +91,7 @@ impl CustomAccountInterface for Allowance {
         env: Env,
         payload: Hash<32>,
         signature: BytesN<64>,
-        _contexts: Vec<Context>,
+        contexts: Vec<Context>,
     ) -> Result<(), AllowanceError> {
         let agent_key: BytesN<32> = env
             .storage()
@@ -97,6 +101,33 @@ impl CustomAccountInterface for Allowance {
 
         env.crypto()
             .ed25519_verify(&agent_key, &payload.into(), &signature);
+
+        let rules: Rules = env
+            .storage()
+            .instance()
+            .get(&DataKey::Rules)
+            .ok_or(AllowanceError::NotInitialized)?;
+
+        // Every invocation the signature would cover, not just the first. A signature
+        // authorises the whole tree, so a rule checked on one entry and skipped on the
+        // next is not a rule.
+        for context in contexts.iter() {
+            let call = match context {
+                Context::Contract(call) => call,
+                // This contract never creates contracts, so nothing else is legitimate.
+                _ => return Err(AllowanceError::MalformedCall),
+            };
+
+            let to = call
+                .args
+                .get(1)
+                .and_then(|arg| Address::try_from_val(&env, &arg).ok())
+                .ok_or(AllowanceError::MalformedCall)?;
+
+            if !rules.allowlist.contains(&to) {
+                return Err(AllowanceError::RecipientNotAllowed);
+            }
+        }
 
         Ok(())
     }
