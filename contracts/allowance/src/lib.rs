@@ -47,6 +47,8 @@ pub enum AllowanceError {
     WrongAsset = 4,
     /// Aimed at the right token, but not an operation the agent may authorise.
     NotATransfer = 5,
+    /// More than the rolling window still allows.
+    ExceedsWindow = 6,
 }
 
 #[contract]
@@ -148,6 +150,18 @@ impl CustomAccountInterface for Allowance {
 
             if !rules.allowlist.contains(&to) {
                 return Err(AllowanceError::RecipientNotAllowed);
+            }
+
+            // The amount lives in the last argument. A call bigger than the whole window
+            // can be refused on its own, without consulting anything already spent.
+            let amount = call
+                .args
+                .get(2)
+                .and_then(|arg| i128::try_from_val(&env, &arg).ok())
+                .ok_or(AllowanceError::MalformedCall)?;
+
+            if amount > rules.window_cap {
+                return Err(AllowanceError::ExceedsWindow);
             }
         }
 

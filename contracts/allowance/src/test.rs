@@ -215,3 +215,17 @@ fn a_call_to_another_token_function_is_refused() {
 
     assert_eq!(check_auth(&f, contexts), Some(AllowanceError::NotATransfer));
 }
+
+/// The thinnest version of the cap: one payment larger than the entire window allowance.
+/// It needs no history and no accumulation — a single call that could never fit, whatever
+/// else has happened.
+#[test]
+fn a_single_payment_larger_than_the_window_cap_is_refused() {
+    let f = setup();
+    let contexts = vec![&f.env, transfer(&f, &f.seller, 1_000_001)];
+
+    assert_eq!(
+        check_auth(&f, contexts),
+        Some(AllowanceError::ExceedsWindow)
+    );
+}
