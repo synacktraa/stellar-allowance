@@ -13,6 +13,56 @@ use soroban_sdk::{
     panic_with_error, symbol_short, token, Address, BytesN, Env, TryFromVal, Vec,
 };
 
+/// Who the agent is. Identity only: no assets, no amounts.
+#[contracttype]
+#[derive(Clone)]
+pub struct Agent {
+    /// A raw ed25519 public key, not an account.
+    ///
+    /// A Stellar account can have its master key removed from its signers while keeping the
+    /// same address, so an address is no evidence of who holds a key. This is the key
+    /// itself, and what `ed25519_verify` checks a signature against.
+    pub key: BytesN<32>,
+    /// The account the agent submits transactions from. A contract cannot submit one.
+    pub address: Address,
+}
+
+/// The asset this allowance spends, and what it starts with.
+#[contracttype]
+#[derive(Clone)]
+pub struct Spending {
+    pub token_address: Address,
+    /// Moved from the owner into the contract at deployment. Zero is legitimate.
+    pub initial_deposit: i128,
+}
+
+/// The asset the agent pays transaction fees in, and what it is given to start.
+///
+/// It buys one thing nothing else can: **restoring this allowance's ledger entries once
+/// they archive**. Both the instance and the spend window expire on their own clocks, and
+/// once expired every payment fails until someone pays rent to bring them back. A contract
+/// cannot submit a transaction, so an allowance can never revive itself however much it
+/// holds — the agent submits the restore from its own account, out of this.
+#[contracttype]
+#[derive(Clone)]
+pub struct AgentFunding {
+    pub native_address: Address,
+    /// Sent straight from the owner to the agent at deployment. The contract never holds it.
+    pub initial_top_up: i128,
+}
+
+/// Everything an allowance is created with. None of it is stored as a `Setup`: the
+/// constructor takes it apart and writes the fields it keeps.
+#[contracttype]
+#[derive(Clone)]
+pub struct Setup {
+    pub owner_address: Address,
+    pub agent: Agent,
+    pub spending: Spending,
+    pub agent_funding: AgentFunding,
+    pub rules: Rules,
+}
+
 /// What the owner sets: a rolling spend limit, and the addresses it may be spent on.
 #[contracttype]
 #[derive(Clone)]
@@ -94,22 +144,18 @@ pub struct Allowance;
 
 #[contractimpl]
 impl Allowance {
-    /// Runs once, at deployment.
-    ///
-    /// The agent is a raw ed25519 public key rather than an `Address`, because
-    /// `__check_auth` has to verify a signature against it and an `Address` cannot be
-    /// turned back into key bytes. It is set here and by nothing else: no function can
-    /// change it, which is a shorter thing to audit than a runtime guard.
-    pub fn __constructor(
-        env: Env,
-        owner: Address,
-        token: Address,
-        agent_key: BytesN<32>,
-        rules: Rules,
-        usdc_in: i128,
-    ) {
+    /// Runs once, at deployment. Everything set here is set for good — no function can
+    /// change the owner, the token or the agent, which is shorter to audit than a guard.
+    pub fn __constructor(env: Env, setup: Setup) {
+        let Setup {
+            owner_address: owner,
+            agent,
+            spending,
+            agent_funding,
+            rules,
+        } = setup;
         // A constructor cannot return an error, so this panics rather than returning one.
-        if usdc_in < 0 {
+        if spending.initial_deposit < 0 || agent_funding.initial_top_up < 0 {
             panic_with_error!(&env, AllowanceError::InvalidAmount);
         }
 
@@ -118,16 +164,28 @@ impl Allowance {
         owner.require_auth();
 
         env.storage().instance().set(&DataKey::Owner, &owner);
-        env.storage().instance().set(&DataKey::Token, &token);
-        env.storage().instance().set(&DataKey::AgentKey, &agent_key);
+        env.storage()
+            .instance()
+            .set(&DataKey::Token, &spending.token_address);
+        env.storage().instance().set(&DataKey::AgentKey, &agent.key);
         env.storage().instance().set(&DataKey::Rules, &rules);
 
         // A zero deposit is a legitimate deployment: rules now, funding later.
-        if usdc_in != 0 {
-            token::TokenClient::new(&env, &token).transfer(
+        if spending.initial_deposit != 0 {
+            token::TokenClient::new(&env, &spending.token_address).transfer(
                 &owner,
                 env.current_contract_address(),
-                &usdc_in,
+                &spending.initial_deposit,
+            );
+        }
+
+        // Straight from the owner to the agent. This contract never holds the native asset,
+        // and nothing in `agent_funding` is stored: nothing reads it again.
+        if agent_funding.initial_top_up != 0 {
+            token::TokenClient::new(&env, &agent_funding.native_address).transfer(
+                &owner,
+                agent.address,
+                &agent_funding.initial_top_up,
             );
         }
     }
@@ -144,8 +202,8 @@ impl Allowance {
     ///
     /// Rules are applied before money moves, so a rejected rule change cannot leave funds
     /// sitting against rules that were never applied.
-    pub fn write(env: Env, rules: Option<Rules>, usdc_in: i128) -> Result<(), AllowanceError> {
-        if usdc_in < 0 {
+    pub fn write(env: Env, rules: Option<Rules>, deposit: i128) -> Result<(), AllowanceError> {
+        if deposit < 0 {
             return Err(AllowanceError::InvalidAmount);
         }
         let owner = require_owner(&env)?;
@@ -154,11 +212,11 @@ impl Allowance {
             env.storage().instance().set(&DataKey::Rules, &rules);
         }
 
-        if usdc_in != 0 {
+        if deposit != 0 {
             token::TokenClient::new(&env, &token(&env)?).transfer(
                 &owner,
                 env.current_contract_address(),
-                &usdc_in,
+                &deposit,
             );
         }
         Ok(())
