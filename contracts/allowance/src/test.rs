@@ -589,3 +589,42 @@ fn the_owner_can_take_their_money_back() {
         "and it went back to the owner, who was not named in the call"
     );
 }
+
+/// The branch that gives `Option<Address>` its purpose. Safe only because Freighter renders
+/// a Parameters section and turns an address argument into a readable strkey, so the owner
+/// reviews the destination rather than signing an opaque invocation.
+#[test]
+fn the_owner_can_send_a_withdrawal_somewhere_else() {
+    let f = setup_with_deposit(5_000);
+    let usdc = TokenClient::new(&f.env, &f.token);
+    let elsewhere = Address::generate(&f.env);
+
+    AllowanceClient::new(&f.env, &f.allowance).withdraw(&2_000, &Some(elsewhere.clone()));
+
+    assert_eq!(usdc.balance(&f.allowance), 3_000);
+    assert_eq!(usdc.balance(&elsewhere), 2_000, "it went where it was told");
+    assert_eq!(
+        usdc.balance(&f.owner),
+        OWNER_FUNDS - 5_000,
+        "and not to the owner, who was not the destination"
+    );
+}
+
+/// `__check_auth` does not run for a direct invocation, so it protects this function not at
+/// all. Without the owner check the contract is drainable by anyone on the network, with
+/// the whole rules engine watching and doing nothing.
+#[test]
+fn nobody_but_the_owner_can_withdraw() {
+    let f = setup_with_deposit(5_000);
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+
+    // no authorisations at all, so require_auth has nothing to satisfy it
+    f.env.set_auths(&[]);
+
+    assert!(client.try_withdraw(&2_000, &None).is_err());
+    assert_eq!(
+        TokenClient::new(&f.env, &f.token).balance(&f.allowance),
+        5_000,
+        "and nothing moved"
+    );
+}
