@@ -10,7 +10,7 @@ use soroban_sdk::{
     auth::{Context, CustomAccountInterface},
     contract, contracterror, contractimpl, contracttype,
     crypto::Hash,
-    Address, BytesN, Env, TryFromVal, Vec,
+    symbol_short, Address, BytesN, Env, TryFromVal, Vec,
 };
 
 /// What the owner sets: a rolling spend limit, and the addresses it may be spent on.
@@ -45,6 +45,8 @@ pub enum AllowanceError {
     MalformedCall = 3,
     /// A transfer of a token this allowance was not set up to spend.
     WrongAsset = 4,
+    /// Aimed at the right token, but not an operation the agent may authorise.
+    NotATransfer = 5,
 }
 
 #[contract]
@@ -123,6 +125,14 @@ impl CustomAccountInterface for Allowance {
                 // This contract never creates contracts, so nothing else is legitimate.
                 _ => return Err(AllowanceError::MalformedCall),
             };
+
+            // A transfer, and nothing else. Other token functions take arguments of the
+            // same types in the same positions, so neither the asset check nor the
+            // recipient check below can distinguish them. The name is what separates
+            // paying someone from granting them a claim.
+            if call.fn_name != symbol_short!("transfer") {
+                return Err(AllowanceError::NotATransfer);
+            }
 
             // Which asset is being moved lives here, not in the arguments. Without it an
             // amount is unitless, and every rule expressed as a number is meaningless.

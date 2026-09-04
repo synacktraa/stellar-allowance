@@ -186,3 +186,32 @@ fn a_transfer_of_some_other_token_is_refused() {
 
     assert_eq!(check_auth(&f, contexts), Some(AllowanceError::WrongAsset));
 }
+
+/// x402's facilitator refuses any invocation that is not a three-argument `transfer`, so a
+/// call like this never reaches the chain by that route. The contract checks anyway: a
+/// signed auth entry can be submitted to the network directly, and what an owner concludes
+/// from reading `__check_auth` should not rest on a third party's validation.
+///
+/// `approve` stands in for the general case because its arguments line up with a
+/// transfer's — the second is a spender rather than a recipient — so every other guard
+/// here passes, and only the function name tells them apart.
+#[test]
+fn a_call_to_another_token_function_is_refused() {
+    let f = setup();
+    let contexts = vec![
+        &f.env,
+        Context::Contract(ContractContext {
+            contract: f.token.clone(),
+            fn_name: symbol_short!("approve"),
+            args: vec![
+                &f.env,
+                f.allowance.to_val(),
+                f.seller.to_val(),
+                1_000_000i128.into_val(&f.env),
+                200u32.into_val(&f.env),
+            ],
+        }),
+    ];
+
+    assert_eq!(check_auth(&f, contexts), Some(AllowanceError::NotATransfer));
+}
