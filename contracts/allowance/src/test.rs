@@ -5,7 +5,7 @@ use ed25519_dalek::{Signer, SigningKey};
 use soroban_sdk::{
     auth::{Context, ContractContext},
     symbol_short,
-    testutils::{Address as _, BytesN as _},
+    testutils::{Address as _, BytesN as _, Ledger as _},
     vec, Address, BytesN, Env, IntoVal,
 };
 
@@ -246,5 +246,40 @@ fn payments_that_together_exceed_the_cap_are_refused() {
         check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 600_000)]),
         Some(AllowanceError::ExceedsWindow),
         "the second takes the window to 1,200,000 against a cap of 1,000,000"
+    );
+}
+
+/// Both halves of "rolling", in one test, because either alone can be satisfied by an
+/// implementation that is wrong in the other direction.
+///
+/// A counter that resets on a fixed boundary passes the ageing-out assertion and fails the
+/// middle one: spend the cap just before the boundary and again just after, and the agent
+/// has moved twice the limit in two ledgers. A counter that never forgets passes the
+/// middle one and fails the last. Only a window that expires spending individually,
+/// by age, passes both.
+#[test]
+fn the_window_rolls_rather_than_resetting() {
+    let f = setup();
+    let start = f.env.ledger().sequence();
+
+    f.env.ledger().set_sequence_number(start + WINDOW - 1);
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1_000_000)]),
+        None,
+        "the whole cap, spent at the end of a would-be period"
+    );
+
+    f.env.ledger().set_sequence_number(start + WINDOW + 1);
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1_000_000)]),
+        Some(AllowanceError::ExceedsWindow),
+        "two ledgers later: a resetting counter would hand over a fresh cap here"
+    );
+
+    f.env.ledger().set_sequence_number(start + WINDOW * 2 + 2);
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1_000_000)]),
+        None,
+        "a full window after the spend, it has aged out"
     );
 }

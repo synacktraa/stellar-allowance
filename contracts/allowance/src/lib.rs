@@ -25,6 +25,24 @@ pub struct Rules {
     pub allowlist: Vec<Address>,
 }
 
+/// Slices the rolling window is cut into. Spending is remembered per slice rather than
+/// per payment, so the entry is the same size after a million payments as after one.
+const SLICES: u32 = 24;
+
+/// One slot more than there are slices, because the slice we are currently in has only
+/// partly elapsed. With exactly `SLICES` slots the remembered span would be shorter than
+/// the window the owner asked for, and spending would age out early — which errs toward
+/// letting a payment through. The extra slot makes the span err long instead.
+const SLOTS: usize = SLICES as usize + 1;
+
+/// What the window remembers: a running total per slice, and which slice was written last.
+#[contracttype]
+#[derive(Clone)]
+pub struct Window {
+    pub slots: Vec<i128>,
+    pub head: u32,
+}
+
 #[contracttype]
 #[derive(Clone)]
 enum DataKey {
@@ -32,7 +50,7 @@ enum DataKey {
     Token,
     AgentKey,
     Rules,
-    Spent,
+    Window,
 }
 
 #[contracterror]
@@ -119,7 +137,9 @@ impl CustomAccountInterface for Allowance {
             .get(&DataKey::Token)
             .ok_or(AllowanceError::NotInitialized)?;
 
-        let mut spent: i128 = env.storage().persistent().get(&DataKey::Spent).unwrap_or(0);
+        let (mut window, slice) = rolled_window(&env, rules.window_ledgers);
+        let mut total: i128 = window.slots.iter().sum();
+        let mut added: i128 = 0;
 
         // Every invocation the signature would cover, not just the first. A signature
         // authorises the whole tree, so a rule checked on one entry and skipped on the
@@ -165,16 +185,55 @@ impl CustomAccountInterface for Allowance {
             // Accumulated, not per call: the cap governs the window, so every payment is
             // measured against what is already inside it. With nothing spent yet this
             // still refuses a single call larger than the whole budget.
-            spent += amount;
-            if spent > rules.window_cap {
+            total += amount;
+            if total > rules.window_cap {
                 return Err(AllowanceError::ExceedsWindow);
             }
+            added += amount;
         }
 
-        env.storage().persistent().set(&DataKey::Spent, &spent);
+        let here = slice % SLOTS as u32;
+        window
+            .slots
+            .set(here, window.slots.get(here).unwrap_or(0) + added);
+        env.storage().persistent().set(&DataKey::Window, &window);
 
         Ok(())
     }
+}
+
+/// Loads the window and empties the slices that have aged out of it, returning the window
+/// and the slice we are in now.
+///
+/// Slices expire one at a time as the ledger advances, which is what makes this window
+/// roll. A counter reset on a fixed boundary would let an agent spend the whole cap on
+/// either side of that boundary, moments apart.
+fn rolled_window(env: &Env, window_ledgers: u32) -> (Window, u32) {
+    // Never zero: a window narrower than the slice count still gets a ledger per slice,
+    // which makes it wider than asked rather than a division by zero.
+    let width = (window_ledgers / SLICES).max(1);
+    let slice = env.ledger().sequence() / width;
+
+    let mut window: Window = env
+        .storage()
+        .persistent()
+        .get(&DataKey::Window)
+        .unwrap_or(Window {
+            slots: Vec::from_array(env, [0i128; SLOTS]),
+            head: slice,
+        });
+
+    if slice > window.head {
+        // Anything older than a full turn of the ring is gone regardless, so never clear
+        // more slots than exist.
+        let stale = (slice - window.head).min(SLOTS as u32);
+        for n in 1..=stale {
+            window.slots.set((window.head + n) % SLOTS as u32, 0);
+        }
+        window.head = slice;
+    }
+
+    (window, slice)
 }
 
 mod test;
