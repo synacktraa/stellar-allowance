@@ -651,3 +651,64 @@ fn a_withdrawal_of_nothing_or_less_is_refused() {
         "and the balance is exactly as it was"
     );
 }
+
+/// Rules are observable only through what the agent may do, so that is where this is
+/// checked — no getter is involved, and the test would survive the storage layout changing
+/// underneath it.
+#[test]
+fn the_owner_can_change_the_rules() {
+    let f = setup();
+    let newcomer = Address::generate(&f.env);
+
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &newcomer, 1)]),
+        Some(AllowanceError::RecipientNotAllowed),
+        "not approved to begin with"
+    );
+
+    AllowanceClient::new(&f.env, &f.allowance).write(
+        &Some(Rules {
+            window_ledgers: WINDOW,
+            window_cap: 1_000_000,
+            allowlist: vec![&f.env, newcomer.clone()],
+        }),
+        &0,
+    );
+
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &newcomer, 1)]),
+        None,
+        "and approved afterwards, without redeploying anything"
+    );
+}
+
+/// Found by mutation, not by design: removing `require_owner` from `write` passed the whole
+/// suite. It is the worse of the two unguarded-owner-function outcomes. Draining the
+/// contract takes the money that is there; rewriting the allowlist points the agent at the
+/// attacker and has the rules engine authorise every payment afterwards.
+#[test]
+fn nobody_but_the_owner_can_change_the_rules() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+    let attacker = Address::generate(&f.env);
+
+    // no authorisations at all, so require_auth has nothing to satisfy it
+    f.env.set_auths(&[]);
+
+    assert!(client
+        .try_write(
+            &Some(Rules {
+                window_ledgers: WINDOW,
+                window_cap: i128::MAX,
+                allowlist: vec![&f.env, attacker.clone()],
+            }),
+            &0,
+        )
+        .is_err());
+
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &attacker, 1)]),
+        Some(AllowanceError::RecipientNotAllowed),
+        "and the allowlist is exactly as the owner left it"
+    );
+}

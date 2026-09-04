@@ -127,6 +127,38 @@ impl Allowance {
         }
     }
 
+    /// Everything the owner changes afterwards, in one invocation and one signature.
+    ///
+    /// `rules: None` means *leave them alone*, never *clear them*. The caller sends a diff
+    /// of what the owner actually touched, so an edit that only adds credit must not arrive
+    /// carrying an allowlist and overwrite the real one.
+    ///
+    /// The owner is loaded rather than passed. An argument that exists only to be checked
+    /// against storage is an argument that can be wrong for no benefit. The agent is not a
+    /// parameter at all: it cannot change.
+    ///
+    /// Rules are applied before money moves, so a rejected rule change cannot leave funds
+    /// sitting against rules that were never applied.
+    pub fn write(env: Env, rules: Option<Rules>, usdc_in: i128) -> Result<(), AllowanceError> {
+        if usdc_in < 0 {
+            return Err(AllowanceError::InvalidAmount);
+        }
+        let owner = require_owner(&env)?;
+
+        if let Some(rules) = rules {
+            env.storage().instance().set(&DataKey::Rules, &rules);
+        }
+
+        if usdc_in != 0 {
+            token::TokenClient::new(&env, &token(&env)?).transfer(
+                &owner,
+                env.current_contract_address(),
+                &usdc_in,
+            );
+        }
+        Ok(())
+    }
+
     /// The owner takes their own money back. `to` falls back to the stored owner.
     ///
     /// No rule applies. The window and the allowlist constrain the agent; this is not a
