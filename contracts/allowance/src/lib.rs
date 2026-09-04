@@ -82,6 +82,8 @@ pub enum AllowanceError {
     NotATransfer = 5,
     /// More than the rolling window still allows.
     ExceedsWindow = 6,
+    /// The owner has stopped the agent.
+    Disabled = 7,
 }
 
 #[contract]
@@ -134,11 +136,15 @@ impl Allowance {
     /// Stored negatively and read positively: an allowance with nothing written is enabled,
     /// and the single negation lives here rather than at every call site.
     pub fn enabled(env: Env) -> bool {
-        !env.storage()
-            .instance()
-            .get(&DataKey::Disabled)
-            .unwrap_or(false)
+        !disabled(&env)
     }
+}
+
+fn disabled(env: &Env) -> bool {
+    env.storage()
+        .instance()
+        .get(&DataKey::Disabled)
+        .unwrap_or(false)
 }
 
 /// Loads the owner and demands their signature. Every owner-facing function goes through
@@ -174,6 +180,14 @@ impl CustomAccountInterface for Allowance {
         signature: BytesN<64>,
         contexts: Vec<Context>,
     ) -> Result<(), AllowanceError> {
+        // Asked first, because it is whole-contract state rather than anything about this
+        // particular payment: there is nothing to check about a call to an allowance that
+        // is not operating. It is also the cheapest check here, which is why a stopped
+        // agent never pays for an ed25519 verification.
+        if disabled(&env) {
+            return Err(AllowanceError::Disabled);
+        }
+
         let agent_key: BytesN<32> = env
             .storage()
             .instance()

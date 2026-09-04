@@ -369,3 +369,17 @@ fn the_owner_can_disable_the_agent() {
         "and it was the owner's signature that was demanded, nobody else's"
     );
 }
+
+/// Until this holds, the brake is wired to nothing: the owner can push it and the agent
+/// carries on spending. Everything else about the payment here is impeccable — right
+/// signer, right token, allowlisted seller, one unit against a million-unit cap.
+#[test]
+fn a_disabled_allowance_pays_nobody() {
+    let f = setup();
+    AllowanceClient::new(&f.env, &f.allowance).disable();
+
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1)]),
+        Some(AllowanceError::Disabled)
+    );
+}
