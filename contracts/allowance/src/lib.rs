@@ -246,6 +246,14 @@ impl CustomAccountInterface for Allowance {
                 return Err(AllowanceError::NotATransfer);
             }
 
+            // Exactly the three-argument transfer, and nothing that merely shares its
+            // name. The recipient and the amount are read positionally below, which only
+            // means anything against the standard token interface — and the token address
+            // is the owner's choice, not this contract's.
+            if call.args.len() != 3 {
+                return Err(AllowanceError::MalformedCall);
+            }
+
             // Which asset is being moved lives here, not in the arguments. Without it an
             // amount is unitless, and every rule expressed as a number is meaningless.
             if call.contract != token {

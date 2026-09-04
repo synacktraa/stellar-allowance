@@ -493,3 +493,36 @@ fn the_owner_can_still_act_on_an_archived_allowance() {
     client.disable();
     assert!(!client.enabled(), "the owner reached a dormant contract");
 }
+
+/// The contract reads a recipient out of `args[1]` and an amount out of `args[2]`, which
+/// only means what it thinks it means for the three-argument transfer of the standard
+/// token interface. Nothing so far checks there are three.
+///
+/// A four-argument call named `transfer` therefore passes every guard: the seller sits in
+/// slot 1, a small number sits in slot 2, and the contract authorises whatever the fourth
+/// argument turns out to do. The owner chooses the token address at construction, so this
+/// is not hypothetical — it is the contract declining to assume the shape of somebody
+/// else's ABI.
+#[test]
+fn a_transfer_with_the_wrong_number_of_arguments_is_refused() {
+    let f = setup();
+    let contexts = vec![
+        &f.env,
+        Context::Contract(ContractContext {
+            contract: f.token.clone(),
+            fn_name: symbol_short!("transfer"),
+            args: vec![
+                &f.env,
+                f.allowance.to_val(),
+                f.seller.to_val(),
+                100i128.into_val(&f.env),
+                42u32.into_val(&f.env),
+            ],
+        }),
+    ];
+
+    assert_eq!(
+        check_auth(&f, contexts),
+        Some(AllowanceError::MalformedCall)
+    );
+}
