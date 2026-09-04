@@ -16,6 +16,10 @@ use soroban_sdk::{
 /// with tests that are not about the window.
 const WINDOW: u32 = 17_280;
 
+/// Testnet's `minPersistentTTL`: what a persistent entry is born with, and what a restore
+/// gives it back.
+const PERSISTENT_TTL: u32 = 120_960;
+
 struct Fixture {
     owner: Address,
     env: Env,
@@ -31,7 +35,7 @@ fn setup() -> Fixture {
 
     // Testnet's real archival settings. The defaults are far shorter, which hides TTL
     // behaviour entirely: an entry expires mid-test and protocol 23 silently restores it.
-    env.ledger().set_min_persistent_entry_ttl(120_960); // 7 days
+    env.ledger().set_min_persistent_entry_ttl(PERSISTENT_TTL);
     env.ledger().set_max_entry_ttl(3_110_400); // 180 days
 
     let owner = Address::generate(&env);
@@ -426,4 +430,66 @@ fn starting_again_does_not_hand_back_a_spent_window() {
         Some(AllowanceError::ExceedsWindow),
         "the window survived the round trip"
     );
+}
+
+/// Archival is not deletion. A persistent entry that lapses is put away and comes back
+/// intact, so a stop stays pushed across a week of silence.
+///
+/// The reason this needs pinning is what the alternative would have done. In *temporary*
+/// storage the flag would be **deleted** on expiry, `unwrap_or(false)` would read "not
+/// disabled", and the stop button would un-press itself — an owner who disabled a
+/// suspicious agent and walked away would come back to a live one. Nothing in the contract
+/// says "this must never be temporary" except this test.
+#[test]
+fn a_stopped_agent_is_still_stopped_after_the_instance_archives() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+    client.disable();
+
+    // past the whole TTL, with nothing winding it
+    f.env
+        .ledger()
+        .set_sequence_number(f.env.ledger().sequence() + PERSISTENT_TTL + 1);
+
+    // Auto-restoration is otherwise invisible, and this is what separates "archived and
+    // came back" from "never expired at all": decay alone would have left nothing here,
+    // while a restore hands back a full TTL.
+    let revived = f
+        .env
+        .as_contract(&f.allowance, || f.env.storage().instance().get_ttl());
+    assert!(
+        revived >= PERSISTENT_TTL - 1,
+        "expected a restored entry, got a TTL of {revived}"
+    );
+
+    assert!(
+        !client.enabled(),
+        "the flag came back from archival as it went in"
+    );
+}
+
+/// An owner is never locked out of their own allowance. Their calls carry no fee ceiling,
+/// so protocol 23 restores the archived entry inside the transaction and the call simply
+/// works — about 57,133 stroops dearer.
+///
+/// The other half of that story cannot be expressed here: on chain the *agent* is stuck,
+/// because 57,133 is over the facilitator's 50,000 ceiling. The test environment models no
+/// such ceiling, so this pins only that owner functions survive archival at all.
+#[test]
+fn the_owner_can_still_act_on_an_archived_allowance() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1)]),
+        None,
+        "a payment first, to bring the window entry into existence"
+    );
+
+    f.env
+        .ledger()
+        .set_sequence_number(f.env.ledger().sequence() + PERSISTENT_TTL + 1);
+
+    client.disable();
+    assert!(!client.enabled(), "the owner reached a dormant contract");
 }
