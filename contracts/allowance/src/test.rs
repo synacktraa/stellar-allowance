@@ -5,7 +5,10 @@ use ed25519_dalek::{Signer, SigningKey};
 use soroban_sdk::{
     auth::{Context, ContractContext},
     symbol_short,
-    testutils::{Address as _, BytesN as _, Ledger as _},
+    testutils::{
+        storage::{Instance as _, Persistent as _},
+        Address as _, BytesN as _, Ledger as _,
+    },
     vec, Address, BytesN, Env, IntoVal,
 };
 
@@ -24,6 +27,11 @@ struct Fixture {
 fn setup() -> Fixture {
     let env = Env::default();
     env.mock_all_auths();
+
+    // Testnet's real archival settings. The defaults are far shorter, which hides TTL
+    // behaviour entirely: an entry expires mid-test and protocol 23 silently restores it.
+    env.ledger().set_min_persistent_entry_ttl(120_960); // 7 days
+    env.ledger().set_max_entry_ttl(3_110_400); // 180 days
 
     let owner = Address::generate(&env);
     let token = Address::generate(&env);
@@ -281,5 +289,58 @@ fn the_window_rolls_rather_than_resetting() {
         check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1_000_000)]),
         None,
         "a full window after the spend, it has aged out"
+    );
+}
+
+/// The two clocks a payment depends on, read from inside the contract.
+fn clocks(f: &Fixture) -> (u32, u32) {
+    f.env.as_contract(&f.allowance, || {
+        (
+            f.env.storage().instance().get_ttl(),
+            f.env.storage().persistent().get_ttl(&DataKey::Window),
+        )
+    })
+}
+
+/// Nothing about using a contract keeps it alive — not invoking it, not writing to it.
+/// Both clocks run down from the day the entry was created, so unless the payment path
+/// tops them up the allowance stops working about a week after it is deployed, and the
+/// only way out is a restore that costs more than a year of upkeep.
+#[test]
+fn a_payment_tops_up_the_clocks_it_depends_on() {
+    let f = setup();
+
+    // the first payment brings the window entry into existence
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1)]),
+        None
+    );
+
+    let (instance_fresh, window_fresh) = clocks(&f);
+
+    // let a day drain away
+    f.env
+        .ledger()
+        .set_sequence_number(f.env.ledger().sequence() + 17_280);
+    let (instance_drained, window_drained) = clocks(&f);
+    assert!(
+        instance_drained < instance_fresh && window_drained < window_fresh,
+        "the clocks should have run down on their own"
+    );
+
+    // a second payment should put them back
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1)]),
+        None
+    );
+    let (instance_after, window_after) = clocks(&f);
+
+    assert!(
+        instance_after > instance_drained,
+        "the instance clock was not topped up: {instance_drained} -> {instance_after}"
+    );
+    assert!(
+        window_after > window_drained,
+        "the window clock was not topped up: {window_drained} -> {window_after}"
     );
 }

@@ -35,6 +35,19 @@ const SLICES: u32 = 24;
 /// letting a payment through. The extra slot makes the span err long instead.
 const SLOTS: usize = SLICES as usize + 1;
 
+/// What the clocks are topped back up to. A persistent entry is born with seven days, and
+/// this keeps it there rather than reaching further: rent is charged on the ledgers added,
+/// and the whole payment has to fit under the facilitator's fee ceiling.
+const TTL_TARGET: u32 = 120_960;
+
+/// How far a clock may drain before a payment tops it up.
+///
+/// `extend_ttl` writes nothing while the TTL is still above the threshold, so with an
+/// hour's gap only the first payment after each hour of drain does any work — every other
+/// payment finds the clock nearly full and moves on. When it does fire it buys back just
+/// the hour that drained, around 2,600 stroops, rather than weeks at once.
+const TTL_THRESHOLD: u32 = TTL_TARGET - 720;
+
 /// What the window remembers: a running total per slice, and which slice was written last.
 #[contracttype]
 #[derive(Clone)]
@@ -197,6 +210,25 @@ impl CustomAccountInterface for Allowance {
             .slots
             .set(here, window.slots.get(here).unwrap_or(0) + added);
         env.storage().persistent().set(&DataKey::Window, &window);
+
+        // Neither invoking a contract nor writing to it extends anything — both measured —
+        // so the payment path has to say so explicitly, or the allowance stops working
+        // about a week after it is deployed and needs a restore costing more than a year
+        // of upkeep.
+        //
+        // Reached through the deployer interface, at this contract's own address, because
+        // `storage().instance().extend_ttl` extends the contract *code* as well. That is
+        // the call in nearly every Soroban example, and a 13KB wasm costs three times the
+        // facilitator's whole fee ceiling for a single hour — every payment would be
+        // refused, for a reason that mentions neither TTL nor rent.
+        env.deployer().extend_ttl_for_contract_instance(
+            env.current_contract_address(),
+            TTL_THRESHOLD,
+            TTL_TARGET,
+        );
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Window, TTL_THRESHOLD, TTL_TARGET);
 
         Ok(())
     }
