@@ -40,7 +40,13 @@ fn setup() -> Fixture {
 
     let allowance = env.register(Allowance, (owner, token.clone(), agent_key, rules));
 
-    Fixture { env, allowance, token, seller, agent }
+    Fixture {
+        env,
+        allowance,
+        token,
+        seller,
+        agent,
+    }
 }
 
 /// What the agent actually signs: the raw 32 bytes of the payload hash, nothing wrapped
@@ -80,5 +86,29 @@ fn agent_signature_authorises_a_payment_to_an_allowlisted_seller() {
         &contexts,
     );
 
-    assert!(result.is_ok(), "expected the payment to be authorised, got {result:?}");
+    assert!(
+        result.is_ok(),
+        "expected the payment to be authorised, got {result:?}"
+    );
+}
+
+#[test]
+fn a_signature_from_any_other_key_is_refused() {
+    let f = setup();
+    let impostor = SigningKey::from_bytes(&[9u8; 32]);
+    let payload = BytesN::random(&f.env);
+    let signature = BytesN::from_array(&f.env, &sign_payload(&impostor, &payload));
+    let contexts = transfer_context(&f, &f.seller, 100);
+
+    let result = f.env.try_invoke_contract_check_auth::<AllowanceError>(
+        &f.allowance,
+        &payload,
+        signature.to_val(),
+        &contexts,
+    );
+
+    assert!(
+        result.is_err(),
+        "a forged signature must not authorise a payment"
+    );
 }
