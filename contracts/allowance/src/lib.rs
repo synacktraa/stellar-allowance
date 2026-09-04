@@ -129,6 +129,21 @@ impl Allowance {
         Ok(())
     }
 
+    /// Lets the agent spend again, under whatever the rules now say.
+    ///
+    /// Nothing is given up by allowing this. Only the owner can stop it and only the owner
+    /// can start it, and every rule is checked on every payment either way — so an
+    /// allowance that has been started again is no more permissive than it was before it
+    /// was stopped.
+    ///
+    /// The spend window is deliberately untouched. A stop and a start is not a way to buy
+    /// a fresh budget.
+    pub fn enable(env: Env) -> Result<(), AllowanceError> {
+        require_owner(&env)?;
+        env.storage().instance().set(&DataKey::Disabled, &false);
+        Ok(())
+    }
+
     /// Whether the agent may spend. Public because the claim this product makes is that
     /// one named person controls this money, and a claim nobody can check from outside is
     /// not worth much.

@@ -383,3 +383,47 @@ fn a_disabled_allowance_pays_nobody() {
         Some(AllowanceError::Disabled)
     );
 }
+
+#[test]
+fn the_owner_can_start_the_agent_again() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+
+    client.disable();
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1)]),
+        Some(AllowanceError::Disabled)
+    );
+
+    client.enable();
+
+    assert!(client.enabled());
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1)]),
+        None
+    );
+}
+
+/// Regression guard. Clearing state on resume is a plausible, well-meant change — and it
+/// would turn the stop button into a way of buying a fresh budget: spend the cap, stop,
+/// start, spend it again. The window belongs to the clock, not to the switch.
+#[test]
+fn starting_again_does_not_hand_back_a_spent_window() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1_000_000)]),
+        None,
+        "the whole cap, spent"
+    );
+
+    client.disable();
+    client.enable();
+
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1)]),
+        Some(AllowanceError::ExceedsWindow),
+        "the window survived the round trip"
+    );
+}
