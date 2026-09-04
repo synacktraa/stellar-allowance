@@ -229,3 +229,22 @@ fn a_single_payment_larger_than_the_window_cap_is_refused() {
         Some(AllowanceError::ExceedsWindow)
     );
 }
+
+/// Two payments that each fit comfortably and together do not. This is the half of the
+/// rule that needs memory: nothing so far survives between calls, so the second is waved
+/// through and the cap has been doubled.
+#[test]
+fn payments_that_together_exceed_the_cap_are_refused() {
+    let f = setup();
+
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 600_000)]),
+        None,
+        "the first payment is well inside the cap"
+    );
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 600_000)]),
+        Some(AllowanceError::ExceedsWindow),
+        "the second takes the window to 1,200,000 against a cap of 1,000,000"
+    );
+}

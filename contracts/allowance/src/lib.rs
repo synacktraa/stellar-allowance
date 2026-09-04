@@ -32,6 +32,7 @@ enum DataKey {
     Token,
     AgentKey,
     Rules,
+    Spent,
 }
 
 #[contracterror]
@@ -118,6 +119,8 @@ impl CustomAccountInterface for Allowance {
             .get(&DataKey::Token)
             .ok_or(AllowanceError::NotInitialized)?;
 
+        let mut spent: i128 = env.storage().persistent().get(&DataKey::Spent).unwrap_or(0);
+
         // Every invocation the signature would cover, not just the first. A signature
         // authorises the whole tree, so a rule checked on one entry and skipped on the
         // next is not a rule.
@@ -152,18 +155,23 @@ impl CustomAccountInterface for Allowance {
                 return Err(AllowanceError::RecipientNotAllowed);
             }
 
-            // The amount lives in the last argument. A call bigger than the whole window
-            // can be refused on its own, without consulting anything already spent.
+            // The amount lives in the last argument.
             let amount = call
                 .args
                 .get(2)
                 .and_then(|arg| i128::try_from_val(&env, &arg).ok())
                 .ok_or(AllowanceError::MalformedCall)?;
 
-            if amount > rules.window_cap {
+            // Accumulated, not per call: the cap governs the window, so every payment is
+            // measured against what is already inside it. With nothing spent yet this
+            // still refuses a single call larger than the whole budget.
+            spent += amount;
+            if spent > rules.window_cap {
                 return Err(AllowanceError::ExceedsWindow);
             }
         }
+
+        env.storage().persistent().set(&DataKey::Spent, &spent);
 
         Ok(())
     }
