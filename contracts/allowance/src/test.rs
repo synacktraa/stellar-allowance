@@ -17,6 +17,7 @@ use soroban_sdk::{
 const WINDOW: u32 = 17_280;
 
 struct Fixture {
+    owner: Address,
     env: Env,
     allowance: Address,
     token: Address,
@@ -34,6 +35,7 @@ fn setup() -> Fixture {
     env.ledger().set_max_entry_ttl(3_110_400); // 180 days
 
     let owner = Address::generate(&env);
+    let owner_addr = owner.clone();
     let token = Address::generate(&env);
     let seller = Address::generate(&env);
 
@@ -49,6 +51,7 @@ fn setup() -> Fixture {
     let allowance = env.register(Allowance, (owner, token.clone(), agent_key, rules));
 
     Fixture {
+        owner: owner_addr,
         env,
         allowance,
         token,
@@ -342,5 +345,27 @@ fn a_payment_tops_up_the_clocks_it_depends_on() {
     assert!(
         window_after > window_drained,
         "the window clock was not topped up: {window_drained} -> {window_after}"
+    );
+}
+
+/// The emergency brake. It moves no money, so it cannot fail for balance reasons — which
+/// is exactly what you want from a stop button.
+#[test]
+fn the_owner_can_disable_the_agent() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+
+    assert!(client.enabled(), "an allowance starts out running");
+
+    client.disable();
+    // Captured immediately: env.auths() reports the most recent invocation, and any call
+    // in between would overwrite it with one that demanded nothing.
+    let demanded = f.env.auths().first().map(|(who, _)| who.clone());
+
+    assert!(!client.enabled(), "the brake is on");
+    assert_eq!(
+        demanded,
+        Some(f.owner.clone()),
+        "and it was the owner's signature that was demanded, nobody else's"
     );
 }

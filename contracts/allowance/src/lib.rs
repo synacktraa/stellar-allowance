@@ -64,6 +64,7 @@ enum DataKey {
     AgentKey,
     Rules,
     Window,
+    Disabled,
 }
 
 #[contracterror]
@@ -106,6 +107,50 @@ impl Allowance {
         env.storage().instance().set(&DataKey::AgentKey, &agent_key);
         env.storage().instance().set(&DataKey::Rules, &rules);
     }
+
+    /// Immediate, total stop. Moves no money, so it cannot fail for balance reasons —
+    /// which is what you want from an emergency brake.
+    ///
+    /// Named for a switch rather than for revocation, because it is one: revocation is
+    /// permanent everywhere else it appears in security, and this is meant to be pushed
+    /// back. A brake that cannot be released is a demolition.
+    ///
+    /// It stops the *agent*. The owner can still take their own money out.
+    ///
+    /// `__check_auth` offers this function no protection whatsoever. It runs only when the
+    /// contract authorises itself as a payer inside someone else's transaction; anything
+    /// the contract does during its own invocation is authorised automatically. So the
+    /// owner check here is not defence in depth, it is the only defence.
+    pub fn disable(env: Env) -> Result<(), AllowanceError> {
+        require_owner(&env)?;
+        env.storage().instance().set(&DataKey::Disabled, &true);
+        Ok(())
+    }
+
+    /// Whether the agent may spend. Public because the claim this product makes is that
+    /// one named person controls this money, and a claim nobody can check from outside is
+    /// not worth much.
+    ///
+    /// Stored negatively and read positively: an allowance with nothing written is enabled,
+    /// and the single negation lives here rather than at every call site.
+    pub fn enabled(env: Env) -> bool {
+        !env.storage()
+            .instance()
+            .get(&DataKey::Disabled)
+            .unwrap_or(false)
+    }
+}
+
+/// Loads the owner and demands their signature. Every owner-facing function goes through
+/// here, so there is one place to look when asking who may do what.
+fn require_owner(env: &Env) -> Result<Address, AllowanceError> {
+    let owner: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::Owner)
+        .ok_or(AllowanceError::NotInitialized)?;
+    owner.require_auth();
+    Ok(owner)
 }
 
 #[contractimpl]
