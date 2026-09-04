@@ -564,7 +564,8 @@ fn the_constructor_pulls_the_owners_deposit_in() {
 /// `usdc_in > 0`, so without an explicit refusal a negative amount would skip the transfer
 /// entirely and the contract would deploy looking funded when nothing moved.
 #[test]
-#[should_panic(expected = "Error(Contract, #8)")]
+// #108 rather than the SAC's #8: this asserts the refusal is ours.
+#[should_panic(expected = "Error(Contract, #108)")]
 fn a_negative_deposit_is_refused() {
     setup_with_deposit(-1);
 }
@@ -730,5 +731,29 @@ fn a_write_that_names_no_rules_leaves_them_alone() {
         check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1)]),
         None,
         "and the seller the owner approved is still approved"
+    );
+}
+
+/// Zero is accepted here, unlike on `withdraw`. A write is a diff, and an empty one is
+/// legitimate — the owner may have changed only something this contract does not store,
+/// like the allowance's name. Negative is refused, because a deposit that reverses
+/// direction is not a deposit.
+#[test]
+fn a_write_cannot_deposit_a_negative_amount() {
+    let f = setup_with_deposit(1_000);
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+
+    assert!(
+        client.try_write(&None, &0).is_ok(),
+        "an empty diff is legal"
+    );
+    assert_eq!(
+        client.try_write(&None, &-1).err(),
+        Some(Ok(AllowanceError::InvalidAmount))
+    );
+    assert_eq!(
+        TokenClient::new(&f.env, &f.token).balance(&f.allowance),
+        1_000,
+        "and nothing moved either way"
     );
 }

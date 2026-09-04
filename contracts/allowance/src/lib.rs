@@ -63,25 +63,30 @@ enum DataKey {
     Disabled,
 }
 
+/// Discriminants start at 101 so that none of them can be confused with the Stellar
+/// Asset Contract's own, which occupy 1-13. A contract error carries no record of which
+/// contract raised it, and the token is in the call tree of every payment - so overlapping
+/// numbers would have the library reporting the token's failures as this contract's rules.
+/// SAC 10 is BalanceError, the commonest real failure of all.
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum AllowanceError {
-    NotInitialized = 1,
+    NotInitialized = 101,
     /// The agent asked to pay someone the owner never approved.
-    RecipientNotAllowed = 2,
+    RecipientNotAllowed = 102,
     /// The invocation being authorised is not a shape this contract recognises.
-    MalformedCall = 3,
+    MalformedCall = 103,
     /// A transfer of a token this allowance was not set up to spend.
-    WrongAsset = 4,
+    WrongAsset = 104,
     /// Aimed at the right token, but not an operation the agent may authorise.
-    NotATransfer = 5,
+    NotATransfer = 105,
     /// More than the rolling window still allows.
-    ExceedsWindow = 6,
+    ExceedsWindow = 106,
     /// The owner has stopped the agent.
-    Disabled = 7,
+    Disabled = 107,
     /// An amount that cannot mean what it says.
-    InvalidAmount = 8,
+    InvalidAmount = 108,
 }
 
 #[contract]
