@@ -131,8 +131,6 @@ fn a_payment_to_an_address_off_the_allowlist_is_refused() {
     );
 }
 
-/// Regression guard, not a driven cycle: the loop was written before this test existed.
-///
 /// A signature covers the whole invocation tree, so checking only the root would let an
 /// attacker append a second transfer to themselves. What makes this worth pinning is that
 /// x402's `exact` scheme forbids sub-invocations — which makes "the protocol guarantees a

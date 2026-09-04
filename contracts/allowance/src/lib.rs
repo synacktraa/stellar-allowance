@@ -13,9 +13,7 @@ use soroban_sdk::{
     Address, BytesN, Env, TryFromVal, Vec,
 };
 
-/// What the owner sets. Three numbers, not four: the per-call cap collapsed into the
-/// rolling window, because one call larger than the whole window cap is already refused
-/// by the window itself.
+/// What the owner sets: a rolling spend limit, and the addresses it may be spent on.
 #[contracttype]
 #[derive(Clone)]
 pub struct Rules {
