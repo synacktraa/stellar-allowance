@@ -712,3 +712,23 @@ fn nobody_but_the_owner_can_change_the_rules() {
         "and the allowlist is exactly as the owner left it"
     );
 }
+
+/// The caller sends a diff of what the owner actually touched, so an edit that only adds
+/// credit arrives with no rules attached. `None` has to mean *leave them alone* — if it
+/// ever came to mean *clear them*, topping up an allowance would silently empty its
+/// allowlist, and the next payment would fail for a reason unrelated to anything the owner
+/// did.
+#[test]
+fn a_write_that_names_no_rules_leaves_them_alone() {
+    let f = setup_with_deposit(1_000);
+    let usdc = TokenClient::new(&f.env, &f.token);
+
+    AllowanceClient::new(&f.env, &f.allowance).write(&None, &4_000);
+
+    assert_eq!(usdc.balance(&f.allowance), 5_000, "the credit arrived");
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1)]),
+        None,
+        "and the seller the owner approved is still approved"
+    );
+}
