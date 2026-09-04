@@ -628,3 +628,26 @@ fn nobody_but_the_owner_can_withdraw() {
         "and nothing moved"
     );
 }
+
+/// Zero is refused here although a zero *deposit* is accepted at construction, and the
+/// asymmetry is deliberate: deploying without funding is a real workflow — rules now,
+/// money later — while withdrawing nothing is a transaction that cost a fee to do nothing.
+#[test]
+fn a_withdrawal_of_nothing_or_less_is_refused() {
+    let f = setup_with_deposit(5_000);
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+
+    assert_eq!(
+        client.try_withdraw(&0, &None).err(),
+        Some(Ok(AllowanceError::InvalidAmount))
+    );
+    assert_eq!(
+        client.try_withdraw(&-1, &None).err(),
+        Some(Ok(AllowanceError::InvalidAmount))
+    );
+    assert_eq!(
+        TokenClient::new(&f.env, &f.token).balance(&f.allowance),
+        5_000,
+        "and the balance is exactly as it was"
+    );
+}
