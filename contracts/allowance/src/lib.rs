@@ -10,7 +10,7 @@ use soroban_sdk::{
     auth::{Context, CustomAccountInterface},
     contract, contracterror, contractimpl, contracttype,
     crypto::Hash,
-    symbol_short, Address, BytesN, Env, TryFromVal, Vec,
+    panic_with_error, symbol_short, token, Address, BytesN, Env, TryFromVal, Vec,
 };
 
 /// What the owner sets: a rolling spend limit, and the addresses it may be spent on.
@@ -84,6 +84,8 @@ pub enum AllowanceError {
     ExceedsWindow = 6,
     /// The owner has stopped the agent.
     Disabled = 7,
+    /// An amount that cannot mean what it says.
+    InvalidAmount = 8,
 }
 
 #[contract]
@@ -103,11 +105,33 @@ impl Allowance {
         token: Address,
         agent_key: BytesN<32>,
         rules: Rules,
+        usdc_in: i128,
     ) {
+        // A constructor cannot return an error, so this panics rather than returning one.
+        // It has to be checked: the transfer below is guarded by `usdc_in > 0`, so a
+        // negative amount would skip it silently and the contract would deploy looking
+        // funded while nothing moved.
+        if usdc_in < 0 {
+            panic_with_error!(&env, AllowanceError::InvalidAmount);
+        }
+
+        // Covers the nested transfer through the auth tree, which is what keeps deploying
+        // and funding to a single confirmation.
+        owner.require_auth();
+
         env.storage().instance().set(&DataKey::Owner, &owner);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::AgentKey, &agent_key);
         env.storage().instance().set(&DataKey::Rules, &rules);
+
+        // A zero deposit is a legitimate deployment: rules now, funding later.
+        if usdc_in != 0 {
+            token::TokenClient::new(&env, &token).transfer(
+                &owner,
+                env.current_contract_address(),
+                &usdc_in,
+            );
+        }
     }
 
     /// Immediate, total stop. Moves no money, so it cannot fail for balance reasons —

@@ -9,6 +9,7 @@ use soroban_sdk::{
         storage::{Instance as _, Persistent as _},
         Address as _, BytesN as _, Ledger as _,
     },
+    token::{StellarAssetClient, TokenClient},
     vec, Address, BytesN, Env, IntoVal,
 };
 
@@ -20,6 +21,9 @@ const WINDOW: u32 = 17_280;
 /// gives it back.
 const PERSISTENT_TTL: u32 = 120_960;
 
+/// What the owner is minted before any of it is deposited.
+const OWNER_FUNDS: i128 = 10_000_000;
+
 struct Fixture {
     owner: Address,
     env: Env,
@@ -30,6 +34,10 @@ struct Fixture {
 }
 
 fn setup() -> Fixture {
+    setup_with_deposit(0)
+}
+
+fn setup_with_deposit(usdc_in: i128) -> Fixture {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -40,8 +48,12 @@ fn setup() -> Fixture {
 
     let owner = Address::generate(&env);
     let owner_addr = owner.clone();
-    let token = Address::generate(&env);
     let seller = Address::generate(&env);
+
+    // A real asset contract, so that a deposit moves something rather than nothing.
+    let issuer = Address::generate(&env);
+    let token = env.register_stellar_asset_contract_v2(issuer).address();
+    StellarAssetClient::new(&env, &token).mint(&owner, &OWNER_FUNDS);
 
     let agent = SigningKey::from_bytes(&[7u8; 32]);
     let agent_key = BytesN::from_array(&env, &agent.verifying_key().to_bytes());
@@ -52,7 +64,7 @@ fn setup() -> Fixture {
         allowlist: vec![&env, seller.clone()],
     };
 
-    let allowance = env.register(Allowance, (owner, token.clone(), agent_key, rules));
+    let allowance = env.register(Allowance, (owner, token.clone(), agent_key, rules, usdc_in));
 
     Fixture {
         owner: owner_addr,
@@ -525,4 +537,34 @@ fn a_transfer_with_the_wrong_number_of_arguments_is_refused() {
         check_auth(&f, contexts),
         Some(AllowanceError::MalformedCall)
     );
+}
+
+/// The owner deploys the allowance themselves, so one signature both creates the contract
+/// and funds it. A transaction carrying a Soroban call may carry nothing else, so creating
+/// and funding could never be two operations — but they can be one, because a deploy runs
+/// its constructor inside the same invocation.
+#[test]
+fn the_constructor_pulls_the_owners_deposit_in() {
+    let f = setup_with_deposit(2_500);
+    let usdc = TokenClient::new(&f.env, &f.token);
+
+    assert_eq!(
+        usdc.balance(&f.allowance),
+        2_500,
+        "the allowance holds the deposit"
+    );
+    assert_eq!(
+        usdc.balance(&f.owner),
+        OWNER_FUNDS - 2_500,
+        "and the owner is exactly that much lighter"
+    );
+}
+
+/// A negative deposit must not be quietly ignored. The transfer is guarded by
+/// `usdc_in > 0`, so without an explicit refusal a negative amount would skip the transfer
+/// entirely and the contract would deploy looking funded when nothing moved.
+#[test]
+#[should_panic(expected = "Error(Contract, #8)")]
+fn a_negative_deposit_is_refused() {
+    setup_with_deposit(-1);
 }
