@@ -25,27 +25,23 @@ pub struct Rules {
     pub allowlist: Vec<Address>,
 }
 
-/// Slices the rolling window is cut into. Spending is remembered per slice rather than
-/// per payment, so the entry is the same size after a million payments as after one.
+/// Spending is remembered per slice rather than per payment, so the entry is the same size
+/// after a million payments as after one.
 const SLICES: u32 = 24;
 
-/// One slot more than there are slices, because the slice we are currently in has only
-/// partly elapsed. With exactly `SLICES` slots the remembered span would be shorter than
-/// the window the owner asked for, and spending would age out early — which errs toward
-/// letting a payment through. The extra slot makes the span err long instead.
+/// One more than there are slices, because the slice we are in has only partly elapsed.
+/// With exactly `SLICES` slots the remembered span comes up short and spending ages out
+/// early — about 4% over the cap. The extra slot makes the span err long instead.
 const SLOTS: usize = SLICES as usize + 1;
 
-/// What the clocks are topped back up to. A persistent entry is born with seven days, and
-/// this keeps it there rather than reaching further: rent is charged on the ledgers added,
-/// and the whole payment has to fit under the facilitator's fee ceiling.
+/// What the clocks are topped back up to: the seven days an entry is born with, and no
+/// further. Rent is charged on the ledgers added, and reaching for a month would make the
+/// first payment past the threshold pay six times the facilitator's fee ceiling at once.
 const TTL_TARGET: u32 = 120_960;
 
-/// How far a clock may drain before a payment tops it up.
-///
-/// `extend_ttl` writes nothing while the TTL is still above the threshold, so with an
-/// hour's gap only the first payment after each hour of drain does any work — every other
-/// payment finds the clock nearly full and moves on. When it does fire it buys back just
-/// the hour that drained, around 2,600 stroops, rather than weeks at once.
+/// How far a clock may drain before a payment tops it up. `extend_ttl` writes nothing
+/// above the threshold, so only the first payment after each hour of drain does any work,
+/// and it buys back just that hour — around 2,600 stroops.
 const TTL_THRESHOLD: u32 = TTL_TARGET - 720;
 
 /// What the window remembers: a running total per slice, and which slice was written last.
@@ -108,15 +104,12 @@ impl Allowance {
         usdc_in: i128,
     ) {
         // A constructor cannot return an error, so this panics rather than returning one.
-        // It has to be checked: the transfer below is guarded by `usdc_in > 0`, so a
-        // negative amount would skip it silently and the contract would deploy looking
-        // funded while nothing moved.
         if usdc_in < 0 {
             panic_with_error!(&env, AllowanceError::InvalidAmount);
         }
 
-        // Covers the nested transfer through the auth tree, which is what keeps deploying
-        // and funding to a single confirmation.
+        // Covers the nested transfer through the auth tree, so deploying and funding stay
+        // a single confirmation.
         owner.require_auth();
 
         env.storage().instance().set(&DataKey::Owner, &owner);
@@ -134,31 +127,21 @@ impl Allowance {
         }
     }
 
-    /// Immediate, total stop. Moves no money, so it cannot fail for balance reasons —
-    /// which is what you want from an emergency brake.
+    /// Immediate, total stop. Moves no money, so it cannot fail for balance reasons.
+    /// Stops the *agent*; the owner can still take their own money out.
     ///
-    /// Named for a switch rather than for revocation, because it is one: revocation is
-    /// permanent everywhere else it appears in security, and this is meant to be pushed
-    /// back. A brake that cannot be released is a demolition.
-    ///
-    /// It stops the *agent*. The owner can still take their own money out.
-    ///
-    /// `__check_auth` offers this function no protection whatsoever. It runs only when the
-    /// contract authorises itself as a payer inside someone else's transaction; anything
-    /// the contract does during its own invocation is authorised automatically. So the
-    /// owner check here is not defence in depth, it is the only defence.
+    /// `__check_auth` protects this function not at all — it runs only when the contract
+    /// authorises itself inside someone else's transaction, and anything the contract does
+    /// during its own invocation is authorised automatically. The owner check here is not
+    /// defence in depth, it is the only defence.
     pub fn disable(env: Env) -> Result<(), AllowanceError> {
         require_owner(&env)?;
         env.storage().instance().set(&DataKey::Disabled, &true);
         Ok(())
     }
 
-    /// Lets the agent spend again, under whatever the rules now say.
-    ///
-    /// Nothing is given up by allowing this. Only the owner can stop it and only the owner
-    /// can start it, and every rule is checked on every payment either way — so an
-    /// allowance that has been started again is no more permissive than it was before it
-    /// was stopped.
+    /// Lets the agent spend again, under whatever the rules now say. No permissiveness is
+    /// gained: every rule is still checked on every payment.
     ///
     /// The spend window is deliberately untouched. A stop and a start is not a way to buy
     /// a fresh budget.
@@ -168,12 +151,8 @@ impl Allowance {
         Ok(())
     }
 
-    /// Whether the agent may spend. Public because the claim this product makes is that
-    /// one named person controls this money, and a claim nobody can check from outside is
-    /// not worth much.
-    ///
-    /// Stored negatively and read positively: an allowance with nothing written is enabled,
-    /// and the single negation lives here rather than at every call site.
+    /// Whether the agent may spend. Public because the claim this product makes is that one
+    /// named person controls this money, and a claim nobody can check is not worth much.
     pub fn enabled(env: Env) -> bool {
         !disabled(&env)
     }
@@ -219,10 +198,8 @@ impl CustomAccountInterface for Allowance {
         signature: BytesN<64>,
         contexts: Vec<Context>,
     ) -> Result<(), AllowanceError> {
-        // Asked first, because it is whole-contract state rather than anything about this
-        // particular payment: there is nothing to check about a call to an allowance that
-        // is not operating. It is also the cheapest check here, which is why a stopped
-        // agent never pays for an ed25519 verification.
+        // First, and cheapest: whole-contract state, so a stopped agent never pays for an
+        // ed25519 verification it was going to fail anyway.
         if disabled(&env) {
             return Err(AllowanceError::Disabled);
         }
@@ -262,18 +239,16 @@ impl CustomAccountInterface for Allowance {
                 _ => return Err(AllowanceError::MalformedCall),
             };
 
-            // A transfer, and nothing else. Other token functions take arguments of the
-            // same types in the same positions, so neither the asset check nor the
-            // recipient check below can distinguish them. The name is what separates
-            // paying someone from granting them a claim.
+            // Other token functions take arguments of the same types in the same
+            // positions, so neither check below can tell them apart. The name is what
+            // separates paying someone from granting them a claim on the balance.
             if call.fn_name != symbol_short!("transfer") {
                 return Err(AllowanceError::NotATransfer);
             }
 
-            // Exactly the three-argument transfer, and nothing that merely shares its
-            // name. The recipient and the amount are read positionally below, which only
-            // means anything against the standard token interface — and the token address
-            // is the owner's choice, not this contract's.
+            // Recipient and amount are read positionally below, which only means anything
+            // against the standard token interface — and which interface sits behind that
+            // address is the owner's choice, not this contract's.
             if call.args.len() != 3 {
                 return Err(AllowanceError::MalformedCall);
             }
@@ -294,16 +269,14 @@ impl CustomAccountInterface for Allowance {
                 return Err(AllowanceError::RecipientNotAllowed);
             }
 
-            // The amount lives in the last argument.
             let amount = call
                 .args
                 .get(2)
                 .and_then(|arg| i128::try_from_val(&env, &arg).ok())
                 .ok_or(AllowanceError::MalformedCall)?;
 
-            // Accumulated, not per call: the cap governs the window, so every payment is
-            // measured against what is already inside it. With nothing spent yet this
-            // still refuses a single call larger than the whole budget.
+            // Against the window, not against the call. With nothing spent yet this still
+            // refuses a single payment larger than the whole budget.
             total += amount;
             if total > rules.window_cap {
                 return Err(AllowanceError::ExceedsWindow);
@@ -317,16 +290,14 @@ impl CustomAccountInterface for Allowance {
             .set(here, window.slots.get(here).unwrap_or(0) + added);
         env.storage().persistent().set(&DataKey::Window, &window);
 
-        // Neither invoking a contract nor writing to it extends anything — both measured —
-        // so the payment path has to say so explicitly, or the allowance stops working
-        // about a week after it is deployed and needs a restore costing more than a year
-        // of upkeep.
+        // Neither invoking a contract nor writing to it extends anything, both measured, so
+        // without this the allowance stops working about a week after deployment.
         //
-        // Reached through the deployer interface, at this contract's own address, because
-        // `storage().instance().extend_ttl` extends the contract *code* as well. That is
-        // the call in nearly every Soroban example, and a 13KB wasm costs three times the
-        // facilitator's whole fee ceiling for a single hour — every payment would be
-        // refused, for a reason that mentions neither TTL nor rent.
+        // Through the deployer interface rather than `storage().instance().extend_ttl`,
+        // which also extends the contract *code*. Rent scales with entry size and the code
+        // entry is two orders of magnitude larger than the instance, so extending it costs
+        // multiples of the facilitator's fee ceiling — every payment refused, for a reason
+        // mentioning neither TTL nor rent.
         env.deployer().extend_ttl_for_contract_instance(
             env.current_contract_address(),
             TTL_THRESHOLD,
