@@ -283,32 +283,6 @@ impl Allowance {
     }
 }
 
-/// Reads anything the constructor wrote. Absent means the constructor never ran, which is
-/// the same answer whichever value was asked for.
-fn read_value<V: TryFromVal<Env, Val>>(env: &Env, key: &DataKey) -> Result<V, AllowanceError> {
-    env.storage()
-        .instance()
-        .get(key)
-        .ok_or(AllowanceError::NotInitialized)
-}
-
-/// Not `read_value`: an allowance that has never been disabled has no entry, and that is
-/// not an error.
-fn is_disabled(env: &Env) -> bool {
-    env.storage()
-        .instance()
-        .get(&DataKey::Disabled)
-        .unwrap_or(false)
-}
-
-/// Loads the owner and demands their signature. Every owner-facing function goes through
-/// here, so there is one place to look when asking who may do what.
-fn require_owner(env: &Env) -> Result<Address, AllowanceError> {
-    let owner: Address = read_value(env, &DataKey::Owner)?;
-    owner.require_auth();
-    Ok(owner)
-}
-
 #[contractimpl]
 impl CustomAccountInterface for Allowance {
     type Signature = BytesN<64>;
@@ -428,6 +402,32 @@ impl CustomAccountInterface for Allowance {
 
         Ok(())
     }
+}
+
+/// Reads anything the constructor wrote. Absent means the constructor never ran, which is
+/// the same answer whichever value was asked for.
+fn read_value<V: TryFromVal<Env, Val>>(env: &Env, key: &DataKey) -> Result<V, AllowanceError> {
+    env.storage()
+        .instance()
+        .get(key)
+        .ok_or(AllowanceError::NotInitialized)
+}
+
+/// Not `read_value`: an allowance that has never been disabled has no entry, and that is
+/// not an error.
+fn is_disabled(env: &Env) -> bool {
+    env.storage()
+        .instance()
+        .get(&DataKey::Disabled)
+        .unwrap_or(false)
+}
+
+/// Loads the owner and demands their signature. Every owner-facing function goes through
+/// here, so there is one place to look when asking who may do what.
+fn require_owner(env: &Env) -> Result<Address, AllowanceError> {
+    let owner: Address = read_value(env, &DataKey::Owner)?;
+    owner.require_auth();
+    Ok(owner)
 }
 
 /// Loads the window and empties the slices that have aged out of it, returning the window
