@@ -52,6 +52,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           previous=$(git tag --list 'allowance-contract-v*' --sort=-v:refname             | grep -vx "$GITHUB_REF_NAME" | head -1)
+          # The first release has no earlier release to bound against, so it bounds
+          # against the commit the contract's history starts from.
+          previous=${previous:-$(git tag --list allowance-contract-base)}
           echo "previous tag: ${previous:-none}"
           if [ -n "$previous" ]; then
             gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes"               -f tag_name="$GITHUB_REF_NAME"               -f previous_tag_name="$previous"               -q .body > changes.md
