@@ -26,8 +26,6 @@ const OWNER_FUNDS: i128 = 10_000_000;
 
 struct Fixture {
     owner: Address,
-    native: Address,
-    agent_address: Address,
     env: Env,
     allowance: Address,
     token: Address,
@@ -36,14 +34,10 @@ struct Fixture {
 }
 
 fn setup() -> Fixture {
-    setup_with(0, 0)
+    setup_with_deposit(0)
 }
 
 fn setup_with_deposit(deposit: i128) -> Fixture {
-    setup_with(deposit, 0)
-}
-
-fn setup_with(deposit: i128, agent_top_up: i128) -> Fixture {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -58,16 +52,8 @@ fn setup_with(deposit: i128, agent_top_up: i128) -> Fixture {
 
     // A real asset contract, so that a deposit moves something rather than nothing.
     let issuer = Address::generate(&env);
-    let token = env
-        .register_stellar_asset_contract_v2(issuer.clone())
-        .address();
+    let token = env.register_stellar_asset_contract_v2(issuer).address();
     StellarAssetClient::new(&env, &token).mint(&owner, &OWNER_FUNDS);
-
-    // A second asset standing in for XLM. The agent needs some of its own to submit the
-    // restore that brings a lapsed allowance back, which no contract can do for itself.
-    let native = env.register_stellar_asset_contract_v2(issuer).address();
-    StellarAssetClient::new(&env, &native).mint(&owner, &OWNER_FUNDS);
-    let agent_address = Address::generate(&env);
 
     let agent = SigningKey::from_bytes(&[7u8; 32]);
     let agent_key = BytesN::from_array(&env, &agent.verifying_key().to_bytes());
@@ -82,17 +68,10 @@ fn setup_with(deposit: i128, agent_top_up: i128) -> Fixture {
         Allowance,
         (Setup {
             owner_address: owner,
-            agent: Agent {
-                key: agent_key,
-                address: agent_address.clone(),
-            },
+            agent_key,
             spending: Spending {
                 token_address: token.clone(),
                 initial_deposit: deposit,
-            },
-            agent_funding: AgentFunding {
-                native_address: native.clone(),
-                initial_top_up: agent_top_up,
             },
             rules,
         },),
@@ -100,8 +79,6 @@ fn setup_with(deposit: i128, agent_top_up: i128) -> Fixture {
 
     Fixture {
         owner: owner_addr,
-        native,
-        agent_address,
         env,
         allowance,
         token,
@@ -789,38 +766,5 @@ fn a_write_cannot_deposit_a_negative_amount() {
         TokenClient::new(&f.env, &f.token).balance(&f.allowance),
         1_000,
         "and nothing moved either way"
-    );
-}
-
-/// The agent needs XLM of its own for one specific job: submitting the restore that revives
-/// a lapsed allowance. A contract cannot submit a transaction, so an allowance can never
-/// repair itself no matter what it holds — the agent's own account has to pay.
-///
-/// It goes straight from the owner to the agent. This contract never holds XLM.
-///
-/// The destination is passed rather than derived from `agent_key`, even though a Stellar
-/// account address is an ed25519 key. Deriving would assume the agent account's master key
-/// is still one of its signers, which is true of a freshly generated agent and not true in
-/// general — and a contract cannot check it. Sending to an account the agent cannot spend
-/// from looks exactly like success.
-#[test]
-fn the_constructor_funds_the_agent_to_repair_its_own_preconditions() {
-    let f = setup_with(0, 500);
-    let xlm = TokenClient::new(&f.env, &f.native);
-
-    assert_eq!(
-        xlm.balance(&f.agent_address),
-        500,
-        "the agent can pay for a restore"
-    );
-    assert_eq!(
-        xlm.balance(&f.allowance),
-        0,
-        "and the allowance never holds XLM"
-    );
-    assert_eq!(
-        xlm.balance(&f.owner),
-        OWNER_FUNDS - 500,
-        "it came from the owner"
     );
 }
