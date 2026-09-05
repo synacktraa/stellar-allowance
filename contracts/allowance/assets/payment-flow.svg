@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 616" width="920" height="616" role="img" aria-label="Sequence diagram in two groups. Off chain: the agent signs a payload hash and hands the signed authorisation entry to a facilitator. On chain: the facilitator sends a token transfer, the Soroban runtime invokes the token, the token calls require_auth, and the runtime calls __check_auth on the allowance, which verifies the signature and applies the rules before the tokens move.">
+  <title>How a payment reaches __check_auth</title>
+
+  <rect x="1" y="1" width="918" height="614" rx="14" fill="#f4f3ef" stroke="#d9d5cb" stroke-width="1.5"/>
+
+  <g font-family="ui-sans-serif, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+
+    <rect x="16" y="16" width="348" height="584" rx="12" fill="none" stroke="#c6c0b1" stroke-width="1.5" stroke-dasharray="7 5"/>
+    <rect x="376" y="16" width="528" height="584" rx="12" fill="none" stroke="#9fb7a8" stroke-width="1.5"/>
+    <g font-size="10.5" font-weight="700" letter-spacing="1.4" text-anchor="middle">
+      <rect x="144" y="8" width="92" height="16" fill="#f4f3ef"/>
+      <text x="190" y="20" fill="#6f6a5e">OFF CHAIN</text>
+      <rect x="598" y="8" width="84" height="16" fill="#f4f3ef"/>
+      <text x="640" y="20" fill="#4f6a5b">ON CHAIN</text>
+    </g>
+
+    <g stroke-width="1.6" stroke-dasharray="6 5">
+      <line x1="100" y1="84" x2="100" y2="548" stroke="#6b67b8"/>
+      <line x1="280" y1="84" x2="280" y2="548" stroke="#bf8534"/>
+      <line x1="460" y1="84" x2="460" y2="548" stroke="#5f7f99"/>
+      <line x1="640" y1="84" x2="640" y2="548" stroke="#b0648a"/>
+      <line x1="820" y1="84" x2="820" y2="548" stroke="#17544a"/>
+    </g>
+
+    <g font-size="13" font-weight="600" text-anchor="middle" stroke-width="1.6">
+      <rect x="28"  y="46" width="144" height="38" rx="8" fill="#e6e5f8" stroke="#6b67b8"/>
+      <rect x="28" y="548" width="144" height="38" rx="8" fill="#e6e5f8" stroke="#6b67b8"/>
+      <text x="100"  y="70" fill="#3b3880">agent</text>
+      <text x="100" y="572" fill="#3b3880">agent</text>
+
+      <rect x="208"  y="46" width="144" height="38" rx="8" fill="#fbeed9" stroke="#bf8534"/>
+      <rect x="208" y="548" width="144" height="38" rx="8" fill="#fbeed9" stroke="#bf8534"/>
+      <text x="280"  y="70" fill="#7a5119">facilitator</text>
+      <text x="280" y="572" fill="#7a5119">facilitator</text>
+
+      <rect x="388"  y="46" width="144" height="38" rx="8" fill="#e2eaf1" stroke="#5f7f99" stroke-dasharray="5 3"/>
+      <rect x="388" y="548" width="144" height="38" rx="8" fill="#e2eaf1" stroke="#5f7f99" stroke-dasharray="5 3"/>
+      <text x="460"  y="70" fill="#2f4a5c">Soroban runtime</text>
+      <text x="460" y="572" fill="#2f4a5c">Soroban runtime</text>
+
+      <rect x="568"  y="46" width="144" height="38" rx="8" fill="#f9e3ec" stroke="#b0648a"/>
+      <rect x="568" y="548" width="144" height="38" rx="8" fill="#f9e3ec" stroke="#b0648a"/>
+      <text x="640"  y="70" fill="#78304f">token contract</text>
+      <text x="640" y="572" fill="#78304f">token contract</text>
+
+      <rect x="748"  y="46" width="144" height="38" rx="8" fill="#d5e8e2" stroke="#17544a" stroke-width="2.4"/>
+      <rect x="748" y="548" width="144" height="38" rx="8" fill="#d5e8e2" stroke="#17544a" stroke-width="2.4"/>
+      <text x="820"  y="70" fill="#0f3e36">allowance</text>
+      <text x="820" y="572" fill="#0f3e36">allowance</text>
+    </g>
+
+    <g font-size="11.5" fill="#33323a">
+
+      <path d="M 100 120 h 36 v 28 h -36" fill="none" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="100,148 110,143 110,153" fill="#4a4856"/>
+      <rect x="142" y="103" width="122" height="15" fill="#f4f3ef"/>
+      <text x="142" y="114">sign the payload hash</text>
+
+      <line x1="100" y1="182" x2="271" y2="182" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="280,182 270,177 270,187" fill="#4a4856"/>
+      <rect x="114" y="165" width="152" height="15" fill="#f4f3ef"/>
+      <text x="190" y="176" text-anchor="middle">signed authorisation entry</text>
+
+      <line x1="280" y1="220" x2="451" y2="220" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="460,220 450,215 450,225" fill="#4a4856"/>
+      <rect x="243" y="196" width="254" height="20" rx="5" fill="#eae7de" stroke="#cdc7b7"/>
+      <text x="370" y="210" text-anchor="middle" font-family="ui-monospace, Cascadia Mono, Menlo, Consolas, monospace" font-size="11">transfer(allowance → seller, amount)</text>
+
+      <line x1="460" y1="258" x2="631" y2="258" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="640,258 630,253 630,263" fill="#4a4856"/>
+      <rect x="529" y="241" width="42" height="15" fill="#f4f3ef"/>
+      <text x="550" y="252" text-anchor="middle">invoke</text>
+
+      <line x1="640" y1="296" x2="469" y2="296" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="460,296 470,291 470,301" fill="#4a4856"/>
+      <rect x="466" y="272" width="168" height="20" rx="5" fill="#eae7de" stroke="#cdc7b7"/>
+      <text x="550" y="286" text-anchor="middle" font-family="ui-monospace, Cascadia Mono, Menlo, Consolas, monospace" font-size="11">require_auth(allowance)</text>
+
+      <line x1="460" y1="336" x2="811" y2="336" stroke="#17544a" stroke-width="2.4"/>
+      <polygon points="820,336 809,330.5 809,341.5" fill="#17544a"/>
+      <rect x="487" y="312" width="306" height="20" rx="5" fill="#d5e8e2" stroke="#17544a"/>
+      <text x="640" y="326" text-anchor="middle" fill="#0f3e36" font-weight="700" font-family="ui-monospace, Cascadia Mono, Menlo, Consolas, monospace" font-size="11">__check_auth(payload, signature, contexts)</text>
+
+      <path d="M 820 368 h -36 v 28 h 36" fill="none" stroke="#17544a" stroke-width="2.4"/>
+      <polygon points="820,396 809,390.5 809,401.5" fill="#17544a"/>
+      <rect x="612" y="351" width="160" height="15" fill="#f4f3ef"/>
+      <text x="770" y="362" text-anchor="end" fill="#0f3e36">verify, then apply the rules</text>
+
+      <line x1="820" y1="430" x2="469" y2="430" stroke="#4a4856" stroke-width="1.7" stroke-dasharray="6 4"/>
+      <polygon points="460,430 470,425 470,435" fill="#4a4856"/>
+      <rect x="518" y="413" width="244" height="15" fill="#f4f3ef"/>
+      <text x="640" y="424" text-anchor="middle">Ok, or an error that stops the transaction</text>
+
+      <line x1="460" y1="468" x2="631" y2="468" stroke="#4a4856" stroke-width="1.7" stroke-dasharray="6 4"/>
+      <polygon points="640,468 630,463 630,473" fill="#4a4856"/>
+      <rect x="518" y="451" width="64" height="15" fill="#f4f3ef"/>
+      <text x="550" y="462" text-anchor="middle">authorised</text>
+
+      <path d="M 640 500 h 36 v 28 h -36" fill="none" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="640,528 650,523 650,533" fill="#4a4856"/>
+      <rect x="682" y="483" width="92" height="15" fill="#f4f3ef"/>
+      <text x="682" y="494">move the tokens</text>
+
+    </g>
+  </g>
+</svg>

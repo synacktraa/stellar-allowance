@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 306" width="920" height="306" role="img" aria-label="A row of seven consecutive time slices with the amount spent in each. Two brackets show the window at slice 24 covering slices 20 to 24 with 170 spent, and the window at slice 26 covering slices 22 to 26 with 160 spent. Under each slice is its slot number, slice modulo 5, so slots repeat: slice 25 lands in slot 0 where slice 20 was, and slice 26 lands in slot 1 where slice 21 was.">
+  <title>Writing a new slice is the same act as forgetting the oldest one</title>
+  <rect x="1" y="1" width="918" height="304" rx="14" fill="#f4f3ef" stroke="#d9d5cb" stroke-width="1.5"/>
+
+  <g font-family="ui-sans-serif, Segoe UI, Roboto, Helvetica, Arial, sans-serif" fill="#33323a">
+
+    <text x="41" y="30" font-size="12" font-weight="600" fill="#6f6a5e">window at slice 24 — 170 of 200 spent</text>
+    <path d="M 41 50 L 41 42 L 635 42 L 635 50" fill="none" stroke="#a49d8e" stroke-width="1.8"/>
+
+    <text x="285" y="68" font-size="12" font-weight="700" fill="#0f3e36">window at slice 26 — 160 of 200 spent</text>
+    <path d="M 285 88 L 285 80 L 879 80 L 879 88" fill="none" stroke="#17544a" stroke-width="2.4"/>
+
+    <g font-size="11.5" fill="#6f6a5e" text-anchor="middle">
+      <text x="94"  y="112">slice 20</text>
+      <text x="216" y="112">slice 21</text>
+      <text x="338" y="112">slice 22</text>
+      <text x="460" y="112">slice 23</text>
+      <text x="582" y="112">slice 24</text>
+      <text x="704" y="112">slice 25</text>
+      <text x="826" y="112">slice 26</text>
+    </g>
+
+    <g stroke-width="1.8">
+      <rect x="41"  y="122" width="106" height="62" rx="10" fill="#ecebe5" stroke="#cfc9bb"/>
+      <rect x="163" y="122" width="106" height="62" rx="10" fill="#ecebe5" stroke="#cfc9bb"/>
+      <rect x="285" y="122" width="106" height="62" rx="10" fill="#d5e8e2" stroke="#17544a"/>
+      <rect x="407" y="122" width="106" height="62" rx="10" fill="#d5e8e2" stroke="#17544a"/>
+      <rect x="529" y="122" width="106" height="62" rx="10" fill="#d5e8e2" stroke="#17544a"/>
+      <rect x="651" y="122" width="106" height="62" rx="10" fill="#d5e8e2" stroke="#17544a"/>
+      <rect x="773" y="122" width="106" height="62" rx="10" fill="#d5e8e2" stroke="#17544a"/>
+    </g>
+
+    <g font-size="19" font-weight="700" text-anchor="middle">
+      <text x="94"  y="161" fill="#9c9587">40</text>
+      <text x="216" y="161" fill="#9c9587">25</text>
+      <text x="338" y="161" fill="#0f3e36">60</text>
+      <text x="460" y="161" fill="#0f3e36">15</text>
+      <text x="582" y="161" fill="#0f3e36">30</text>
+      <text x="704" y="161" fill="#0f3e36">20</text>
+      <text x="826" y="161" fill="#0f3e36">35</text>
+    </g>
+
+    <g font-size="10.5" font-family="ui-monospace, Cascadia Mono, Menlo, Consolas, monospace" text-anchor="middle" stroke-width="1.4">
+      <rect x="54"  y="196" width="80" height="22" rx="6" fill="#fbeed9" stroke="#bf8534"/>
+      <text x="94"  y="211" fill="#7a5119">slot 0</text>
+      <rect x="176" y="196" width="80" height="22" rx="6" fill="#e6e5f8" stroke="#6b67b8"/>
+      <text x="216" y="211" fill="#3b3880">slot 1</text>
+      <rect x="298" y="196" width="80" height="22" rx="6" fill="#eae7de" stroke="#cdc7b7"/>
+      <text x="338" y="211" fill="#5c574c">slot 2</text>
+      <rect x="420" y="196" width="80" height="22" rx="6" fill="#eae7de" stroke="#cdc7b7"/>
+      <text x="460" y="211" fill="#5c574c">slot 3</text>
+      <rect x="542" y="196" width="80" height="22" rx="6" fill="#eae7de" stroke="#cdc7b7"/>
+      <text x="582" y="211" fill="#5c574c">slot 4</text>
+      <rect x="664" y="196" width="80" height="22" rx="6" fill="#fbeed9" stroke="#bf8534"/>
+      <text x="704" y="211" fill="#7a5119">slot 0</text>
+      <rect x="786" y="196" width="80" height="22" rx="6" fill="#e6e5f8" stroke="#6b67b8"/>
+      <text x="826" y="211" fill="#3b3880">slot 1</text>
+    </g>
+
+    <path d="M 94 224 L 94 238 L 704 238 L 704 224" fill="none" stroke="#bf8534" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <path d="M 216 224 L 216 250 L 826 250 L 826 224" fill="none" stroke="#6b67b8" stroke-width="1.6" stroke-dasharray="5 4"/>
+
+    <text x="460" y="278" font-size="12" text-anchor="middle" fill="#33323a">Two more payments, and <tspan font-weight="700">less</tspan> is counted. Slices 20 and 21 were never deleted — 25 and 26 landed in the same slots and overwrote them.</text>
+
+  </g>
+</svg>
