@@ -1,0 +1,18 @@
+[package]
+name = "allowance"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+# Signs the raw 32-byte payload hash. The SDK's own `Sign` helper signs the XDR of an
+# ScVal instead, which `ed25519_verify` would never accept — see sign_payload below.
+ed25519-dalek = "2"
