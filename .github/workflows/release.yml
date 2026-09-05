@@ -25,16 +25,36 @@ jobs:
 
       - uses: stellar/stellar-cli@v27.1.0
 
+      # The tag names a version and so does Cargo.toml. When they disagree the release
+      # carries a label contradicting the crate it was built from, so refuse instead.
+      - name: Version
+        id: version
+        working-directory: contracts
+        run: |
+          crate=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "allowance") | .version')
+          tag=${GITHUB_REF_NAME#allowance-contract-v}
+          if [ "$crate" != "$tag" ]; then
+            echo "Cargo.toml says $crate, the tag says $tag" >&2
+            exit 1
+          fi
+          echo "$crate"
+          echo "version=$crate" >> "$GITHUB_OUTPUT"
+
       # `source_repo` is what `stellar contract info build` reads to find this run's
-      # attestation. Without it the released wasm cannot be traced back to a commit.
+      # attestation. `version` lets a deployed allowance name its own version, so
+      # nothing has to keep a table mapping wasm hashes back to releases.
       - name: Build
         working-directory: contracts
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           stellar contract build \
             --package allowance \
             --locked \
             --out-dir "$GITHUB_WORKSPACE/dist" \
-            --meta source_repo=github:${{ github.repository }}
+            --meta source_repo=github:"$GITHUB_REPOSITORY" \
+            --meta version="$VERSION"
 
       - name: Hash
         id: wasm
@@ -56,13 +76,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHA256: ${{ steps.wasm.outputs.sha256 }}
+          VERSION: ${{ steps.version.outputs.version }}
           ATTESTED: ${{ github.event.repository.visibility == 'public' }}
         run: |
-          echo "Wasm hash \`$SHA256\`, built from \`$GITHUB_SHA\`." > notes.md
+          echo "Version \`$VERSION\`, wasm hash \`$SHA256\`, built from \`$GITHUB_SHA\`." > notes.md
           cat >> notes.md <<'EOF'
 
           Deploy the file attached here rather than a local build. A local build omits the
-          `source_repo` metadata, which produces different bytes and a different hash.
+          `source_repo` and `version` metadata, which produces different bytes and a
+          different hash.
           EOF
           if [ "$ATTESTED" = "true" ]; then
           cat >> notes.md <<'EOF'
