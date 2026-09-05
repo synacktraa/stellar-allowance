@@ -251,8 +251,8 @@ impl Allowance {
 
     /// Whether the agent may spend. Public because the claim this product makes is that one
     /// named person controls this money, and a claim nobody can check is not worth much.
-    pub fn enabled(env: Env) -> bool {
-        !disabled(&env)
+    pub fn is_enabled(env: Env) -> bool {
+        !is_disabled(&env)
     }
 
     /// Everything about an allowance except how much of it is left.
@@ -261,13 +261,13 @@ impl Allowance {
     /// entry: the host loads all of it however little is asked for, so five getters would
     /// be five loads of the same bytes. The window is left out because it lives in its own
     /// entry on its own clock, and a config read should still answer once that has expired.
-    pub fn config(env: Env) -> Result<Config, AllowanceError> {
+    pub fn get_config(env: Env) -> Result<Config, AllowanceError> {
         Ok(Config {
             owner_address: read_value(&env, &DataKey::Owner)?,
             agent_key: read_value(&env, &DataKey::AgentKey)?,
             token_address: read_value(&env, &DataKey::Token)?,
             rules: read_value(&env, &DataKey::Rules)?,
-            enabled: !disabled(&env),
+            enabled: !is_disabled(&env),
         })
     }
 
@@ -294,7 +294,7 @@ fn read_value<V: TryFromVal<Env, Val>>(env: &Env, key: &DataKey) -> Result<V, Al
 
 /// Not `read_value`: an allowance that has never been disabled has no entry, and that is
 /// not an error.
-fn disabled(env: &Env) -> bool {
+fn is_disabled(env: &Env) -> bool {
     env.storage()
         .instance()
         .get(&DataKey::Disabled)
@@ -332,7 +332,7 @@ impl CustomAccountInterface for Allowance {
     ) -> Result<(), AllowanceError> {
         // First, and cheapest: whole-contract state, so a stopped agent never pays for an
         // ed25519 verification it was going to fail anyway.
-        if disabled(&env) {
+        if is_disabled(&env) {
             return Err(AllowanceError::Disabled);
         }
 

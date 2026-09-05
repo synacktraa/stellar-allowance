@@ -382,14 +382,14 @@ fn the_owner_can_disable_the_agent() {
     let f = setup();
     let client = AllowanceClient::new(&f.env, &f.allowance);
 
-    assert!(client.enabled(), "an allowance starts out running");
+    assert!(client.is_enabled(), "an allowance starts out running");
 
     client.disable();
     // Captured immediately: env.auths() reports the most recent invocation, and any call
     // in between would overwrite it with one that demanded nothing.
     let demanded = f.env.auths().first().map(|(who, _)| who.clone());
 
-    assert!(!client.enabled(), "the brake is on");
+    assert!(!client.is_enabled(), "the brake is on");
     assert_eq!(
         demanded,
         Some(f.owner.clone()),
@@ -424,7 +424,7 @@ fn the_owner_can_start_the_agent_again() {
 
     client.enable();
 
-    assert!(client.enabled());
+    assert!(client.is_enabled());
     assert_eq!(
         check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 1)]),
         None
@@ -486,7 +486,7 @@ fn a_stopped_agent_is_still_stopped_after_the_instance_archives() {
     );
 
     assert!(
-        !client.enabled(),
+        !client.is_enabled(),
         "the flag came back from archival as it went in"
     );
 }
@@ -514,7 +514,7 @@ fn the_owner_can_still_act_on_an_archived_allowance() {
         .set_sequence_number(f.env.ledger().sequence() + PERSISTENT_TTL + 1);
 
     client.disable();
-    assert!(!client.enabled(), "the owner reached a dormant contract");
+    assert!(!client.is_enabled(), "the owner reached a dormant contract");
 }
 
 /// The contract reads a recipient out of `args[1]` and an amount out of `args[2]`, which
@@ -842,7 +842,7 @@ fn reading_the_window_does_not_write_it() {
 #[test]
 fn config_reports_what_the_allowance_was_created_with() {
     let f = setup_with_deposit(1_000);
-    let config = AllowanceClient::new(&f.env, &f.allowance).config();
+    let config = AllowanceClient::new(&f.env, &f.allowance).get_config();
 
     assert_eq!(config.owner_address, f.owner, "who the money belongs to");
     assert_eq!(
@@ -868,8 +868,11 @@ fn config_follows_the_disable_switch() {
     let client = AllowanceClient::new(&f.env, &f.allowance);
 
     client.disable();
-    assert!(!client.config().enabled, "disabled, and the config says so");
+    assert!(
+        !client.get_config().enabled,
+        "disabled, and the config says so"
+    );
 
     client.enable();
-    assert!(client.config().enabled, "and back again");
+    assert!(client.get_config().enabled, "and back again");
 }
