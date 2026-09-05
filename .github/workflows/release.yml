@@ -38,9 +38,15 @@ jobs:
 
       - name: Hash
         id: wasm
-        run: echo "sha256=$(stellar contract info hash --wasm dist/allowance.wasm)" >> "$GITHUB_OUTPUT"
+        run: |
+          sha256=$(stellar contract info hash --wasm dist/allowance.wasm)
+          echo "$sha256"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
 
+      # GitHub does not issue attestations for user-owned private repositories, and the
+      # step fails rather than skipping. The release is still worth publishing without one.
       - uses: actions/attest-build-provenance@v4
+        if: github.event.repository.visibility == 'public'
         with:
           subject-path: dist/allowance.wasm
 
@@ -48,14 +54,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHA256: ${{ steps.wasm.outputs.sha256 }}
+          ATTESTED: ${{ github.event.repository.visibility == 'public' }}
         run: |
           echo "Wasm hash \`$SHA256\`, built from \`$GITHUB_SHA\`." > notes.md
           cat >> notes.md <<'EOF'
 
           Deploy the file attached here rather than a local build. A local build omits the
-          `source_repo` metadata, which produces different bytes and a different hash, and
-          only the hash above carries a build attestation.
+          `source_repo` metadata, which produces different bytes and a different hash.
+          EOF
+          if [ "$ATTESTED" = "true" ]; then
+          cat >> notes.md <<'EOF'
+
+          These bytes carry a build attestation, so they can be traced back to the commit
+          that produced them.
 
               stellar contract info build --wasm allowance.wasm
           EOF
+          else
+          cat >> notes.md <<'EOF'
+
+          No build attestation. GitHub does not issue them for private repositories. The
+          build is pinned, so re-running this release once the repository is public
+          produces the same hash and attests it.
+          EOF
+          fi
           gh release create "$GITHUB_REF_NAME" dist/allowance.wasm --notes-file notes.md
