@@ -10,7 +10,7 @@ use soroban_sdk::{
     auth::{Context, CustomAccountInterface},
     contract, contracterror, contractimpl, contracttype,
     crypto::Hash,
-    panic_with_error, symbol_short, token, Address, BytesN, Env, TryFromVal, Vec,
+    panic_with_error, symbol_short, token, Address, BytesN, Env, TryFromVal, Val, Vec,
 };
 
 /// The asset this allowance spends, and what it starts with.
@@ -190,7 +190,8 @@ impl Allowance {
         }
 
         if deposit != 0 {
-            token::TokenClient::new(&env, &token(&env)?).transfer(
+            let token: Address = read_value(&env, &DataKey::Token)?;
+            token::TokenClient::new(&env, &token).transfer(
                 &owner,
                 env.current_contract_address(),
                 &deposit,
@@ -219,7 +220,8 @@ impl Allowance {
         let owner = require_owner(&env)?;
 
         let here = env.current_contract_address();
-        token::TokenClient::new(&env, &token(&env)?).transfer(&here, to.unwrap_or(owner), &amount);
+        let token: Address = read_value(&env, &DataKey::Token)?;
+        token::TokenClient::new(&env, &token).transfer(&here, to.unwrap_or(owner), &amount);
         Ok(())
     }
 
@@ -261,10 +263,10 @@ impl Allowance {
     /// entry on its own clock, and a config read should still answer once that has expired.
     pub fn config(env: Env) -> Result<Config, AllowanceError> {
         Ok(Config {
-            owner_address: owner(&env)?,
-            agent_key: agent_key(&env)?,
-            token_address: token(&env)?,
-            rules: rules(&env)?,
+            owner_address: read_value(&env, &DataKey::Owner)?,
+            agent_key: read_value(&env, &DataKey::AgentKey)?,
+            token_address: read_value(&env, &DataKey::Token)?,
+            rules: read_value(&env, &DataKey::Rules)?,
             enabled: !disabled(&env),
         })
     }
@@ -275,40 +277,23 @@ impl Allowance {
     /// A read that writes would bill the owner a transaction for every glance at a
     /// dashboard, so `rolled_window` returns a copy and only the payment path stores one.
     pub fn spent_in_window(env: Env) -> Result<i128, AllowanceError> {
-        let rules = rules(&env)?;
+        let rules: Rules = read_value(&env, &DataKey::Rules)?;
         let (window, _) = rolled_window(&env, rules.window_ledgers);
         Ok(window.slots.iter().sum())
     }
 }
 
-fn token(env: &Env) -> Result<Address, AllowanceError> {
+/// Reads anything the constructor wrote. Absent means the constructor never ran, which is
+/// the same answer whichever value was asked for.
+fn read_value<V: TryFromVal<Env, Val>>(env: &Env, key: &DataKey) -> Result<V, AllowanceError> {
     env.storage()
         .instance()
-        .get(&DataKey::Token)
+        .get(key)
         .ok_or(AllowanceError::NotInitialized)
 }
 
-fn owner(env: &Env) -> Result<Address, AllowanceError> {
-    env.storage()
-        .instance()
-        .get(&DataKey::Owner)
-        .ok_or(AllowanceError::NotInitialized)
-}
-
-fn agent_key(env: &Env) -> Result<BytesN<32>, AllowanceError> {
-    env.storage()
-        .instance()
-        .get(&DataKey::AgentKey)
-        .ok_or(AllowanceError::NotInitialized)
-}
-
-fn rules(env: &Env) -> Result<Rules, AllowanceError> {
-    env.storage()
-        .instance()
-        .get(&DataKey::Rules)
-        .ok_or(AllowanceError::NotInitialized)
-}
-
+/// Not `read_value`: an allowance that has never been disabled has no entry, and that is
+/// not an error.
 fn disabled(env: &Env) -> bool {
     env.storage()
         .instance()
@@ -319,7 +304,7 @@ fn disabled(env: &Env) -> bool {
 /// Loads the owner and demands their signature. Every owner-facing function goes through
 /// here, so there is one place to look when asking who may do what.
 fn require_owner(env: &Env) -> Result<Address, AllowanceError> {
-    let owner = owner(env)?;
+    let owner: Address = read_value(env, &DataKey::Owner)?;
     owner.require_auth();
     Ok(owner)
 }
@@ -351,13 +336,13 @@ impl CustomAccountInterface for Allowance {
             return Err(AllowanceError::Disabled);
         }
 
-        let agent_key = agent_key(&env)?;
+        let agent_key: BytesN<32> = read_value(&env, &DataKey::AgentKey)?;
 
         env.crypto()
             .ed25519_verify(&agent_key, &payload.into(), &signature);
 
-        let rules = rules(&env)?;
-        let token = token(&env)?;
+        let rules: Rules = read_value(&env, &DataKey::Rules)?;
+        let token: Address = read_value(&env, &DataKey::Token)?;
 
         let (mut window, slice) = rolled_window(&env, rules.window_ledgers);
         let mut total: i128 = window.slots.iter().sum();
