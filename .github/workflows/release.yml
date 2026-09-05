@@ -1,0 +1,61 @@
+name: release
+
+on:
+  push:
+    tags: ["allowance-contract-v*"]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  allowance:
+    name: allowance contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned rather than stable. A compiler bump changes the wasm bytes on its own,
+      # and the hash of those bytes is how a deployed contract is identified.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.97.1"
+          targets: wasm32v1-none
+
+      - uses: stellar/stellar-cli@v27.1.0
+
+      # `source_repo` is what `stellar contract info build` reads to find this run's
+      # attestation. Without it the released wasm cannot be traced back to a commit.
+      - name: Build
+        working-directory: contracts
+        run: |
+          stellar contract build \
+            --package allowance \
+            --locked \
+            --out-dir "$GITHUB_WORKSPACE/dist" \
+            --meta source_repo=github:${{ github.repository }}
+
+      - name: Hash
+        id: wasm
+        run: echo "sha256=$(stellar contract info hash --wasm dist/allowance.wasm)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/allowance.wasm
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA256: ${{ steps.wasm.outputs.sha256 }}
+        run: |
+          echo "Wasm hash \`$SHA256\`, built from \`$GITHUB_SHA\`." > notes.md
+          cat >> notes.md <<'EOF'
+
+          Deploy the file attached here rather than a local build. A local build omits the
+          `source_repo` metadata, which produces different bytes and a different hash, and
+          only the hash above carries a build attestation.
+
+              stellar contract info build --wasm allowance.wasm
+          EOF
+          gh release create "$GITHUB_REF_NAME" dist/allowance.wasm --notes-file notes.md
