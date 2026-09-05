@@ -837,3 +837,39 @@ fn reading_the_window_does_not_write_it() {
         "the slots were cleared in storage"
     );
 }
+
+/// Everything the owner's dashboard needs to draw an allowance, in one call.
+#[test]
+fn config_reports_what_the_allowance_was_created_with() {
+    let f = setup_with_deposit(1_000);
+    let config = AllowanceClient::new(&f.env, &f.allowance).config();
+
+    assert_eq!(config.owner_address, f.owner, "who the money belongs to");
+    assert_eq!(
+        config.token_address, f.token,
+        "which asset it is denominated in"
+    );
+    assert_eq!(
+        config.agent_key,
+        BytesN::from_array(&f.env, &f.agent.verifying_key().to_bytes()),
+        "the key the owner derives the agent's account from, to fund it"
+    );
+    assert_eq!(config.rules.window_cap, 1_000_000);
+    assert_eq!(config.rules.window_ledgers, WINDOW);
+    assert_eq!(config.rules.allowlist, vec![&f.env, f.seller.clone()]);
+    assert!(config.enabled, "an allowance starts able to spend");
+}
+
+/// The switch is the one part of this that moves after deployment, so reporting it as it
+/// was set rather than as it stands would be worse than not reporting it at all.
+#[test]
+fn config_follows_the_disable_switch() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+
+    client.disable();
+    assert!(!client.config().enabled, "disabled, and the config says so");
+
+    client.enable();
+    assert!(client.config().enabled, "and back again");
+}

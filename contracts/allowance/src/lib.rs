@@ -50,6 +50,19 @@ pub struct Rules {
     pub allowlist: Vec<Address>,
 }
 
+/// An allowance as it stands, for anyone who wants to check it.
+///
+/// Returned rather than stored, so its field names cost bytes in one response and no rent.
+#[contracttype]
+#[derive(Clone)]
+pub struct Config {
+    pub owner_address: Address,
+    pub agent_key: BytesN<32>,
+    pub token_address: Address,
+    pub rules: Rules,
+    pub enabled: bool,
+}
+
 /// Spending is remembered per slice rather than per payment, so the entry is the same size
 /// after a million payments as after one.
 const SLICES: u32 = 24;
@@ -240,6 +253,22 @@ impl Allowance {
         !disabled(&env)
     }
 
+    /// Everything about an allowance except how much of it is left.
+    ///
+    /// One call rather than a getter each because instance storage is a single ledger
+    /// entry: the host loads all of it however little is asked for, so five getters would
+    /// be five loads of the same bytes. The window is left out because it lives in its own
+    /// entry on its own clock, and a config read should still answer once that has expired.
+    pub fn config(env: Env) -> Result<Config, AllowanceError> {
+        Ok(Config {
+            owner_address: owner(&env)?,
+            agent_key: agent_key(&env)?,
+            token_address: token(&env)?,
+            rules: rules(&env)?,
+            enabled: !disabled(&env),
+        })
+    }
+
     /// How much of the cap has already been spent, as of this ledger.
     ///
     /// Answering means ageing the window forward, and that roll is deliberately not saved.
@@ -256,6 +285,20 @@ fn token(env: &Env) -> Result<Address, AllowanceError> {
     env.storage()
         .instance()
         .get(&DataKey::Token)
+        .ok_or(AllowanceError::NotInitialized)
+}
+
+fn owner(env: &Env) -> Result<Address, AllowanceError> {
+    env.storage()
+        .instance()
+        .get(&DataKey::Owner)
+        .ok_or(AllowanceError::NotInitialized)
+}
+
+fn agent_key(env: &Env) -> Result<BytesN<32>, AllowanceError> {
+    env.storage()
+        .instance()
+        .get(&DataKey::AgentKey)
         .ok_or(AllowanceError::NotInitialized)
 }
 
@@ -276,11 +319,7 @@ fn disabled(env: &Env) -> bool {
 /// Loads the owner and demands their signature. Every owner-facing function goes through
 /// here, so there is one place to look when asking who may do what.
 fn require_owner(env: &Env) -> Result<Address, AllowanceError> {
-    let owner: Address = env
-        .storage()
-        .instance()
-        .get(&DataKey::Owner)
-        .ok_or(AllowanceError::NotInitialized)?;
+    let owner = owner(env)?;
     owner.require_auth();
     Ok(owner)
 }
@@ -312,11 +351,7 @@ impl CustomAccountInterface for Allowance {
             return Err(AllowanceError::Disabled);
         }
 
-        let agent_key: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&DataKey::AgentKey)
-            .ok_or(AllowanceError::NotInitialized)?;
+        let agent_key = agent_key(&env)?;
 
         env.crypto()
             .ed25519_verify(&agent_key, &payload.into(), &signature);
