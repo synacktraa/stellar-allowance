@@ -768,3 +768,72 @@ fn a_write_cannot_deposit_a_negative_amount() {
         "and nothing moved either way"
     );
 }
+
+/// The window as it actually sits in storage, rather than as a reader computes it.
+fn stored_window(f: &Fixture) -> Window {
+    f.env.as_contract(&f.allowance, || {
+        f.env
+            .storage()
+            .persistent()
+            .get(&DataKey::Window)
+            .expect("no window has been written yet")
+    })
+}
+
+/// The number a dashboard shows the owner. It has to be the number `__check_auth` would
+/// arrive at, or the owner is told they have room the agent does not have.
+#[test]
+fn spent_in_window_counts_only_what_is_still_inside_it() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+    let start = f.env.ledger().sequence();
+
+    assert_eq!(
+        client.spent_in_window(),
+        0,
+        "nothing spent, nothing counted"
+    );
+
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 400_000)]),
+        None
+    );
+    assert_eq!(client.spent_in_window(), 400_000, "the payment just made");
+
+    f.env.ledger().set_sequence_number(start + WINDOW / 2);
+    assert_eq!(client.spent_in_window(), 400_000, "still inside the window");
+
+    f.env.ledger().set_sequence_number(start + WINDOW * 2);
+    assert_eq!(
+        client.spent_in_window(),
+        0,
+        "a window later, it has aged out"
+    );
+}
+
+/// Answering the question means rolling the window forward, and rolling is a write. Doing
+/// that write would turn every glance at a dashboard into a transaction the owner pays for,
+/// so the roll has to happen on a copy and be thrown away.
+#[test]
+fn reading_the_window_does_not_write_it() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+
+    assert_eq!(
+        check_auth(&f, vec![&f.env, transfer(&f, &f.seller, 400_000)]),
+        None
+    );
+    let before = stored_window(&f);
+
+    f.env
+        .ledger()
+        .set_sequence_number(f.env.ledger().sequence() + WINDOW * 2);
+    assert_eq!(client.spent_in_window(), 0, "the reader rolled forward");
+
+    let after = stored_window(&f);
+    assert_eq!(after.head, before.head, "the head moved in storage");
+    assert_eq!(
+        after.slots, before.slots,
+        "the slots were cleared in storage"
+    );
+}

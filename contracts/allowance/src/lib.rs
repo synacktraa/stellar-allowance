@@ -239,12 +239,30 @@ impl Allowance {
     pub fn enabled(env: Env) -> bool {
         !disabled(&env)
     }
+
+    /// How much of the cap has already been spent, as of this ledger.
+    ///
+    /// Answering means ageing the window forward, and that roll is deliberately not saved.
+    /// A read that writes would bill the owner a transaction for every glance at a
+    /// dashboard, so `rolled_window` returns a copy and only the payment path stores one.
+    pub fn spent_in_window(env: Env) -> Result<i128, AllowanceError> {
+        let rules = rules(&env)?;
+        let (window, _) = rolled_window(&env, rules.window_ledgers);
+        Ok(window.slots.iter().sum())
+    }
 }
 
 fn token(env: &Env) -> Result<Address, AllowanceError> {
     env.storage()
         .instance()
         .get(&DataKey::Token)
+        .ok_or(AllowanceError::NotInitialized)
+}
+
+fn rules(env: &Env) -> Result<Rules, AllowanceError> {
+    env.storage()
+        .instance()
+        .get(&DataKey::Rules)
         .ok_or(AllowanceError::NotInitialized)
 }
 
@@ -303,12 +321,7 @@ impl CustomAccountInterface for Allowance {
         env.crypto()
             .ed25519_verify(&agent_key, &payload.into(), &signature);
 
-        let rules: Rules = env
-            .storage()
-            .instance()
-            .get(&DataKey::Rules)
-            .ok_or(AllowanceError::NotInitialized)?;
-
+        let rules = rules(&env)?;
         let token = token(&env)?;
 
         let (mut window, slice) = rolled_window(&env, rules.window_ledgers);
