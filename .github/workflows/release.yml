@@ -50,6 +50,8 @@ jobs:
         with:
           subject-path: dist/allowance.wasm
 
+      # Re-runnable. Going public and re-running a release rewrites its notes rather
+      # than failing on a tag that already has a release.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -78,4 +80,9 @@ jobs:
           produces the same hash and attests it.
           EOF
           fi
-          gh release create "$GITHUB_REF_NAME" dist/allowance.wasm --notes-file notes.md
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
+            gh release upload "$GITHUB_REF_NAME" dist/allowance.wasm --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/allowance.wasm --notes-file notes.md
+          fi
