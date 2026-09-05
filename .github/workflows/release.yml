@@ -14,7 +14,10 @@ jobs:
     name: allowance contract
     runs-on: ubuntu-latest
     steps:
+      # Full history: the previous tag is what bounds the generated release notes.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Pinned rather than stable. A compiler bump changes the wasm bytes on its own,
       # and the hash of those bytes is how a deployed contract is identified.
@@ -40,6 +43,22 @@ jobs:
           fi
           echo "$crate"
           echo "version=$crate" >> "$GITHUB_OUTPUT"
+
+      # GitHub generates release notes from the pull requests in a range, but does not
+      # work out the range itself. Left to its default it reaches back to the first
+      # commit in the repository and lists everything ever merged.
+      - name: Notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous=$(git tag --list 'allowance-contract-v*' --sort=-v:refname             | grep -vx "$GITHUB_REF_NAME" | head -1)
+          echo "previous tag: ${previous:-none}"
+          if [ -n "$previous" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes"               -f tag_name="$GITHUB_REF_NAME"               -f previous_tag_name="$previous"               -q .body > changes.md
+          else
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes"               -f tag_name="$GITHUB_REF_NAME"               -q .body > changes.md
+          fi
+          cat changes.md
 
       # `source_repo` is what `stellar contract info build` reads to find this run's
       # attestation. `version` lets a deployed allowance name its own version, so
@@ -82,26 +101,23 @@ jobs:
           echo "Version \`$VERSION\`, wasm hash \`$SHA256\`, built from \`$GITHUB_SHA\`." > notes.md
           cat >> notes.md <<'EOF'
 
-          Deploy the file attached here rather than a local build. A local build omits the
-          `source_repo` and `version` metadata, which produces different bytes and a
-          different hash.
+          Deploy the file attached here rather than a local build. A local build omits the `source_repo` and `version` metadata, which produces different bytes and a different hash.
           EOF
           if [ "$ATTESTED" = "true" ]; then
           cat >> notes.md <<'EOF'
 
-          These bytes carry a build attestation, so they can be traced back to the commit
-          that produced them.
+          These bytes carry a build attestation, so they can be traced back to the commit that produced them.
 
               stellar contract info build --wasm allowance.wasm
           EOF
           else
           cat >> notes.md <<'EOF'
 
-          No build attestation. GitHub does not issue them for private repositories. The
-          build is pinned, so re-running this release once the repository is public
-          produces the same hash and attests it.
+          No build attestation. GitHub does not issue them for private repositories. The build is pinned, so re-running this release once the repository is public produces the same hash and attests it.
           EOF
           fi
+          echo >> notes.md
+          cat changes.md >> notes.md
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
             gh release upload "$GITHUB_REF_NAME" dist/allowance.wasm --clobber
