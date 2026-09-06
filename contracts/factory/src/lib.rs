@@ -74,6 +74,12 @@ impl Factory {
             .deploy_v2(wasm, (setup,))
     }
 
+    /// The allowance version this factory creates. Fixed at deployment, which is why a new
+    /// allowance release means a new factory rather than a call that repoints this one.
+    pub fn allowance_wasm(env: Env) -> BytesN<32> {
+        env.storage().instance().get(&DataKey::Wasm).unwrap()
+    }
+
     /// Where an owner's allowance at this index is, whether or not it exists yet. A pure
     /// computation: it reads no ledger state and does not deploy anything.
     pub fn address_for(env: Env, owner: Address, index: u32) -> Address {

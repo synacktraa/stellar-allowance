@@ -181,3 +181,14 @@ fn an_owner_cannot_be_forged() {
         "landing on another owner's address must need that owner's signature"
     );
 }
+
+/// How a client learns which allowance version a factory creates. There is no setter, so
+/// this is also the whole of what the factory can ever be asked about itself.
+#[test]
+fn the_pinned_wasm_hash_is_what_the_constructor_was_given() {
+    let env = Env::default();
+    let wasm = env.deployer().upload_contract_wasm(allowance::WASM);
+    let factory = FactoryClient::new(&env, &env.register(Factory, (wasm.clone(),)));
+
+    assert_eq!(factory.allowance_wasm(), wasm);
+}
