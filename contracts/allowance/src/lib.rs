@@ -208,6 +208,9 @@ impl Allowance {
         let owner = require_owner(&env)?;
 
         if let Some(name) = name {
+            if name.len() > NAME_MAX {
+                return Err(AllowanceError::NameTooLong);
+            }
             env.storage().instance().set(&DataKey::Name, &name);
         }
 

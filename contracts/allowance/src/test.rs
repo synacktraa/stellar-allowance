@@ -773,6 +773,47 @@ fn a_name_of_exactly_the_cap_is_accepted() {
     assert_eq!(config.name.len(), 64);
 }
 
+/// A cap that only guards one door is not a cap. Creation refuses an over-long name, so a
+/// rename has to refuse the same one.
+#[test]
+fn a_name_over_the_cap_is_refused_on_rename() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+    let too_long = String::from_str(
+        &f.env,
+        "sixty five bytes exactly, counted so the boundary is pinned here!",
+    );
+
+    let before = client.get_config();
+
+    // Rules ride along. They stay unapplied because returning an error rolls the whole
+    // invocation back, not because of where the guard sits.
+    assert_eq!(
+        client
+            .try_write(
+                &Some(too_long),
+                &Some(Rules {
+                    window_ledgers: WINDOW,
+                    window_cap: 42,
+                    allowlist: vec![&f.env, f.seller.clone()],
+                }),
+                &0,
+            )
+            .err(),
+        Some(Ok(AllowanceError::NameTooLong))
+    );
+    assert_eq!(
+        client.get_config().name,
+        String::from_str(&f.env, "Test allowance"),
+        "a refused rename leaves the old name in place"
+    );
+    assert_eq!(
+        client.get_config().rules.window_cap,
+        before.rules.window_cap,
+        "and leaves the rules that arrived with it unapplied"
+    );
+}
+
 /// Naming one thing must not clear the others. A write is a diff in every field it takes,
 /// not only in the rules.
 #[test]
