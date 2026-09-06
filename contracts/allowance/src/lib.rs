@@ -10,7 +10,7 @@ use soroban_sdk::{
     auth::{Context, CustomAccountInterface},
     contract, contracterror, contractimpl, contracttype,
     crypto::Hash,
-    panic_with_error, symbol_short, token, Address, BytesN, Env, TryFromVal, Val, Vec,
+    panic_with_error, symbol_short, token, Address, BytesN, Env, String, TryFromVal, Val, Vec,
 };
 
 /// The asset this allowance spends, and what it starts with.
@@ -34,6 +34,9 @@ pub struct Setup {
     /// same address, so an address is no evidence of who holds a key. This is the key
     /// itself, and what `ed25519_verify` checks a signature against.
     pub agent_key: BytesN<32>,
+    /// What the owner calls this allowance. Instance storage is read whole on every call,
+    /// so this is capped rather than open-ended.
+    pub name: String,
     pub spending: Spending,
     pub rules: Rules,
 }
@@ -58,6 +61,7 @@ pub struct Rules {
 pub struct Config {
     pub owner: Address,
     pub agent_key: BytesN<32>,
+    pub name: String,
     pub token: Address,
     pub rules: Rules,
     pub enabled: bool,
@@ -96,6 +100,7 @@ enum DataKey {
     Owner,
     Token,
     AgentKey,
+    Name,
     Rules,
     Window,
     Disabled,
@@ -138,6 +143,7 @@ impl Allowance {
         let Setup {
             owner,
             agent_key,
+            name,
             spending,
             rules,
         } = setup;
@@ -155,6 +161,7 @@ impl Allowance {
             .instance()
             .set(&DataKey::Token, &spending.token);
         env.storage().instance().set(&DataKey::AgentKey, &agent_key);
+        env.storage().instance().set(&DataKey::Name, &name);
         env.storage().instance().set(&DataKey::Rules, &rules);
 
         // A zero deposit is a legitimate deployment: rules now, funding later.
@@ -265,6 +272,7 @@ impl Allowance {
         Ok(Config {
             owner: read_value(&env, &DataKey::Owner)?,
             agent_key: read_value(&env, &DataKey::AgentKey)?,
+            name: read_value(&env, &DataKey::Name)?,
             token: read_value(&env, &DataKey::Token)?,
             rules: read_value(&env, &DataKey::Rules)?,
             enabled: !is_disabled(&env),

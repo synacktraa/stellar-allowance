@@ -10,7 +10,7 @@ use soroban_sdk::{
         Address as _, BytesN as _, Ledger as _,
     },
     token::{StellarAssetClient, TokenClient},
-    vec, Address, BytesN, Env, IntoVal,
+    vec, Address, BytesN, Env, IntoVal, String,
 };
 
 /// A day's worth of ledgers, give or take. Wide enough that the window never interferes
@@ -69,6 +69,7 @@ fn setup_with_deposit(deposit: i128) -> Fixture {
         (Setup {
             owner,
             agent_key,
+            name: String::from_str(&env, "Test allowance"),
             spending: Spending {
                 token: token.clone(),
                 initial_deposit: deposit,
@@ -845,6 +846,11 @@ fn config_reports_what_the_allowance_was_created_with() {
     let config = AllowanceClient::new(&f.env, &f.allowance).get_config();
 
     assert_eq!(config.owner, f.owner, "who the money belongs to");
+    assert_eq!(
+        config.name,
+        String::from_str(&f.env, "Test allowance"),
+        "what the owner calls it"
+    );
     assert_eq!(config.token, f.token, "which asset it is denominated in");
     assert_eq!(
         config.agent_key,
