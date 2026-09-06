@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#
+# Fast checks only. Anything that compiles belongs in pre-push, because a commit hook that
+# takes more than a moment gets bypassed with --no-verify and then guards nothing.
+#
+# Enable with: git config core.hooksPath .githooks
+
+set -uo pipefail
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+if grep -q '^contracts/' <<<"$staged"; then
+  echo "pre-commit: contracts, cargo fmt"
+  (cd contracts && cargo fmt --all -- --check) || {
+    echo "pre-commit: formatting is off. Run 'cd contracts && cargo fmt --all'." >&2
+    exit 1
+  }
+fi
+
+exit 0

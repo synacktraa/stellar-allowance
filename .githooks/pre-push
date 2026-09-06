@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#
+# The gate CI runs, run before the push rather than after it. Ordered as CI orders it: the
+# allowance wasm is built first because contractimport reads it while the tests compile,
+# which clippy --all-targets does too.
+#
+# Enable with: git config core.hooksPath .githooks
+
+set -uo pipefail
+
+base=$(git merge-base origin/dev HEAD 2>/dev/null)
+if [ -n "$base" ]; then
+  changed=$(git diff --name-only "$base"..HEAD)
+else
+  changed=$(git ls-files)
+fi
+
+if grep -q '^contracts/' <<<"$changed"; then
+  echo "pre-push: contracts"
+  (
+    cd contracts || exit 1
+    cargo build --release --target wasm32v1-none -p allowance &&
+      cargo fmt --all -- --check &&
+      cargo clippy --all-targets -- -D warnings &&
+      cargo test --all
+  ) || {
+    echo "pre-push: the contracts gate failed. CI would fail the same way." >&2
+    exit 1
+  }
+fi
+
+exit 0
