@@ -194,8 +194,9 @@ impl Allowance {
     /// against storage is an argument that can be wrong for no benefit. The agent is not a
     /// parameter at all: it cannot change.
     ///
-    /// Rules are applied before money moves, so a rejected rule change cannot leave funds
-    /// sitting against rules that were never applied.
+    /// A write is all or nothing. Returning an error rolls the whole invocation back, so a
+    /// refused field discards whatever was stored beside it and the fields are applied in
+    /// signature order for reading, not for safety.
     pub fn write(
         env: Env,
         name: Option<String>,
