@@ -10,14 +10,14 @@ use soroban_sdk::{
     auth::{Context, CustomAccountInterface},
     contract, contracterror, contractimpl, contracttype,
     crypto::Hash,
-    panic_with_error, symbol_short, token, Address, BytesN, Env, TryFromVal, Val, Vec,
+    panic_with_error, symbol_short, token, Address, BytesN, Env, String, TryFromVal, Val, Vec,
 };
 
 /// The asset this allowance spends, and what it starts with.
 #[contracttype]
 #[derive(Clone)]
 pub struct Spending {
-    pub token_address: Address,
+    pub token: Address,
     /// Moved from the owner into the contract at deployment. Zero is legitimate.
     pub initial_deposit: i128,
 }
@@ -27,13 +27,16 @@ pub struct Spending {
 #[contracttype]
 #[derive(Clone)]
 pub struct Setup {
-    pub owner_address: Address,
+    pub owner: Address,
     /// The agent's raw ed25519 public key, not an account.
     ///
     /// A Stellar account can have its master key removed from its signers while keeping the
     /// same address, so an address is no evidence of who holds a key. This is the key
     /// itself, and what `ed25519_verify` checks a signature against.
     pub agent_key: BytesN<32>,
+    /// What the owner calls this allowance. Instance storage is read whole on every call,
+    /// so this is capped rather than open-ended.
+    pub name: String,
     pub spending: Spending,
     pub rules: Rules,
 }
@@ -56,9 +59,10 @@ pub struct Rules {
 #[contracttype]
 #[derive(Clone)]
 pub struct Config {
-    pub owner_address: Address,
+    pub owner: Address,
     pub agent_key: BytesN<32>,
-    pub token_address: Address,
+    pub name: String,
+    pub token: Address,
     pub rules: Rules,
     pub enabled: bool,
 }
@@ -82,6 +86,11 @@ const TTL_TARGET: u32 = 120_960;
 /// and it buys back just that hour — around 2,600 stroops.
 const TTL_THRESHOLD: u32 = TTL_TARGET - 720;
 
+/// Longest name an allowance may carry, in bytes rather than characters: bytes are what the
+/// entry pays rent on, and instance storage is read whole on every call including every
+/// payment. Sixty four leaves room for a name that is not written in English.
+const NAME_MAX: u32 = 64;
+
 /// What the window remembers: a running total per slice, and which slice was written last.
 #[contracttype]
 #[derive(Clone)]
@@ -96,6 +105,7 @@ enum DataKey {
     Owner,
     Token,
     AgentKey,
+    Name,
     Rules,
     Window,
     Disabled,
@@ -125,6 +135,8 @@ pub enum AllowanceError {
     Disabled = 107,
     /// An amount that cannot mean what it says.
     InvalidAmount = 108,
+    /// A name longer than `NAME_MAX`.
+    NameTooLong = 109,
 }
 
 #[contract]
@@ -136,14 +148,18 @@ impl Allowance {
     /// change the owner, the token or the agent, which is shorter to audit than a guard.
     pub fn __constructor(env: Env, setup: Setup) {
         let Setup {
-            owner_address: owner,
+            owner,
             agent_key,
+            name,
             spending,
             rules,
         } = setup;
-        // A constructor cannot return an error, so this panics rather than returning one.
+        // A constructor cannot return an error, so these panic rather than returning one.
         if spending.initial_deposit < 0 {
             panic_with_error!(&env, AllowanceError::InvalidAmount);
+        }
+        if name.len() > NAME_MAX {
+            panic_with_error!(&env, AllowanceError::NameTooLong);
         }
 
         // Covers the nested transfer through the auth tree, so deploying and funding stay
@@ -153,13 +169,14 @@ impl Allowance {
         env.storage().instance().set(&DataKey::Owner, &owner);
         env.storage()
             .instance()
-            .set(&DataKey::Token, &spending.token_address);
+            .set(&DataKey::Token, &spending.token);
         env.storage().instance().set(&DataKey::AgentKey, &agent_key);
+        env.storage().instance().set(&DataKey::Name, &name);
         env.storage().instance().set(&DataKey::Rules, &rules);
 
         // A zero deposit is a legitimate deployment: rules now, funding later.
         if spending.initial_deposit != 0 {
-            token::TokenClient::new(&env, &spending.token_address).transfer(
+            token::TokenClient::new(&env, &spending.token).transfer(
                 &owner,
                 env.current_contract_address(),
                 &spending.initial_deposit,
@@ -169,21 +186,34 @@ impl Allowance {
 
     /// Everything the owner changes afterwards, in one invocation and one signature.
     ///
-    /// `rules: None` means *leave them alone*, never *clear them*. The caller sends a diff
-    /// of what the owner actually touched, so an edit that only adds credit must not arrive
-    /// carrying an allowlist and overwrite the real one.
+    /// `None` means *leave it alone*, never *clear it*, for the rules and the name alike.
+    /// The caller sends a diff of what the owner actually touched, so an edit that only adds
+    /// credit must not arrive carrying an allowlist and overwrite the real one.
     ///
     /// The owner is loaded rather than passed. An argument that exists only to be checked
     /// against storage is an argument that can be wrong for no benefit. The agent is not a
     /// parameter at all: it cannot change.
     ///
-    /// Rules are applied before money moves, so a rejected rule change cannot leave funds
-    /// sitting against rules that were never applied.
-    pub fn write(env: Env, rules: Option<Rules>, deposit: i128) -> Result<(), AllowanceError> {
+    /// A write is all or nothing. Returning an error rolls the whole invocation back, so a
+    /// refused field discards whatever was stored beside it and the fields are applied in
+    /// signature order for reading, not for safety.
+    pub fn write(
+        env: Env,
+        name: Option<String>,
+        rules: Option<Rules>,
+        deposit: i128,
+    ) -> Result<(), AllowanceError> {
         if deposit < 0 {
             return Err(AllowanceError::InvalidAmount);
         }
         let owner = require_owner(&env)?;
+
+        if let Some(name) = name {
+            if name.len() > NAME_MAX {
+                return Err(AllowanceError::NameTooLong);
+            }
+            env.storage().instance().set(&DataKey::Name, &name);
+        }
 
         if let Some(rules) = rules {
             env.storage().instance().set(&DataKey::Rules, &rules);
@@ -263,9 +293,10 @@ impl Allowance {
     /// entry on its own clock, and a config read should still answer once that has expired.
     pub fn get_config(env: Env) -> Result<Config, AllowanceError> {
         Ok(Config {
-            owner_address: read_value(&env, &DataKey::Owner)?,
+            owner: read_value(&env, &DataKey::Owner)?,
             agent_key: read_value(&env, &DataKey::AgentKey)?,
-            token_address: read_value(&env, &DataKey::Token)?,
+            name: read_value(&env, &DataKey::Name)?,
+            token: read_value(&env, &DataKey::Token)?,
             rules: read_value(&env, &DataKey::Rules)?,
             enabled: !is_disabled(&env),
         })
