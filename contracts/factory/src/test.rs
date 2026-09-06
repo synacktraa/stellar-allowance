@@ -121,3 +121,30 @@ fn a_different_owner_gives_a_different_address() {
         factory.address_for(&other, &0)
     );
 }
+
+/// The interface picks a free index before submitting, so this is the backstop rather than
+/// the normal path. Without it a second create would silently replace the first.
+#[test]
+fn the_same_index_cannot_be_used_twice() {
+    let f = setup();
+    let factory = FactoryClient::new(&f.env, &f.factory);
+    factory.create(&setup_args(&f), &0);
+
+    assert!(
+        factory.try_create(&setup_args(&f), &0).is_err(),
+        "an occupied index must not be handed out again"
+    );
+}
+
+/// An owner holding several allowances is the ordinary case, not an edge one.
+#[test]
+fn an_owner_can_hold_more_than_one() {
+    let f = setup();
+    let factory = FactoryClient::new(&f.env, &f.factory);
+
+    let first = factory.create(&setup_args(&f), &0);
+    let second = factory.create(&setup_args(&f), &1);
+
+    assert_ne!(first, second);
+    assert_eq!(second, factory.address_for(&f.owner, &1));
+}
