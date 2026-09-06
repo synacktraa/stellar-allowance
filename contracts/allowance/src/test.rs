@@ -680,6 +680,7 @@ fn the_owner_can_change_the_rules() {
     );
 
     AllowanceClient::new(&f.env, &f.allowance).write(
+        &None,
         &Some(Rules {
             window_ledgers: WINDOW,
             window_cap: 1_000_000,
@@ -710,6 +711,7 @@ fn nobody_but_the_owner_can_change_the_rules() {
 
     assert!(client
         .try_write(
+            &None,
             &Some(Rules {
                 window_ledgers: WINDOW,
                 window_cap: i128::MAX,
@@ -736,7 +738,7 @@ fn a_write_that_names_no_rules_leaves_them_alone() {
     let f = setup_with_deposit(1_000);
     let usdc = TokenClient::new(&f.env, &f.token);
 
-    AllowanceClient::new(&f.env, &f.allowance).write(&None, &4_000);
+    AllowanceClient::new(&f.env, &f.allowance).write(&None, &None, &4_000);
 
     assert_eq!(usdc.balance(&f.allowance), 5_000, "the credit arrived");
     assert_eq!(
@@ -746,21 +748,54 @@ fn a_write_that_names_no_rules_leaves_them_alone() {
     );
 }
 
+/// Naming one thing must not clear the others. A write is a diff in every field it takes,
+/// not only in the rules.
+#[test]
+fn a_rename_leaves_the_rules_alone_and_a_rule_change_leaves_the_name_alone() {
+    let f = setup();
+    let client = AllowanceClient::new(&f.env, &f.allowance);
+    let before = client.get_config();
+
+    client.write(&Some(String::from_str(&f.env, "Groceries")), &None, &0);
+    let renamed = client.get_config();
+    assert_eq!(renamed.name, String::from_str(&f.env, "Groceries"));
+    assert_eq!(
+        renamed.rules.allowlist, before.rules.allowlist,
+        "a rename must not clear the allowlist"
+    );
+
+    client.write(
+        &None,
+        &Some(Rules {
+            window_ledgers: WINDOW,
+            window_cap: 42,
+            allowlist: before.rules.allowlist.clone(),
+        }),
+        &0,
+    );
+    let recapped = client.get_config();
+    assert_eq!(recapped.rules.window_cap, 42);
+    assert_eq!(
+        recapped.name,
+        String::from_str(&f.env, "Groceries"),
+        "a rule change must not clear the name"
+    );
+}
+
 /// Zero is accepted here, unlike on `withdraw`. A write is a diff, and an empty one is
-/// legitimate — the owner may have changed only something this contract does not store,
-/// like the allowance's name. Negative is refused, because a deposit that reverses
-/// direction is not a deposit.
+/// legitimate rather than an error: refusing it would add a check that protects nothing.
+/// Negative is refused, because a deposit that reverses direction is not a deposit.
 #[test]
 fn a_write_cannot_deposit_a_negative_amount() {
     let f = setup_with_deposit(1_000);
     let client = AllowanceClient::new(&f.env, &f.allowance);
 
     assert!(
-        client.try_write(&None, &0).is_ok(),
+        client.try_write(&None, &None, &0).is_ok(),
         "an empty diff is legal"
     );
     assert_eq!(
-        client.try_write(&None, &-1).err(),
+        client.try_write(&None, &None, &-1).err(),
         Some(Ok(AllowanceError::InvalidAmount))
     );
     assert_eq!(

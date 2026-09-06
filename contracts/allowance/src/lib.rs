@@ -176,9 +176,9 @@ impl Allowance {
 
     /// Everything the owner changes afterwards, in one invocation and one signature.
     ///
-    /// `rules: None` means *leave them alone*, never *clear them*. The caller sends a diff
-    /// of what the owner actually touched, so an edit that only adds credit must not arrive
-    /// carrying an allowlist and overwrite the real one.
+    /// `None` means *leave it alone*, never *clear it*, for the rules and the name alike.
+    /// The caller sends a diff of what the owner actually touched, so an edit that only adds
+    /// credit must not arrive carrying an allowlist and overwrite the real one.
     ///
     /// The owner is loaded rather than passed. An argument that exists only to be checked
     /// against storage is an argument that can be wrong for no benefit. The agent is not a
@@ -186,11 +186,20 @@ impl Allowance {
     ///
     /// Rules are applied before money moves, so a rejected rule change cannot leave funds
     /// sitting against rules that were never applied.
-    pub fn write(env: Env, rules: Option<Rules>, deposit: i128) -> Result<(), AllowanceError> {
+    pub fn write(
+        env: Env,
+        name: Option<String>,
+        rules: Option<Rules>,
+        deposit: i128,
+    ) -> Result<(), AllowanceError> {
         if deposit < 0 {
             return Err(AllowanceError::InvalidAmount);
         }
         let owner = require_owner(&env)?;
+
+        if let Some(name) = name {
+            env.storage().instance().set(&DataKey::Name, &name);
+        }
 
         if let Some(rules) = rules {
             env.storage().instance().set(&DataKey::Rules, &rules);
