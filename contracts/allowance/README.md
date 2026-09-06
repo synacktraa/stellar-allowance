@@ -23,8 +23,8 @@ cargo test
 ```
 
 `stellar contract build` writes the deployable artifact to
-`target/wasm32v1-none/release/allowance.wasm`, already optimized, at 14,682 bytes. A plain
-`cargo build --release` gives 31,286 bytes from the same source. Size is rent for as long as
+`target/wasm32v1-none/release/allowance.wasm`, already optimized, at 15,201 bytes. A plain
+`cargo build --release` gives 32,571 bytes from the same source. Size is rent for as long as
 the code stays on the ledger, so it matters which command produced any number you are quoting.
 
 ## Deploy
@@ -38,10 +38,11 @@ stellar contract deploy \
   --source owner --network testnet \
   -- \
   --setup '{
-    "owner_address": "GABC...",
-    "agent_key":     "80ede8c6...db8bb04e",
-    "spending":      { "token_address": "CDLZ...", "initial_deposit": "0" },
-    "rules":         {
+    "owner":     "GABC...",
+    "agent_key": "80ede8c6...db8bb04e",
+    "name":      "Research agent",
+    "spending":  { "token": "CDLZ...", "initial_deposit": "0" },
+    "rules":     {
       "window_ledgers": 17280,
       "window_cap":     "50000000",
       "allowlist":      ["GXYZ..."]
@@ -51,9 +52,10 @@ stellar contract deploy \
 
 | field | |
 |---|---|
-| `owner_address` | the only account that can withdraw, change the rules, or stop the agent |
+| `owner` | the only account that can withdraw, change the rules, or stop the agent |
 | `agent_key` | the agent's ed25519 public key as 32 bytes of hex, not a `G...` address |
-| `token_address` | the asset this allowance spends, and the only one it will authorize |
+| `name` | what the owner calls it. At most 64 bytes, which is fewer than 64 characters outside ASCII |
+| `token` | the asset this allowance spends, and the only one it will authorize |
 | `initial_deposit` | moved from the owner into the contract in the same transaction. `0` is a legitimate deployment: rules now, funding later |
 | `window_ledgers` | width of the rolling window. 17,280 is roughly a day |
 | `window_cap` | most that can move across that whole window |
@@ -377,6 +379,6 @@ A contract cannot submit a transaction. That is why the agent needs XLM of its o
 the only thing it needs XLM for. Spending is paid for by the facilitator.
 
 The code entry is a separate problem and not the owner's. It is shared by every contract
-deployed from that hash, it costs about 51 XLM a year at 14,682 bytes, and no payment can
+deployed from that hash, it costs about 53 XLM a year at 15,201 bytes, and no payment can
 carry it. Keeping it alive is an operational job for whoever publishes the contract. Restoring
 and extending are permissionless, so that can be done centrally for every allowance at once.
