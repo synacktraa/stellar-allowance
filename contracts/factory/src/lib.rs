@@ -57,6 +57,23 @@ impl Factory {
             .set(&DataKey::Wasm, &allowance_wasm);
     }
 
+    /// Deploys an allowance and runs its constructor in the same invocation, so the owner
+    /// signs once for the contract, its rules and its opening deposit.
+    ///
+    /// The signature demanded here is on the address the salt was derived from. The
+    /// allowance constructor demands its own, on the address it stores. Those are the same
+    /// address only while both declarations of `Setup` agree.
+    pub fn create(env: Env, setup: Setup, index: u32) -> Address {
+        setup.owner.require_auth();
+
+        let salt = salt_for(&env, &setup.owner, index);
+        let wasm: BytesN<32> = env.storage().instance().get(&DataKey::Wasm).unwrap();
+
+        env.deployer()
+            .with_current_contract(salt)
+            .deploy_v2(wasm, (setup,))
+    }
+
     /// Where an owner's allowance at this index is, whether or not it exists yet. A pure
     /// computation: it reads no ledger state and does not deploy anything.
     pub fn address_for(env: Env, owner: Address, index: u32) -> Address {

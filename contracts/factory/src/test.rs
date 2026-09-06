@@ -3,7 +3,7 @@
 use super::*;
 use soroban_sdk::{
     testutils::{Address as _, Ledger as _},
-    Address, Env,
+    vec, Address, BytesN, Env, String,
 };
 
 /// The allowance is deployed by hash, so its built artifact is what these tests need, not
@@ -19,6 +19,7 @@ struct Fixture {
     env: Env,
     owner: Address,
     factory: Address,
+    token: Address,
 }
 
 fn setup() -> Fixture {
@@ -28,11 +29,58 @@ fn setup() -> Fixture {
     let wasm = env.deployer().upload_contract_wasm(allowance::WASM);
     let factory = env.register(Factory, (wasm,));
 
+    let issuer = Address::generate(&env);
+    let token = env.register_stellar_asset_contract_v2(issuer).address();
+
     Fixture {
         owner: Address::generate(&env),
         factory,
+        token,
         env,
     }
+}
+
+fn setup_args(f: &Fixture) -> Setup {
+    Setup {
+        owner: f.owner.clone(),
+        agent_key: BytesN::from_array(&f.env, &[7u8; 32]),
+        name: String::from_str(&f.env, "Research agent"),
+        spending: Spending {
+            token: f.token.clone(),
+            initial_deposit: 0,
+        },
+        rules: Rules {
+            window_ledgers: 17_280,
+            window_cap: 1_000_000,
+            allowlist: vec![&f.env, f.owner.clone()],
+        },
+    }
+}
+
+/// What the interface computes before submitting has to be where the contract ends up, or
+/// an owner would create allowances they could not find again.
+#[test]
+fn a_created_allowance_lands_where_address_for_predicted() {
+    let f = setup();
+    let factory = FactoryClient::new(&f.env, &f.factory);
+    let predicted = factory.address_for(&f.owner, &0);
+
+    assert_eq!(factory.create(&setup_args(&f), &0), predicted);
+}
+
+/// Setup is declared in this crate rather than imported, so nothing but a round trip proves
+/// the two declarations encode the same bytes. The allowance decoding what the factory
+/// encoded is that proof.
+#[test]
+fn the_allowance_constructor_ran_with_what_create_was_given() {
+    let f = setup();
+    let created = FactoryClient::new(&f.env, &f.factory).create(&setup_args(&f), &0);
+    let config = allowance::Client::new(&f.env, &created).get_config();
+
+    assert_eq!(config.owner, f.owner, "the owner reached the constructor");
+    assert_eq!(config.token, f.token, "and so did the nested Spending");
+    assert_eq!(config.name, String::from_str(&f.env, "Research agent"));
+    assert_eq!(config.rules.window_cap, 1_000_000, "and the nested Rules");
 }
 
 /// The client derives this address from a secret it already holds, months after the
