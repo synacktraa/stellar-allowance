@@ -86,6 +86,11 @@ const TTL_TARGET: u32 = 120_960;
 /// and it buys back just that hour — around 2,600 stroops.
 const TTL_THRESHOLD: u32 = TTL_TARGET - 720;
 
+/// Longest name an allowance may carry, in bytes rather than characters: bytes are what the
+/// entry pays rent on, and instance storage is read whole on every call including every
+/// payment. Sixty four leaves room for a name that is not written in English.
+const NAME_MAX: u32 = 64;
+
 /// What the window remembers: a running total per slice, and which slice was written last.
 #[contracttype]
 #[derive(Clone)]
@@ -130,6 +135,8 @@ pub enum AllowanceError {
     Disabled = 107,
     /// An amount that cannot mean what it says.
     InvalidAmount = 108,
+    /// A name longer than `NAME_MAX`.
+    NameTooLong = 109,
 }
 
 #[contract]
@@ -147,9 +154,12 @@ impl Allowance {
             spending,
             rules,
         } = setup;
-        // A constructor cannot return an error, so this panics rather than returning one.
+        // A constructor cannot return an error, so these panic rather than returning one.
         if spending.initial_deposit < 0 {
             panic_with_error!(&env, AllowanceError::InvalidAmount);
+        }
+        if name.len() > NAME_MAX {
+            panic_with_error!(&env, AllowanceError::NameTooLong);
         }
 
         // Covers the nested transfer through the auth tree, so deploying and funding stay

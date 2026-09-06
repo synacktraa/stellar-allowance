@@ -38,6 +38,14 @@ fn setup() -> Fixture {
 }
 
 fn setup_with_deposit(deposit: i128) -> Fixture {
+    setup_full(deposit, "Test allowance")
+}
+
+fn setup_named(name: &str) -> Fixture {
+    setup_full(0, name)
+}
+
+fn setup_full(deposit: i128, name: &str) -> Fixture {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -69,7 +77,7 @@ fn setup_with_deposit(deposit: i128) -> Fixture {
         (Setup {
             owner,
             agent_key,
-            name: String::from_str(&env, "Test allowance"),
+            name: String::from_str(&env, name),
             spending: Spending {
                 token: token.clone(),
                 initial_deposit: deposit,
@@ -746,6 +754,23 @@ fn a_write_that_names_no_rules_leaves_them_alone() {
         None,
         "and the seller the owner approved is still approved"
     );
+}
+
+/// The cap is on bytes rather than characters, because bytes are what the entry pays rent on
+/// and what every payment reads when instance storage is loaded whole.
+#[test]
+// #109 rather than a host error: this asserts the refusal is ours.
+#[should_panic(expected = "Error(Contract, #109)")]
+fn a_name_over_the_cap_is_refused_at_creation() {
+    setup_named("sixty five bytes exactly, counted so the boundary is pinned here!");
+}
+
+/// The other side of the boundary, so the cap cannot drift by one without a test noticing.
+#[test]
+fn a_name_of_exactly_the_cap_is_accepted() {
+    let f = setup_named("sixty four bytes exactly, counted so the boundary is pinned here");
+    let config = AllowanceClient::new(&f.env, &f.allowance).get_config();
+    assert_eq!(config.name.len(), 64);
 }
 
 /// Naming one thing must not clear the others. A write is a diff in every field it takes,
