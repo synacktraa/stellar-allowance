@@ -148,3 +148,36 @@ fn an_owner_can_hold_more_than_one() {
     assert_ne!(first, second);
     assert_eq!(second, factory.address_for(&f.owner, &1));
 }
+
+/// The property the salt shape exists to provide. This runs without `mock_all_auths`, so a
+/// signature is genuinely absent rather than assumed.
+#[test]
+fn an_owner_cannot_be_forged() {
+    let env = Env::default();
+    let wasm = env.deployer().upload_contract_wasm(allowance::WASM);
+    let factory = FactoryClient::new(&env, &env.register(Factory, (wasm,)));
+
+    let issuer = Address::generate(&env);
+    let token = env.register_stellar_asset_contract_v2(issuer).address();
+    let victim = Address::generate(&env);
+
+    let setup = Setup {
+        owner: victim.clone(),
+        agent_key: BytesN::from_array(&env, &[7u8; 32]),
+        name: String::from_str(&env, "Not yours"),
+        spending: Spending {
+            token,
+            initial_deposit: 0,
+        },
+        rules: Rules {
+            window_ledgers: 17_280,
+            window_cap: 1,
+            allowlist: vec![&env, victim],
+        },
+    };
+
+    assert!(
+        factory.try_create(&setup, &0).is_err(),
+        "landing on another owner's address must need that owner's signature"
+    );
+}
