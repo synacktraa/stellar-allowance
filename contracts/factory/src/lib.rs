@@ -5,7 +5,9 @@
 //! With no index to look one up in, an allowance's address has to be computable rather than
 //! recorded. That needs a constant deployer, which is all this contract is.
 
-use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, xdr::ToXdr, Address, Bytes, BytesN, Env, String, Vec,
+};
 
 /// Declared again rather than imported from the allowance crate. Importing it drags that
 /// crate's exported `__constructor` symbol into this binary and the link fails. The XDR
@@ -54,6 +56,23 @@ impl Factory {
             .instance()
             .set(&DataKey::Wasm, &allowance_wasm);
     }
+
+    /// Where an owner's allowance at this index is, whether or not it exists yet. A pure
+    /// computation: it reads no ledger state and does not deploy anything.
+    pub fn address_for(env: Env, owner: Address, index: u32) -> Address {
+        env.deployer()
+            .with_current_contract(salt_for(&env, &owner, index))
+            .deployed_address()
+    }
+}
+
+/// The owner is in the salt so an address can only be taken by whoever can authorize it.
+/// The index is in it so an owner can hold more than one.
+fn salt_for(env: &Env, owner: &Address, index: u32) -> BytesN<32> {
+    let mut buf = Bytes::new(env);
+    buf.append(&owner.clone().to_xdr(env));
+    buf.append(&index.to_xdr(env));
+    env.crypto().sha256(&buf).into()
 }
 
 mod test;
