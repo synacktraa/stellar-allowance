@@ -1,0 +1,33 @@
+{
+  "name": "@stellar-allowance/sdk",
+  "version": "0.1.0",
+  "description": "Pay x402 APIs from a Stellar allowance",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^16.3.0",
+    "@x402/core": "~2.25.0",
+    "@x402/fetch": "~2.25.0",
+    "@x402/stellar": "~2.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}
