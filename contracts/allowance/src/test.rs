@@ -67,10 +67,10 @@ fn setup_with_deposit(deposit: i128) -> Fixture {
     let allowance = env.register(
         Allowance,
         (Setup {
-            owner_address: owner,
+            owner,
             agent_key,
             spending: Spending {
-                token_address: token.clone(),
+                token: token.clone(),
                 initial_deposit: deposit,
             },
             rules,
@@ -844,11 +844,8 @@ fn config_reports_what_the_allowance_was_created_with() {
     let f = setup_with_deposit(1_000);
     let config = AllowanceClient::new(&f.env, &f.allowance).get_config();
 
-    assert_eq!(config.owner_address, f.owner, "who the money belongs to");
-    assert_eq!(
-        config.token_address, f.token,
-        "which asset it is denominated in"
-    );
+    assert_eq!(config.owner, f.owner, "who the money belongs to");
+    assert_eq!(config.token, f.token, "which asset it is denominated in");
     assert_eq!(
         config.agent_key,
         BytesN::from_array(&f.env, &f.agent.verifying_key().to_bytes()),

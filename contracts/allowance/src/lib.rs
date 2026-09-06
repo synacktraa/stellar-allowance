@@ -17,7 +17,7 @@ use soroban_sdk::{
 #[contracttype]
 #[derive(Clone)]
 pub struct Spending {
-    pub token_address: Address,
+    pub token: Address,
     /// Moved from the owner into the contract at deployment. Zero is legitimate.
     pub initial_deposit: i128,
 }
@@ -27,7 +27,7 @@ pub struct Spending {
 #[contracttype]
 #[derive(Clone)]
 pub struct Setup {
-    pub owner_address: Address,
+    pub owner: Address,
     /// The agent's raw ed25519 public key, not an account.
     ///
     /// A Stellar account can have its master key removed from its signers while keeping the
@@ -56,9 +56,9 @@ pub struct Rules {
 #[contracttype]
 #[derive(Clone)]
 pub struct Config {
-    pub owner_address: Address,
+    pub owner: Address,
     pub agent_key: BytesN<32>,
-    pub token_address: Address,
+    pub token: Address,
     pub rules: Rules,
     pub enabled: bool,
 }
@@ -136,7 +136,7 @@ impl Allowance {
     /// change the owner, the token or the agent, which is shorter to audit than a guard.
     pub fn __constructor(env: Env, setup: Setup) {
         let Setup {
-            owner_address: owner,
+            owner,
             agent_key,
             spending,
             rules,
@@ -153,13 +153,13 @@ impl Allowance {
         env.storage().instance().set(&DataKey::Owner, &owner);
         env.storage()
             .instance()
-            .set(&DataKey::Token, &spending.token_address);
+            .set(&DataKey::Token, &spending.token);
         env.storage().instance().set(&DataKey::AgentKey, &agent_key);
         env.storage().instance().set(&DataKey::Rules, &rules);
 
         // A zero deposit is a legitimate deployment: rules now, funding later.
         if spending.initial_deposit != 0 {
-            token::TokenClient::new(&env, &spending.token_address).transfer(
+            token::TokenClient::new(&env, &spending.token).transfer(
                 &owner,
                 env.current_contract_address(),
                 &spending.initial_deposit,
@@ -263,9 +263,9 @@ impl Allowance {
     /// entry on its own clock, and a config read should still answer once that has expired.
     pub fn get_config(env: Env) -> Result<Config, AllowanceError> {
         Ok(Config {
-            owner_address: read_value(&env, &DataKey::Owner)?,
+            owner: read_value(&env, &DataKey::Owner)?,
             agent_key: read_value(&env, &DataKey::AgentKey)?,
-            token_address: read_value(&env, &DataKey::Token)?,
+            token: read_value(&env, &DataKey::Token)?,
             rules: read_value(&env, &DataKey::Rules)?,
             enabled: !is_disabled(&env),
         })
