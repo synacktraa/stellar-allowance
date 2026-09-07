@@ -36,4 +36,12 @@ if grep -q '^sdk/' <<<"$changed"; then
   }
 fi
 
+if grep -q '^demo/seller/' <<<"$changed"; then
+  echo "pre-push: demo/seller"
+  (cd demo/seller && npm run build) || {
+    echo "pre-push: the seller does not build. Vercel would fail the same way." >&2
+    exit 1
+  }
+fi
+
 exit 0
