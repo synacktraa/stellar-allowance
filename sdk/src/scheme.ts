@@ -73,9 +73,9 @@ export class ExactAllowanceScheme implements SchemeNetworkClient {
       networkPassphrase,
     );
 
-    // Recording simulation runs __check_auth on a custom account, and it has no signature to
-    // pass, so the allowance receives Void where it declares BytesN<64> and traps. The entry
-    // above is therefore signed first, and this is the only simulation: it enforces.
+    // Simulation records when the transaction carries no auth entries and enforces when it
+    // does, so the entry above is signed first and this one simulation enforces it. Signing
+    // after a recording pass leaves its scvVoid signature in place for the host to enforce.
     const tx = await contract.AssembledTransaction.build({
       contractId: asset,
       method: 'transfer',

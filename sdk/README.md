@@ -119,9 +119,11 @@ raw 64 bytes, G address    -> ok, signature scval type: scvVec
 and it cannot be reached through `ExactStellarScheme`, so this package builds the payment
 payload itself and signs the auth entry directly.
 
-There is a second ordering constraint underneath. Recording simulation invokes `__check_auth`
-on a custom account with no signature to pass, so an allowance declaring `BytesN<64>` receives
-`Void` and traps. The entry is therefore signed before the only simulation, which enforces.
+There is a second ordering constraint underneath. Simulation runs in one of two modes: with no
+auth entries present it records what would be needed and verifies nothing, and with entries
+present it enforces them. So the entry has to be signed, and in the transaction, before the
+simulation that is supposed to check it. Signing it afterwards leaves an entry the host
+enforces against a signature nobody wrote.
 
 `x402Client`'s spend controls are off. They default to USDC only and $1 a payment, and an
 allowance already holds one token the owner chose and one cap the owner set, both enforced by
