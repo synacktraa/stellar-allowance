@@ -17,4 +17,17 @@ if grep -q '^contracts/' <<<"$staged"; then
   }
 fi
 
+if grep -q '^sdk/' <<<"$staged"; then
+  echo "pre-commit: sdk, tsc --noEmit"
+  if [ ! -x sdk/node_modules/.bin/tsc ]; then
+    echo "pre-commit: sdk/node_modules is missing. Run 'cd sdk && npm install'." >&2
+    exit 1
+  fi
+  # The local binary, not npx: npx spends 20 seconds resolving before it runs anything.
+  (cd sdk && ./node_modules/.bin/tsc --noEmit) || {
+    echo "pre-commit: the sdk does not type check." >&2
+    exit 1
+  }
+fi
+
 exit 0
