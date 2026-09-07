@@ -112,7 +112,7 @@ test('the caller picks the network, not the seller', async () => {
   const paid = await seller('stellar:pubnet', USDC_TESTNET);
   try {
     await withEnv(set, async () => {
-      // There is no public mainnet Soroban RPC, so pubnet needs a url either way.
+      // @x402/stellar has no default RPC for pubnet, so a url is needed either way.
       const { fetch } = new Allowance({
         network: 'stellar:pubnet',
         rpc: { url: 'http://127.0.0.1:1' },

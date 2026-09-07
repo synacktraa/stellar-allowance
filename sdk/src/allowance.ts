@@ -16,7 +16,8 @@ export interface AllowanceOptions {
   /**
    * Which network the allowance is on, CAIP-2. Defaults to `stellar:testnet`.
    *
-   * `stellar:pubnet` also needs `rpc.url`: there is no public mainnet Soroban RPC.
+   * `stellar:pubnet` also needs `rpc.url`. SDF publishes an RPC for testnet and futurenet
+   * but not for mainnet, so there is no default to fall back on.
    */
   network?: Network;
 }
