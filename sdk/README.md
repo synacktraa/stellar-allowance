@@ -45,7 +45,7 @@ lost secret means withdrawing and creating a new allowance.
 |---|---|
 | `allowlist` | the recipient is not one the owner approved |
 | `window` | more than the rolling cap still allows |
-| `stopped` | the owner has disabled the agent |
+| `stopped` | the owner has stopped this allowance |
 | `not-set-up` | nothing is deployed at that address |
 | `wrong-asset`, `not-a-transfer`, `malformed`, `invalid-amount` | the request is not a payment this allowance recognizes |
 

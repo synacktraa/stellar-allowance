@@ -73,7 +73,7 @@ await probe(
 );
 
 await probe(
-  '3. the owner has stopped the agent',
+  '3. the owner has stopped the allowance',
   'stopped',
   () => send('disable'),
   () => send('enable'),
