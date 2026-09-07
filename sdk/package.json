@@ -20,7 +20,8 @@
     "build": "tsc",
     "test": "npm run build && node --test test/*.test.mjs",
     "e2e:setup": "npm run build && node test/e2e/setup.mjs",
-    "e2e": "npm run build && node --env-file=test/e2e/.env.local test/e2e/pay.mjs"
+    "e2e": "npm run build && node --env-file=test/e2e/.env.local test/e2e/pay.mjs",
+    "e2e:refusals": "npm run build && node --env-file=test/e2e/.env.local test/e2e/refusals.mjs"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.3.0",

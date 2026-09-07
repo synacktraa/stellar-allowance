@@ -167,16 +167,21 @@ A successful run:
 
 ```
 status 200
-{"pair":"XLM/USDC","bid":0.1908358,"ask":0.1909939,"mid":0.1909148, ...}
+{"pair":"XLM/USDC","bid":0.1917265,"ask":0.1918408,"mid":0.1917836, ...}
 
 settled by the facilitator
   success     true
-  transaction 150f3a5d22dc3851b14faba5418f7b681e9efa662edc607daab02e01e71f969d
+  transaction 574370730f5f1616f56beec3b99c6714a1325aea8065e195fa8959a90e7c69a5
   payer       CD7MXKE263USEVT7ECVUAFH2PSDTHVKRNWHUOF5AQZNDNAVXWO43T4TC
 ```
 
 The payer is the allowance contract. The agent's key holds no funds, pays no fee, and is never
 a transaction source. The fee was paid by the facilitator.
+
+`npm run e2e:refusals` proves each rule refuses, by changing the allowance rather than the
+seller: an allowlist without the seller in it, a window cap below the price, and a disabled
+allowance. Each case restores what it changed. Run it from a clean allowance, since it treats
+whatever it finds as the state to restore to.
 
 Everything setup writes lands in `test/e2e/.env.local`, which is gitignored. Secrets are never
 printed.
