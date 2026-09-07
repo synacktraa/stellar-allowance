@@ -18,7 +18,9 @@ export class AllowanceRefused extends Error {
   readonly detail: string;
 
   constructor(code: number, detail: string) {
-    super(`allowance refused the payment: ${RULES[code]}`);
+    // The discriminant stays in the message because `@x402/fetch` rethrows a plain Error
+    // carrying only this string, and `refusalFrom` has to rebuild the refusal from it.
+    super(`allowance refused the payment: ${RULES[code]}, Error(Contract, #${code})`);
     this.name = 'AllowanceRefused';
     this.code = code;
     this.rule = RULES[code];

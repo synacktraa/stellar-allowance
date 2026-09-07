@@ -4,6 +4,7 @@ import { STELLAR_TESTNET_CAIP2 } from '@x402/stellar';
 import type { RpcConfig } from '@x402/stellar';
 import type { Network } from '@x402/core/types';
 import { ExactAllowanceScheme } from './scheme.js';
+import { refusalFrom } from './refusals.js';
 import { createAllowanceSigner } from './signer.js';
 
 export interface AllowanceOptions {
@@ -63,6 +64,16 @@ export class Allowance {
     const client = new x402Client()
       .setSpendControls(false)
       .register(network, this.scheme);
-    this.fetch = wrapFetchWithPayment(globalThis.fetch, client);
+
+    // `@x402/fetch` replaces whatever the scheme threw with a plain Error carrying only its
+    // message, so an AllowanceRefused is rebuilt from that message rather than lost.
+    const paid = wrapFetchWithPayment(globalThis.fetch, client);
+    this.fetch = async (input, init) => {
+      try {
+        return await paid(input, init);
+      } catch (error) {
+        throw (error instanceof Error && refusalFrom(error.message)) || error;
+      }
+    };
   }
 }
