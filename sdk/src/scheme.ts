@@ -1,6 +1,13 @@
 import { randomBytes } from 'node:crypto';
 
-import { Address, contract, nativeToScVal, xdr } from '@stellar/stellar-sdk';
+import {
+  Address,
+  Operation,
+  TransactionBuilder,
+  contract,
+  nativeToScVal,
+  xdr,
+} from '@stellar/stellar-sdk';
 import {
   findDefaultAsset,
   getEstimatedLedgerCloseTimeSeconds,
@@ -78,15 +85,19 @@ export class ExactAllowanceScheme implements SchemeNetworkClient {
       parseResultXdr: (result: unknown) => result,
       simulate: false,
     });
-    tx.built = tx.raw!.build();
 
-    // An AssembledTransaction is built with one host-function operation, and every auth
-    // entry for the whole invocation tree hangs off that one.
-    const operation = tx.built.operations[0] as { auth?: xdr.SorobanAuthorizationEntry[] };
-    operation.auth = [entry];
+    // `operations` decodes a fresh copy every time it is read, so assigning to
+    // `built.operations[0].auth` leaves the envelope untouched and the entry never reaches
+    // the network. The operation is rebuilt instead, which is what assembleTransaction does.
+    const built = tx.raw!.build();
+    const invoke = built.operations[0] as Operation.InvokeHostFunction;
+    tx.built = TransactionBuilder.cloneFrom(built)
+      .clearOperations()
+      .addOperation(Operation.invokeHostFunction({ func: invoke.func, auth: [entry] }))
+      .build();
 
-    // The allowance's rules run here, and assembleTransaction keeps auth entries that are
-    // already present rather than replacing them with the simulation's.
+    // The allowance's rules run here. Simulating a transaction that already carries auth
+    // entries enforces them, and assembleTransaction keeps the ones already present.
     await tx.simulate();
     try {
       handleSimulationResult(tx.simulation);
