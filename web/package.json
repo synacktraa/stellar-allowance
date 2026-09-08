@@ -1,0 +1,30 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "npm --prefix ../sdk ci && npm --prefix ../sdk run build && next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test test-dist/test/*.test.js",
+    "bake": "node scripts/bake.mjs"
+  },
+  "dependencies": {
+    "@stellar-allowance/sdk": "file:../sdk",
+    "@stellar/freighter-api": "^6.0.1",
+    "@stellar/stellar-sdk": "^16.3.0",
+    "@x402/core": "~2.25.0",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@fontsource/lora": "^5.3.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  },
+  "license": "Apache-2.0"
+}
