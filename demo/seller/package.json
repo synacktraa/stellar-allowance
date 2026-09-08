@@ -2,6 +2,7 @@
   "name": "stellar-allowance-demo-seller",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "An x402 API that charges for a quote, so an allowance has something to pay",
   "scripts": {
     "dev": "next dev",
