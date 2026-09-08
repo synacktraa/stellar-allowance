@@ -1,0 +1,72 @@
+{
+  "at": "2026-09-08T18:07:10.581Z",
+  "events": [
+    {
+      "id": "fund",
+      "party": "owner",
+      "title": "Fund an owner",
+      "sub": "friendbot",
+      "state": "done",
+      "amount": "10,000.00 XLM"
+    },
+    {
+      "id": "trustline",
+      "party": "owner",
+      "title": "Add the USDC trustline",
+      "state": "done"
+    },
+    {
+      "id": "swap",
+      "party": "owner",
+      "title": "Swap 10 XLM for USDC",
+      "sub": "testnet DEX, strict send",
+      "state": "done",
+      "amount": "17.2310 USDC"
+    },
+    {
+      "id": "deploy",
+      "party": "owner",
+      "title": "Deploy the allowance",
+      "sub": "allowlist: the seller · cap 0.025 USDC per 24h · the agent's key GDZK…325L holds 0.000",
+      "state": "done",
+      "amount": "0.050 USDC in",
+      "hash": "CD5DYH7TXU6PXD7EOLKRNOX2J3SQT3H5BKJG7QGUBW3LXWEX7IEPKXGZ"
+    },
+    {
+      "id": "pay-1",
+      "party": "agent",
+      "title": "Pay the seller",
+      "amount": "0.010 USDC",
+      "state": "done",
+      "sub": "settled by OpenZeppelin · the payer is the contract",
+      "hash": "bfec7bdd37c8b111e0d88afe0133e4bb2bbeba0e18500ada8605e886f5d63ecf"
+    },
+    {
+      "id": "stranger",
+      "party": "agent",
+      "title": "Told to pay a stranger",
+      "amount": "0.010 USDC",
+      "state": "refused",
+      "rule": "allowlist",
+      "sub": "not on the allowlist. Refused at simulation; nothing left the contract."
+    },
+    {
+      "id": "pay-2",
+      "party": "agent",
+      "title": "Pay the seller again",
+      "amount": "0.010 USDC",
+      "state": "done",
+      "sub": "0.020 now in the window",
+      "hash": "cf6a7a92052cd3d3b0d29fc00f309d610349211707d14c79d12e17b54871f2d1"
+    },
+    {
+      "id": "pay-3",
+      "party": "agent",
+      "title": "Pay the seller a third time",
+      "amount": "0.010 USDC",
+      "state": "refused",
+      "rule": "window",
+      "sub": "0.030 would exceed the 0.025 cap. Refused; nothing left the contract."
+    }
+  ]
+}
