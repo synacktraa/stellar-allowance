@@ -145,7 +145,7 @@ export function liveDeps(): Deps {
       const settled = response.headers.get('payment-response');
       if (!settled) throw new Error(`the seller answered ${response.status} with no payment-response header`);
       const receipt = decodePaymentResponseHeader(settled);
-      return { hash: receipt.transaction, payer: receipt.payer };
+      return { hash: receipt.transaction, payer: receipt.payer ?? id };
     },
 
     async refuse({ id, secret }, wants) {
