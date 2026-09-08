@@ -1,7 +1,7 @@
 import { Keypair } from '@stellar/stellar-sdk';
 import { AllowanceRefused } from '@stellar-allowance/sdk';
-import type { DemoEvent } from './events.js';
-import { DEPOSIT, WINDOW_CAP, usdc } from './params.js';
+import type { DemoEvent } from './events';
+import { DEPOSIT, WINDOW_CAP, usdc } from './params';
 
 export interface Wants {
   scheme: string;

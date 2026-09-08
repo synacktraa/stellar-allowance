@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AllowanceRefused } from '@stellar-allowance/sdk';
-import type { DemoEvent } from '../lib/demo/events.js';
-import { runDemo, type Deps } from '../lib/demo/run.js';
+import type { DemoEvent } from '../lib/demo/events';
+import { runDemo, type Deps } from '../lib/demo/run';
 
 const wants = {
   scheme: 'exact',

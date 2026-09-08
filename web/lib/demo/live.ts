@@ -14,9 +14,9 @@ import {
 import { decodePaymentRequiredHeader, decodePaymentResponseHeader } from '@x402/core/http';
 import type { PaymentRequirements } from '@x402/core/types';
 import { Allowance, AllowanceRefused, generateAllowanceSalt } from '@stellar-allowance/sdk';
-import { firstFreeIndex } from '../allowance/index.js';
-import { DEPOSIT, WINDOW_CAP, WINDOW_LEDGERS } from './params.js';
-import type { Deps, Wants } from './run.js';
+import { firstFreeIndex } from '../allowance/index';
+import { DEPOSIT, WINDOW_CAP, WINDOW_LEDGERS } from './params';
+import type { Deps, Wants } from './run';
 
 const NETWORK = Networks.TESTNET;
 const RPC_URL = 'https://soroban-testnet.stellar.org';
