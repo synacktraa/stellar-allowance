@@ -29,13 +29,13 @@ payment path, the allowlist, and the window last.
 Self-provisioning, the way `sdk/test/e2e/setup.mjs` is. A server route generates an owner and
 an agent keypair, funds the owner from friendbot, adds the USDC trustline, swaps 10 XLM for
 USDC on the testnet DEX, and deploys an allowance at its derived address with the seller as the
-only allowlisted address and a 0.25 USDC cap on a 24 hour window. Then it pays four times:
+only allowlisted address and a 0.025 USDC cap on a 24 hour window. Then it pays four times:
 
 ```
-pay the seller 0.10        settled, the payer is the contract
+pay the seller 0.01        settled, the payer is the contract
 told to pay a stranger     refused: allowlist, at simulation, nothing leaves the contract
-pay the seller 0.10        settled, 0.20 in the window
-pay the seller 0.10        refused: window, 0.30 would exceed 0.25
+pay the seller 0.01        settled, 0.02 in the window
+pay the seller 0.01        refused: window, 0.03 would exceed 0.025
 ```
 
 The stranger is a fresh random address handed to `scheme.createPaymentPayload` as `payTo`
