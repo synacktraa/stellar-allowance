@@ -17,4 +17,25 @@ if grep -q '^contracts/' <<<"$staged"; then
   }
 fi
 
+# The local binary, not npx: npx spends 20 seconds resolving before it runs anything.
+typecheck() {
+  echo "pre-commit: $1, tsc --noEmit"
+  if [ ! -x "$1/node_modules/.bin/tsc" ]; then
+    echo "pre-commit: $1/node_modules is missing. Run 'cd $1 && npm install'." >&2
+    exit 1
+  fi
+  (cd "$1" && ./node_modules/.bin/tsc --noEmit) || {
+    echo "pre-commit: $1 does not type check." >&2
+    exit 1
+  }
+}
+
+if grep -q '^sdk/' <<<"$staged"; then
+  typecheck sdk
+fi
+
+if grep -q '^demo/seller/' <<<"$staged"; then
+  typecheck demo/seller
+fi
+
 exit 0
