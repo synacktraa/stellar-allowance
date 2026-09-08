@@ -38,4 +38,8 @@ if grep -q '^demo/seller/' <<<"$staged"; then
   typecheck demo/seller
 fi
 
+if grep -q '^web/' <<<"$staged"; then
+  typecheck web
+fi
+
 exit 0
