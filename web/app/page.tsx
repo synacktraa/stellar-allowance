@@ -28,35 +28,37 @@ export default function Page() {
           </p>
         </div>
 
-        <div className="stats">
-          <div className="cell dark">
-            <div className="k">The agent&rsquo;s key holds</div>
-            <div className="v">
-              0.00<small>USDC</small>
+        <div className="side">
+          <div className="stats">
+            <div className="cell dark">
+              <div className="k">The agent&rsquo;s key holds</div>
+              <div className="v">
+                0.00<small>USDC</small>
+              </div>
+              <div className="c">it can ask; it cannot take</div>
             </div>
-            <div className="c">it can ask; it cannot take</div>
-          </div>
-          <div className="cell">
-            <div className="k">In the payment path</div>
-            <div className="v">
-              0<small>of ours</small>
+            <div className="cell">
+              <div className="k">In the payment path</div>
+              <div className="v">
+                0<small>of ours</small>
+              </div>
+              <div className="c">a public facilitator submits, the contract decides</div>
             </div>
-            <div className="c">a public facilitator submits, the contract decides</div>
-          </div>
-          <div className="cell addr">
-            <div className="k">The allowance</div>
-            <div className="v">
-              <a
-                className="hash"
-                href={`https://stellar.expert/explorer/testnet/contract/${allowance}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {allowance.slice(0, 6)}…{allowance.slice(-4)}
-              </a>
-            </div>
-            <div className="c">
-              {settled} payments settled, {refused} refused
+            <div className="cell addr">
+              <div className="k">The allowance</div>
+              <div className="v">
+                <a
+                  className="hash"
+                  href={`https://stellar.expert/explorer/testnet/contract/${allowance}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {allowance.slice(0, 6)}…{allowance.slice(-4)}
+                </a>
+              </div>
+              <div className="c">
+                {settled} payments settled, {refused} refused
+              </div>
             </div>
           </div>
         </div>

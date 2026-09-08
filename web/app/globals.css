@@ -72,6 +72,7 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: clamp(48px, 8vw, 84px);
 }
@@ -95,6 +96,14 @@ header {
   background: var(--yellow);
   padding: 9px 12px;
   white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .tag {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 8px 10px;
+  }
 }
 
 /* --- hero -------------------------------------------------------------- */
@@ -364,13 +373,20 @@ section {
 
 /* --- the stats --------------------------------------------------------- */
 
-.stats {
+.side {
   container-type: inline-size;
+}
+
+.stats {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 1px;
   background: var(--line-strong);
   border: 1px solid var(--line-strong);
+}
+
+.cell.dark {
+  grid-column: 1 / -1;
 }
 
 .run + .stats {
@@ -433,7 +449,7 @@ section {
   overflow-wrap: anywhere;
 }
 
-@container (max-width: 640px) {
+@container (max-width: 420px) {
   .stats {
     grid-template-columns: 1fr;
   }
