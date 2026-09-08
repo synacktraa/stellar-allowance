@@ -105,7 +105,7 @@ export async function* runDemo(deps: Deps): AsyncGenerator<DemoEvent> {
     );
     if (!first) return;
 
-    const stranger: Base = { id: 'stranger', party: 'agent', title: 'Told to pay a stranger', amount: each };
+    const stranger: Base = { id: 'stranger', party: 'agent', title: 'Prompt-injected to pay a stranger', amount: each };
     yield { ...stranger, state: 'started' };
     const refusal = await deps.refuse(allowance, wants);
     yield {

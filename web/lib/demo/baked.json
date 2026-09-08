@@ -44,7 +44,7 @@
     {
       "id": "stranger",
       "party": "agent",
-      "title": "Told to pay a stranger",
+      "title": "Prompt-injected to pay a stranger",
       "amount": "0.010 USDC",
       "state": "refused",
       "rule": "allowlist",

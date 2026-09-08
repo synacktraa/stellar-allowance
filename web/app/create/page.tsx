@@ -6,6 +6,7 @@ import { firstFreeIndex } from '@/lib/allowance/index';
 import { connect } from '@/lib/create/wallet';
 import { HORIZON_URL, RPC_URL, USDC_ISSUER, deployAllowance, wasmInstalled } from '@/lib/create/deploy';
 import { DECIMALS, usdc } from '@/lib/demo/params';
+import { Footer, Header } from '../chrome';
 
 type State = 'idle' | 'started' | 'done' | 'failed';
 
@@ -149,12 +150,7 @@ export default function Create() {
 
   return (
     <main className="wrap">
-      <header>
-        <a className="brand" href="/">
-          STELLAR<span>//</span>ALLOWANCE
-        </a>
-        <div className="tag">testnet · unaudited</div>
-      </header>
+      <Header create={false} />
 
       <div className="hero">
         <div>
@@ -264,10 +260,7 @@ export default function Create() {
         )}
       </section>
 
-      <footer>
-        <span>Not (yet) affiliated with the Stellar Development Foundation.</span>
-        <a href="https://github.com/synacktraa/stellar-allowance">github →</a>
-      </footer>
+      <Footer />
     </main>
   );
 }

@@ -9,7 +9,7 @@ const STEPS: Array<Pick<DemoEvent, 'id' | 'party' | 'title'>> = [
   { id: 'swap', party: 'owner', title: 'Swap 10 XLM for USDC' },
   { id: 'deploy', party: 'owner', title: 'Deploy the allowance' },
   { id: 'pay-1', party: 'agent', title: 'Pay the seller' },
-  { id: 'stranger', party: 'agent', title: 'Told to pay a stranger' },
+  { id: 'stranger', party: 'agent', title: 'Prompt-injected to pay a stranger' },
   { id: 'pay-2', party: 'agent', title: 'Pay the seller again' },
   { id: 'pay-3', party: 'agent', title: 'Pay the seller a third time' },
 ];

@@ -1,5 +1,6 @@
 import type { DemoEvent } from '@/lib/demo/events';
 import baked from '@/lib/demo/baked.json';
+import { Footer, Header } from './chrome';
 import { Run } from './run';
 
 const run = baked as { at: string; events: DemoEvent[] };
@@ -11,20 +12,16 @@ export default function Page() {
 
   return (
     <main className="wrap">
-      <header>
-        <a className="brand" href="/">
-          STELLAR<span>//</span>ALLOWANCE
-        </a>
-        <div className="tag">testnet · unaudited</div>
-      </header>
+      <Header />
 
       <div className="hero">
         <div>
           <h1>Give the agent an allowance. Keep the wallet.</h1>
           <p className="lede">
-            The money sits in a contract on Stellar. The agent holds a key that can <b>ask</b> to pay, and the
-            contract decides: only addresses the owner allowed, only up to a cap per rolling window. A request
-            that breaks a rule is refused on chain, before anything moves.
+            You want an agent that pays for things without holding your wallet. So the money sits in a
+            contract on Stellar, and the agent holds a key that can <b>ask</b> to pay. The contract decides:
+            only addresses you allowed, only up to a cap per rolling window. Anything else is refused on chain,
+            before it moves.
           </p>
         </div>
 
@@ -66,11 +63,6 @@ export default function Page() {
 
       <Run baked={run.events} at={run.at} />
 
-      <p className="note">
-        x402 ships spend controls of its own. They run inside the agent&rsquo;s process, so the agent can
-        ignore them. This limit runs on the chain, and the agent cannot.
-      </p>
-
       <p style={{ marginTop: 28 }}>
         <a className="cta" href="/create">
           Create one for your agent
@@ -78,10 +70,7 @@ export default function Page() {
         </a>
       </p>
 
-      <footer>
-        <span>Not (yet) affiliated with the Stellar Development Foundation.</span>
-        <a href="https://github.com/synacktraa/stellar-allowance">github →</a>
-      </footer>
+      <Footer />
     </main>
   );
 }
