@@ -469,3 +469,14 @@ footer a {
     transition: none;
   }
 }
+
+/* --- the note under the run ------------------------------------------- */
+
+.note {
+  max-width: 56ch;
+  margin: 28px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-70);
+  text-wrap: pretty;
+}
