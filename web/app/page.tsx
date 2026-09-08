@@ -71,6 +71,13 @@ export default function Page() {
         ignore them. This limit runs on the chain, and the agent cannot.
       </p>
 
+      <p style={{ marginTop: 28 }}>
+        <a className="cta" href="/create">
+          Create one for your agent
+          <small>Freighter on testnet · you set the rules · the agent gets a key</small>
+        </a>
+      </p>
+
       <footer>
         <span>Not (yet) affiliated with the Stellar Development Foundation.</span>
         <a href="https://github.com/synacktraa/stellar-allowance">github →</a>

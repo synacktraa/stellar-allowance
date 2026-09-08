@@ -496,3 +496,97 @@ footer a {
   color: var(--ink-70);
   text-wrap: pretty;
 }
+
+/* --- the create form --------------------------------------------------- */
+
+.row.failed {
+  border-left: 4px solid var(--coral);
+  padding-left: 12px;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+  padding: 20px 18px 22px;
+  border-top: 1px solid var(--line);
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-70);
+}
+
+.form .wide,
+.form .hint {
+  grid-column: 1 / -1;
+}
+
+.form input,
+.form textarea {
+  font: 400 15px/1.4 var(--sans);
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  min-width: 0;
+  border-radius: 0;
+}
+
+.form textarea {
+  font: 400 13px/1.5 var(--mono);
+  min-height: 84px;
+  resize: vertical;
+}
+
+.form input:focus-visible,
+.form textarea:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 1px;
+}
+
+.form .hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-70);
+}
+
+@container (max-width: 600px) {
+  .form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- the reveal -------------------------------------------------------- */
+
+.reveal {
+  margin-top: 24px;
+}
+
+.reveal .cell .v {
+  font: 500 14px/1.5 var(--mono);
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.copy {
+  align-self: flex-start;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--ink);
+  color: var(--surface);
+  border: 0;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.copy:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
