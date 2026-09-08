@@ -42,3 +42,5 @@ next-env.d.ts
 
 # built test output
 test-dist/
+e2e/shots/
+e2e/results/
