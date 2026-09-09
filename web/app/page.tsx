@@ -64,8 +64,8 @@ export default function Page() {
       <Run baked={run.events} at={run.at} />
 
       <div className="act">
-        <a className="cta" href="/create">
-          Create an allowance
+        <a className="cta" href="/dashboard">
+          Open the dashboard
         </a>
         <span className="note-inline">Freighter on testnet · you set the rules</span>
       </div>

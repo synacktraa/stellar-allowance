@@ -8,8 +8,8 @@ export function Header({ create = true }: { create?: boolean }) {
       </a>
       <nav className="nav">
         {create && (
-          <a className="cta quiet" href="/create">
-            Create an allowance
+          <a className="cta quiet" href="/dashboard">
+            Dashboard
           </a>
         )}
         <a className="gh" href="https://github.com/synacktraa/stellar-allowance" aria-label="GitHub">

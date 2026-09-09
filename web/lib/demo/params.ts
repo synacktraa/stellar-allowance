@@ -22,3 +22,23 @@ export const MAX_ALLOWANCES = 60;
 
 export const usdc = (base: bigint | string | number): string =>
   (Number(base) / 10 ** DECIMALS).toFixed(3);
+
+/**
+ * What the owner typed, as the integer the contract counts in.
+ *
+ * Digits and one point, never a float: money that round-trips through a double is money that
+ * arrives a stroop light.
+ */
+export function toBase(amount: string): bigint {
+  const [whole, fraction = ''] = amount.trim().split('.');
+  if (!/^\d+$/.test(whole) || !/^\d*$/.test(fraction)) {
+    throw new Error(`"${amount}" is not an amount`);
+  }
+  if (fraction.length > DECIMALS) {
+    throw new Error(`USDC has ${DECIMALS} decimals, so "${amount}" is finer than it can hold`);
+  }
+  return (
+    BigInt(whole) * 10n ** BigInt(DECIMALS) +
+    BigInt((fraction + '0'.repeat(DECIMALS)).slice(0, DECIMALS))
+  );
+}
