@@ -27,7 +27,16 @@ export default async function OpengraphImage() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 22, letterSpacing: 4 }}>
           <span>STELLAR//ALLOWANCE</span>
-          <span style={{ background: '#fdda24', padding: '10px 16px', fontSize: 18 }}>TESTNET · UNAUDITED</span>
+          <span
+            style={{
+              padding: '9px 15px',
+              fontSize: 18,
+              color: 'rgba(15, 15, 15, 0.7)',
+              border: '1px solid rgba(15, 15, 15, 0.3)',
+            }}
+          >
+            TESTNET · UNAUDITED
+          </span>
         </div>
 
         <div style={{ fontSize: 84, lineHeight: 1.05, maxWidth: 900, display: 'flex' }}>
