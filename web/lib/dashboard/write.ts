@@ -1,12 +1,7 @@
 import { Keypair, Networks, contract } from '@stellar/stellar-sdk';
 import { generateAllowanceSalt } from '@stellar-allowance/sdk';
-import { USDC_SAC } from '../demo/params';
+import { USDC_SAC, WASM_HASH } from '../demo/params';
 import { RPC_URL } from './read';
-
-// The contract code every allowance is deployed from, already installed on testnet. Checked by
-// hash rather than fetched: the release asset carries no cross-origin headers, and the hash is
-// what a deployment needs anyway.
-export const WASM_HASH = '6077823e41bb7de03da15497b5996894609a3caa26fab363efdf0a0499eeb7c2';
 
 /** Freighter's signer satisfies this, and so does a Keypair, which is how tests drive it. */
 export interface Signing {

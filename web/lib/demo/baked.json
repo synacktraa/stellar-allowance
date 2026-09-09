@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-08T18:07:10.581Z",
+  "at": "2026-09-09T18:41:31.592Z",
   "events": [
     {
       "id": "fund",
@@ -21,16 +21,16 @@
       "title": "Swap 10 XLM for USDC",
       "sub": "testnet DEX, strict send",
       "state": "done",
-      "amount": "17.2310 USDC"
+      "amount": "17.0899 USDC"
     },
     {
       "id": "deploy",
       "party": "owner",
       "title": "Deploy the allowance",
-      "sub": "allowlist: the seller · cap 0.025 USDC per 24h · the agent's key GDZK…325L holds 0.000",
+      "sub": "allowlist: the seller · cap 0.025 USDC per 24h · the agent's key GD4E…S2P6 holds 0.000",
       "state": "done",
       "amount": "0.050 USDC in",
-      "hash": "CD5DYH7TXU6PXD7EOLKRNOX2J3SQT3H5BKJG7QGUBW3LXWEX7IEPKXGZ"
+      "hash": "CAUKREBY6F2CAPFSSNAIJWYN2XSOGQ6J5GXZ4BLQ3HIV4NTK7L6FTYNZ"
     },
     {
       "id": "pay-1",
@@ -39,7 +39,7 @@
       "amount": "0.010 USDC",
       "state": "done",
       "sub": "settled by OpenZeppelin · the payer is the contract",
-      "hash": "bfec7bdd37c8b111e0d88afe0133e4bb2bbeba0e18500ada8605e886f5d63ecf"
+      "hash": "bc9edba68669f8df8ebcbe6d77b3506c39202e7702db9b8e8d415714a03f7840"
     },
     {
       "id": "stranger",
@@ -57,7 +57,7 @@
       "amount": "0.010 USDC",
       "state": "done",
       "sub": "0.020 now in the window",
-      "hash": "cf6a7a92052cd3d3b0d29fc00f309d610349211707d14c79d12e17b54871f2d1"
+      "hash": "db5b753df58929ab27f4634c8207f86c3c464541be5a4438c4ad20bffdecdfed"
     },
     {
       "id": "pay-3",

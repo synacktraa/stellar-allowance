@@ -25,6 +25,20 @@ Nobody is asked which index to use. Sixty addresses are derived from the owner, 
 instance entries are fetched in one `getLedgerEntries` call, and the first address that answers
 with nothing is where the next allowance goes.
 
+## The demo runs in the visitor's browser
+
+Pressing the button funds an owner through friendbot, swaps XLM for USDC on the testnet DEX,
+deploys an allowance, pays a live x402 API and shows two payments refused on chain. All of it
+from the page: there is no route behind the button and nothing of ours in the path.
+
+That matters under load. A serverless function would serialise on a module-level flag within one
+instance and cap nothing across instances, and every run would reach friendbot from one shared
+address, which is what friendbot rate limits. Runs from a hundred browsers are a hundred
+addresses.
+
+`npm run bake` drives the same generator from Node and records the result into
+`lib/demo/baked.json`, which is what the page shows before anyone presses anything.
+
 ## Running it
 
 The SDK is linked from `../sdk`, so build it once before the first run.
@@ -37,14 +51,13 @@ npm run dev
 
 ## Environment
 
-Nothing here holds a key. The demo generates every keypair it uses per run and discards it.
+Two values, both public, and no secret. The demo generates every keypair it uses inside the run
+and discards it, in the visitor's own browser.
 
 | | |
 |---|---|
 | `NEXT_PUBLIC_SITE_URL` | absolute base for the link preview. Defaults to `http://localhost:3000` |
-| `SELLER_URL` | the x402 API the demo pays |
-| `WASM_URL` | the contract release the demo deploys from |
-| `BAKE_URL` | which host `npm run bake` records a run against |
+| `NEXT_PUBLIC_SELLER_URL` | the x402 API the demo pays. Point it at a local seller to develop against one |
 
 ## Tests
 

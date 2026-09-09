@@ -20,6 +20,18 @@ export const USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLL
 // so the ceiling is a product decision rather than a technical one.
 export const MAX_ALLOWANCES = 60;
 
+/**
+ * The contract code every allowance is deployed from, already installed on testnet.
+ *
+ * Checked by hash rather than fetched. The release asset carries no cross-origin headers, so a
+ * browser cannot read it, and the hash is what a deployment needs anyway.
+ */
+export const WASM_HASH = '6077823e41bb7de03da15497b5996894609a3caa26fab363efdf0a0499eeb7c2';
+
+/** The x402 API the demo pays. Public, and pointable at a local seller during development. */
+export const SELLER_URL =
+  process.env.NEXT_PUBLIC_SELLER_URL ?? 'https://xlm-quote-api.vercel.app/api/quote';
+
 export const usdc = (base: bigint | string | number): string =>
   (Number(base) / 10 ** DECIMALS).toFixed(3);
 

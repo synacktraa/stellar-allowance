@@ -8,7 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "tsc -p tsconfig.test.json && node --test test-dist/test/*.test.js",
-    "bake": "node scripts/bake.mjs"
+    "bake": "tsc -p tsconfig.test.json && node scripts/bake.mjs"
   },
   "dependencies": {
     "@stellar-allowance/sdk": "file:../sdk",
