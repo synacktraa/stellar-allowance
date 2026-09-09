@@ -18,6 +18,7 @@ const run = baked as { at: string; events: DemoEvent[] };
  */
 const HERO = {
   asked: 10,
+  paid: 8,
   outcome: '8 paid · 1 off the list · 1 over the cap',
   agent: '0.00',
   allowance: '5.00',
@@ -64,7 +65,7 @@ export default function Page() {
                 {HERO.seller}
                 <small>USDC</small>
               </div>
-              <div className="c">all the rules allow</div>
+              <div className="c">was paid {HERO.paid} times</div>
             </div>
           </div>
         </div>

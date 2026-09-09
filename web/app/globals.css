@@ -493,9 +493,8 @@ blockquote cite a:hover {
 .stats {
   display: grid;
   /* The allowance carries the longest caption, the seller the shortest. Sized so neither wraps
-     and neither trails a hole after its last word: at the width this block settles to, that
-     leaves 21px behind one and 16px behind the other. */
-  grid-template-columns: 1.7fr 1fr;
+     and neither trails a hole after its last word. */
+  grid-template-columns: 1.45fr 1fr;
   gap: 1px;
   background: var(--line-strong);
   border: 1px solid var(--line-strong);
