@@ -38,7 +38,7 @@
       "title": "Pay the seller",
       "amount": "0.010 USDC",
       "state": "done",
-      "sub": "settled by OpenZeppelin Â· the payer is the contract",
+      "sub": "settled by OpenZeppelin · the payer is the contract",
       "hash": "6ad5ed439b80b2a293f885d401ff570dbce7590e4ce57aa6b2f3c9b241b2ea18"
     },
     {
