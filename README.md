@@ -40,6 +40,14 @@ back, and a URL that never asks for payment passes straight through.
 
 ## The repository
 
+Two flows, one contract between them. The owner signs with a wallet and can change any rule.
+The agent signs an auth entry and can only ask.
+
+![A map in two lanes, both ending at one contract. Creating and managing: the owner signs with
+Freighter through the interface in web/, which deploys the allowance and sets its rules. Paying:
+the agent uses the SDK to pay an x402 seller through a facilitator, and the allowance checks that
+payment before it moves.](assets/system.svg)
+
 | | |
 |---|---|
 | [`contracts/allowance`](contracts/allowance) | the Soroban contract, and the design: `__check_auth`, the allowlist, the rolling window, storage and TTL |

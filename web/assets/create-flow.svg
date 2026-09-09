@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 632" width="920" height="632" role="img" aria-label="Sequence diagram in two groups. In the browser: the owner gives a name, a cap, a window and the URLs the agent may pay; the interface resolves each URL to the address it wants paying, asks a Soroban RPC for sixty derived addresses to find the first free index, and hands the deploy transaction to Freighter, which the owner approves once. The network: the signed envelope is submitted, the allowance runs its constructor, and the interface returns the contract id and the agent secret, shown once.">
+  <title>How an allowance is created</title>
+
+  <rect x="1" y="1" width="918" height="630" rx="14" fill="#f4f3ef" stroke="#d9d5cb" stroke-width="1.5"/>
+
+  <g font-family="ui-sans-serif, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+
+    <rect x="16" y="16" width="528" height="600" rx="12" fill="none" stroke="#c6c0b1" stroke-width="1.5" stroke-dasharray="7 5"/>
+    <rect x="556" y="16" width="348" height="600" rx="12" fill="none" stroke="#9fb7a8" stroke-width="1.5"/>
+    <g font-size="10.5" font-weight="700" letter-spacing="1.4" text-anchor="middle">
+      <rect x="222" y="8" width="116" height="16" fill="#f4f3ef"/>
+      <text x="280" y="20" fill="#6f6a5e">IN THE BROWSER</text>
+      <rect x="678" y="8" width="104" height="16" fill="#f4f3ef"/>
+      <text x="730" y="20" fill="#4f6a5b">THE NETWORK</text>
+    </g>
+
+    <g stroke-width="1.6" stroke-dasharray="6 5">
+      <line x1="100" y1="84" x2="100" y2="566" stroke="#6b67b8"/>
+      <line x1="280" y1="84" x2="280" y2="566" stroke="#bf8534"/>
+      <line x1="460" y1="84" x2="460" y2="566" stroke="#b0648a"/>
+      <line x1="640" y1="84" x2="640" y2="566" stroke="#5f7f99"/>
+      <line x1="820" y1="84" x2="820" y2="566" stroke="#17544a"/>
+    </g>
+
+    <g font-size="13" font-weight="600" text-anchor="middle" stroke-width="1.6">
+      <rect x="28"  y="46" width="144" height="38" rx="8" fill="#e6e5f8" stroke="#6b67b8"/>
+      <rect x="28" y="566" width="144" height="38" rx="8" fill="#e6e5f8" stroke="#6b67b8"/>
+      <text x="100"  y="70" fill="#3b3880">owner</text>
+      <text x="100" y="590" fill="#3b3880">owner</text>
+
+      <rect x="208"  y="46" width="144" height="38" rx="8" fill="#fbeed9" stroke="#bf8534"/>
+      <rect x="208" y="566" width="144" height="38" rx="8" fill="#fbeed9" stroke="#bf8534"/>
+      <text x="280"  y="70" fill="#7a5119">Freighter</text>
+      <text x="280" y="590" fill="#7a5119">Freighter</text>
+
+      <rect x="388"  y="46" width="144" height="38" rx="8" fill="#f9e3ec" stroke="#b0648a"/>
+      <rect x="388" y="566" width="144" height="38" rx="8" fill="#f9e3ec" stroke="#b0648a"/>
+      <text x="460"  y="70" fill="#78304f">the interface</text>
+      <text x="460" y="590" fill="#78304f">the interface</text>
+
+      <rect x="568"  y="46" width="144" height="38" rx="8" fill="#e2eaf1" stroke="#5f7f99" stroke-dasharray="5 3"/>
+      <rect x="568" y="566" width="144" height="38" rx="8" fill="#e2eaf1" stroke="#5f7f99" stroke-dasharray="5 3"/>
+      <text x="640"  y="70" fill="#2f4a5c">Soroban RPC</text>
+      <text x="640" y="590" fill="#2f4a5c">Soroban RPC</text>
+
+      <rect x="748"  y="46" width="144" height="38" rx="8" fill="#d5e8e2" stroke="#17544a" stroke-width="2.4"/>
+      <rect x="748" y="566" width="144" height="38" rx="8" fill="#d5e8e2" stroke="#17544a" stroke-width="2.4"/>
+      <text x="820"  y="70" fill="#0f3e36">allowance</text>
+      <text x="820" y="590" fill="#0f3e36">allowance</text>
+    </g>
+
+    <g font-size="11.5" fill="#33323a">
+
+      <line x1="100" y1="120" x2="451" y2="120" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="460,120 450,115 450,125" fill="#4a4856"/>
+      <rect x="155" y="103" width="250" height="15" fill="#f4f3ef"/>
+      <text x="280" y="114" text-anchor="middle">name, cap, window, and the URLs it may pay</text>
+
+      <path d="M 460 160 h -36 v 28 h 36" fill="none" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="460,188 450,183 450,193" fill="#4a4856"/>
+      <rect x="125" y="143" width="293" height="15" fill="#f4f3ef"/>
+      <text x="418" y="154" text-anchor="end">each URL answers with the address it wants paying</text>
+
+      <line x1="460" y1="222" x2="631" y2="222" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="640,222 630,217 630,227" fill="#4a4856"/>
+      <rect x="423" y="198" width="254" height="20" rx="5" fill="#eae7de" stroke="#cdc7b7"/>
+      <text x="550" y="212" text-anchor="middle" font-family="ui-monospace, Cascadia Mono, Menlo, Consolas, monospace" font-size="11">getLedgerEntries(60 derived addresses)</text>
+
+      <line x1="640" y1="262" x2="469" y2="262" stroke="#4a4856" stroke-width="1.7" stroke-dasharray="6 4"/>
+      <polygon points="460,262 470,257 470,267" fill="#4a4856"/>
+      <rect x="419" y="245" width="262" height="15" fill="#f4f3ef"/>
+      <text x="550" y="256" text-anchor="middle">what exists. the first gap is the next index</text>
+
+      <line x1="460" y1="302" x2="289" y2="302" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="280,302 290,297 290,307" fill="#4a4856"/>
+      <rect x="287" y="278" width="166" height="20" rx="5" fill="#eae7de" stroke="#cdc7b7"/>
+      <text x="370" y="292" text-anchor="middle" font-family="ui-monospace, Cascadia Mono, Menlo, Consolas, monospace" font-size="11">signTransaction(deploy)</text>
+
+      <path d="M 280 342 h 36 v 28 h -36" fill="none" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="280,370 290,365 290,375" fill="#4a4856"/>
+      <rect x="322" y="325" width="150" height="15" fill="#f4f3ef"/>
+      <text x="322" y="336">the owner approves, once</text>
+
+      <line x1="280" y1="404" x2="451" y2="404" stroke="#4a4856" stroke-width="1.7" stroke-dasharray="6 4"/>
+      <polygon points="460,404 450,399 450,409" fill="#4a4856"/>
+      <rect x="324" y="387" width="92" height="15" fill="#f4f3ef"/>
+      <text x="370" y="398" text-anchor="middle">signed envelope</text>
+
+      <line x1="460" y1="444" x2="631" y2="444" stroke="#4a4856" stroke-width="1.7"/>
+      <polygon points="640,444 630,439 630,449" fill="#4a4856"/>
+      <rect x="492" y="420" width="116" height="20" rx="5" fill="#eae7de" stroke="#cdc7b7"/>
+      <text x="550" y="434" text-anchor="middle" font-family="ui-monospace, Cascadia Mono, Menlo, Consolas, monospace" font-size="11">sendTransaction</text>
+
+      <line x1="640" y1="484" x2="811" y2="484" stroke="#17544a" stroke-width="2.4"/>
+      <polygon points="820,484 809,478.5 809,489.5" fill="#17544a"/>
+      <rect x="572" y="460" width="316" height="20" rx="5" fill="#d5e8e2" stroke="#17544a"/>
+      <text x="730" y="474" text-anchor="middle" fill="#0f3e36" font-weight="700" font-family="ui-monospace, Cascadia Mono, Menlo, Consolas, monospace" font-size="11">__constructor(owner, agent key, rules, deposit)</text>
+
+      <line x1="460" y1="524" x2="109" y2="524" stroke="#4a4856" stroke-width="1.7" stroke-dasharray="6 4"/>
+      <polygon points="100,524 110,519 110,529" fill="#4a4856"/>
+      <rect x="127" y="507" width="306" height="15" fill="#f4f3ef"/>
+      <text x="280" y="518" text-anchor="middle">the contract id, and the agent secret shown once</text>
+
+    </g>
+  </g>
+</svg>
