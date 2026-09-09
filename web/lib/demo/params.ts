@@ -1,18 +1,12 @@
 // Amounts are in the asset's base unit. USDC on Stellar has seven decimals, so 100000 is 0.01.
 export const DECIMALS = 7;
 
-// 5 USDC in, of which the window lets 0.085 out per day. The seller charges 0.01, so eight
-// payments fit inside the cap and a ninth does not. The balance is far larger than the cap on
+// 5 USDC in, of which the window lets 0.025 out per day. The seller charges 0.01, so two
+// payments fit inside the cap and a third does not. The balance is far larger than the cap on
 // purpose: a refusal against a nearly empty allowance proves nothing, because a reader cannot
 // tell the rule from the funds running out.
 export const DEPOSIT = 50_000_000n;
-export const WINDOW_CAP = 850_000n;
-
-// How many payments the cap admits before it stops one. Tied to the cap by the seller's price
-// rather than by arithmetic, because the price arrives from the seller at run time: the cap sits
-// half a payment above eight of them, so the eighth is unambiguously allowed and the ninth is
-// unambiguously not.
-export const PAYMENTS = 8;
+export const WINDOW_CAP = 250_000n;
 export const WINDOW_LEDGERS = 17_280;
 
 // Stellar closes a ledger about every five seconds, so an hour is 720 of them.

@@ -113,7 +113,7 @@ export default function Page() {
         </p>
         <p className="lede">
           The cap below is testnet-small on purpose. A cap is a number, and the same contract
-          holds 500 USDC a day as readily as it holds 0.085.
+          holds 500 USDC a day as readily as it holds 0.025.
         </p>
       </section>
 

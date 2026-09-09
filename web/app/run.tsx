@@ -95,7 +95,7 @@ export function Run({ baked, at }: { baked: DemoEvent[]; at: string }) {
         <span className="note-inline">
           {live === 'stopped'
             ? 'the run stopped early. the rows above say where'
-            : 'testnet · about two minutes · no wallet'}
+            : 'testnet · about a minute · no wallet'}
         </span>
       </div>
     </section>

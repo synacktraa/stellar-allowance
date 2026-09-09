@@ -1,7 +1,7 @@
 import { Keypair } from '@stellar/stellar-sdk';
 import { AllowanceRefused } from '@stellar-allowance/sdk';
 import type { DemoEvent } from './events';
-import { DEPOSIT, PAYMENTS, WINDOW_CAP, usdc } from './params';
+import { DEPOSIT, WINDOW_CAP, usdc } from './params';
 
 export interface Wants {
   scheme: string;
@@ -101,12 +101,10 @@ export async function* runDemo(deps: Deps): AsyncGenerator<DemoEvent> {
     const first = yield* step(
       { id: 'pay-1', party: 'agent', title: 'Pay the seller', amount: each },
       () => deps.pay(allowance, url),
-      (r) => ({ sub: 'settled by OpenZeppelin · the payer is the contract', hash: r.hash }),
+      (r) => ({ sub: 'settled by OpenZeppelin Â· the payer is the contract', hash: r.hash }),
     );
     if (!first) return;
 
-    // Second, not last: the injection is the rule worth seeing, and a reader who stops early
-    // should have seen it. It also costs nothing to run — the allowlist refuses at simulation.
     const stranger: Base = { id: 'stranger', party: 'agent', title: 'Prompt-injected to pay a stranger', amount: each };
     yield { ...stranger, state: 'started' };
     const refusal = await deps.refuse(allowance, wants);
@@ -117,20 +115,19 @@ export async function* runDemo(deps: Deps): AsyncGenerator<DemoEvent> {
       sub: 'not on the allowlist. Refused at simulation; nothing left the contract.',
     };
 
-    // The rest of the window, one payment at a time, and then one payment past it. Every row
-    // carries the running total rather than a position in a list, because the cap is what the
-    // contract compares against and the count is not.
-    for (let n = 2; n <= PAYMENTS + 1; n += 1) {
-      const spent = usdc(price * BigInt(n));
-      const beyond = n > PAYMENTS;
-      const paid = yield* step(
-        { id: `pay-${n}`, party: 'agent', title: 'Pay the seller', amount: each },
-        () => deps.pay(allowance, url),
-        (r) => ({ sub: `${spent} now in the window`, hash: r.hash }),
-        () => `${spent} would exceed the ${usdc(WINDOW_CAP)} cap. Refused; nothing left the contract.`,
-      );
-      if (!paid && !beyond) return;
-    }
+    const second = yield* step(
+      { id: 'pay-2', party: 'agent', title: 'Pay the seller again', amount: each },
+      () => deps.pay(allowance, url),
+      (r) => ({ sub: `${usdc(price * 2n)} now in the window`, hash: r.hash }),
+    );
+    if (!second) return;
+
+    yield* step(
+      { id: 'pay-3', party: 'agent', title: 'Pay the seller a third time', amount: each },
+      () => deps.pay(allowance, url),
+      (r) => ({ hash: r.hash }),
+      () => `${usdc(price * 3n)} would exceed the ${usdc(WINDOW_CAP)} cap. Refused; nothing left the contract.`,
+    );
   } catch {
     return;
   }
