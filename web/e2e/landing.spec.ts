@@ -108,23 +108,6 @@ test('the page carries the ask it answers, attributed', async ({ page }) => {
   await expect(quote.locator('cite')).toContainText('DHH');
 });
 
-// A picture of where the money sits, because that is the whole difference and eight log rows
-// do not show it.
-test('the mechanism is drawn, and readable without seeing it', async ({ page }) => {
-  await page.goto('/');
-  const panels = page.locator('figure svg[role="img"]');
-  expect(await panels.count()).toBeGreaterThan(0);
-
-  // Every panel has to carry its own claim in words, because a drawing nobody can see is
-  // decoration.
-  for (const label of await panels.evaluateAll((nodes) =>
-    nodes.map((node) => node.getAttribute('aria-label') ?? ''),
-  )) {
-    expect(label).toMatch(/money/i);
-  }
-  await expect(page.locator('figure figcaption')).not.toBeEmpty();
-});
-
 // Not a new payment protocol. The word that says so appears exactly where the proof starts.
 test('the run is introduced as x402, not as something new', async ({ page }) => {
   await page.goto('/');

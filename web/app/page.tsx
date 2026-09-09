@@ -3,7 +3,6 @@ import baked from '@/lib/demo/baked.json';
 import { Footer, Header } from './chrome';
 import { AgentLines, Install } from './code';
 import { Run } from './run';
-import { Where } from './where';
 
 const run = baked as { at: string; events: DemoEvent[] };
 
@@ -22,9 +21,8 @@ export default function Page() {
           <p className="lede">
             A wallet holds the money and can spend all of it, and the key that spends it sits in
             the agent&rsquo;s environment, where anything the agent reads can reach it. So the money
-            sits in a Soroban contract instead and the agent holds a key that can only{' '}
-            <b>ask</b>. The contract decides: only addresses you allowed, only up to a cap per
-            rolling window. Anything else is refused on chain, before it moves.
+            sits in a Soroban contract instead, and the agent holds a key that can only{' '}
+            <b>ask</b>.
           </p>
         </div>
 
@@ -75,7 +73,15 @@ export default function Page() {
             I want to give my machine an agent account, an allowance, and permission to just take
             care of stuff.
           </p>
-          <cite>DHH</cite>
+          <cite>
+            <a
+              href="https://x.com/dhh/status/2097317603186229297"
+              target="_blank"
+              rel="noreferrer"
+            >
+              DHH
+            </a>
+          </cite>
         </blockquote>
 
         <p className="lede">
@@ -84,18 +90,14 @@ export default function Page() {
           that holds.
         </p>
         <p className="lede">
-          This is a concrete version of it, and concrete is the claim. There is an address to look
-          up, a contract to read, and three rules the chain enforces rather than the agent&rsquo;s
-          own good behavior. Nothing routes around them: not the agent, not its dependencies, not
-          me.
+          This is a concrete version of it. Three rules, enforced by the chain rather than by the
+          agent&rsquo;s own good behavior, so nothing routes around them: not the agent, not its
+          dependencies, not me.
         </p>
-
-        <Where />
 
         <p className="lede">
           None of it is a new payment protocol. x402 defines the handshake and a public facilitator
-          settles it, the same as for any agent paying any API. The only thing that changed is which
-          address pays.
+          settles it. The only change is which address pays.
         </p>
       </section>
 
