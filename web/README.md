@@ -6,8 +6,9 @@ manages allowances from. Deployed at
 
 ## How an allowance is created
 
-The owner signs once. The rest is the interface reading the chain and submitting what was
-signed.
+The owner signs once. The agent's keypair is generated in the browser during that same step and
+its secret is shown one time; nothing stores it. The rest is the interface reading the chain and
+submitting what was signed.
 
 ![Sequence diagram. In the browser: the owner gives a name, a cap, a window and the URLs the
 agent may pay; the interface resolves each URL to the address it wants paying, asks a Soroban
