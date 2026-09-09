@@ -11,13 +11,14 @@ signed.
 
 ![Sequence diagram. In the browser: the owner gives a name, a cap, a window and the URLs the
 agent may pay; the interface resolves each URL to the address it wants paying, asks a Soroban
-RPC for sixty derived addresses, and hands the deploy transaction to Freighter, which the owner
+RPC for the instance entries of sixty derived addresses, and hands the deploy transaction to Freighter, which the owner
 approves once. The network: the signed envelope is submitted, the allowance runs its
 constructor, and the interface returns the contract id and the agent secret,
 once.](assets/create-flow.svg)
 
-Nobody is asked which index to use. Sixty addresses are derived from the owner and read in one
-call, and the first gap is where the next allowance goes.
+Nobody is asked which index to use. Sixty addresses are derived from the owner, their contract
+instance entries are fetched in one `getLedgerEntries` call, and the first address that answers
+with nothing is where the next allowance goes.
 
 ## Running it
 
