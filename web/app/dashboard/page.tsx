@@ -26,7 +26,6 @@ export default function Dashboard() {
   const [open, setOpen] = useState<Open>(null);
   const [at, setAt] = useState(1);
   const [signedIn, setSignedIn] = useState(false);
-  const [checking, setChecking] = useState(true);
 
   // Occupancy is the one thing a stale answer gets wrong in a way the owner pays for, so every
   // load asks the chain rather than trusting anything this browser remembers.
@@ -64,18 +63,19 @@ export default function Dashboard() {
   useEffect(() => {
     const asked = new URLSearchParams(window.location.search).get('owner');
     if (asked && /^G[A-Z2-7]{55}$/.test(asked)) {
-      setChecking(false);
       void refresh(asked).catch((error) => setProblem(say(error)));
       return;
     }
+    // Nothing waits on this. Freighter's isConnected sits on its own timeout, close to 3s, when
+    // no extension answers, and every first visit is a visit without one - so the connect button
+    // stays live and this only swaps the view if it turns out there is an approval to walk in on.
     void resume()
       .then(async (address) => {
         if (!address) return;
         setSignedIn(true);
         await refresh(address);
       })
-      .catch((error) => setProblem(say(error)))
-      .finally(() => setChecking(false));
+      .catch((error) => setProblem(say(error)));
   }, [refresh]);
 
   useEffect(() => {
@@ -98,13 +98,8 @@ export default function Dashboard() {
             a rule or take money back out.
           </p>
           <div className="act">
-            <button
-              className="cta"
-              type="button"
-              disabled={busy || checking}
-              onClick={() => void onConnect()}
-            >
-              {checking ? 'Checking Freighter' : busy ? 'Asking Freighter' : 'Connect Freighter'}
+            <button className="cta" type="button" disabled={busy} onClick={() => void onConnect()}>
+              {busy ? 'Asking Freighter' : 'Connect Freighter'}
             </button>
             <span className="note-inline">testnet · nothing is signed by connecting</span>
           </div>

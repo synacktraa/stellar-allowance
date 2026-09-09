@@ -62,6 +62,16 @@ test('a row opens a panel carrying the two values and the four lines', async ({ 
   await page.screenshot({ path: 'e2e/shots/dash-panel.png' });
 });
 
+// Freighter's isConnected waits on a reply from an extension that is not installed and burns
+// its own timeout, close to 3s. The button must not wait with it: every first visit is a first
+// visit without the extension.
+test('the connect button is live before the wallet check comes back', async ({ page }) => {
+  await page.goto('/dashboard');
+  await expect(page.getByRole('button', { name: 'Connect Freighter' })).toBeEnabled({
+    timeout: 1000,
+  });
+});
+
 test('the connect screen wears one filled yellow block', async ({ page }) => {
   await page.goto('/dashboard');
   await expect(page.getByRole('button', { name: 'Connect Freighter' })).toBeVisible();
