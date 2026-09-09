@@ -40,8 +40,9 @@ back, and a URL that never asks for payment passes straight through.
 
 ## The repository
 
-Two flows, one contract between them. The owner signs with a wallet and can change any rule.
-The agent signs an auth entry and can only ask.
+Two flows, one contract between them. The owner creates an allowance and can change its rules,
+top it up, empty it or pause it. The agent can request a payment and nothing else: it cannot
+change a rule, pay anyone off the list, or take money out.
 
 ![A map in two lanes, both ending at one contract. Creating and managing: the owner signs with
 Freighter through the interface in web/, which deploys the allowance and sets its rules. Paying:
