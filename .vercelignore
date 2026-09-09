@@ -1,0 +1,11 @@
+# The interface builds from web/ with the linked SDK from sdk/. Nothing else is needed, and
+# build output from the other packages is large enough to abort the upload.
+**/node_modules
+**/.next
+**/dist
+**/test-dist
+contracts/target
+web/e2e/shots
+web/e2e/results
+.claude
+.worktrees
