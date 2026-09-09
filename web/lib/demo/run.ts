@@ -101,7 +101,7 @@ export async function* runDemo(deps: Deps): AsyncGenerator<DemoEvent> {
     const first = yield* step(
       { id: 'pay-1', party: 'agent', title: 'Pay the seller', amount: each },
       () => deps.pay(allowance, url),
-      (r) => ({ sub: 'settled by OpenZeppelin Â· the payer is the contract', hash: r.hash }),
+      (r) => ({ sub: 'settled by OpenZeppelin · the payer is the contract', hash: r.hash }),
     );
     if (!first) return;
 

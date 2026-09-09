@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AllowanceRefused } from '@stellar-allowance/sdk';
 import type { DemoEvent } from '../lib/demo/events';
@@ -99,4 +99,33 @@ test('the baked run carries the same steps the generator emits, in the same orde
     baked.events.map((e) => `${e.id}:${e.title}`),
     emitted.map((e) => `${e.id}:${e.title}`),
   );
+});
+
+test('nothing in the demo or the page was decoded with the wrong codec', () => {
+  // A UTF-8 file read back through a locale codec and written out again turns "·" into two
+  // characters. Nothing that looks at meaning catches it - not the compiler, not the title
+  // comparison above - and it reaches the page as mojibake, in a row that says the payer is the
+  // contract. It reached production once.
+  const markers: Array<[string, Buffer]> = [
+    ['a stray \u00c2', Buffer.from([0xc3, 0x82])],
+    ['a stray \u00e2\u20ac', Buffer.from([0xc3, 0xa2, 0xc2, 0x80])],
+    ['a replacement character', Buffer.from([0xef, 0xbf, 0xbd])],
+  ];
+
+  const roots = ['../../lib/demo', '../../app'];
+  const files: string[] = [];
+  for (const root of roots) {
+    const dir = join(__dirname, root);
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isFile() && /\.(ts|tsx|json|css)$/.test(entry.name)) files.push(join(dir, entry.name));
+    }
+  }
+  assert.ok(files.length > 0, 'found nothing to check');
+
+  for (const file of files) {
+    const raw = readFileSync(file);
+    for (const [what, marker] of markers) {
+      assert.ok(!raw.includes(marker), `${file} carries ${what}`);
+    }
+  }
 });
