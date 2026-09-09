@@ -412,6 +412,123 @@ section {
   }
 }
 
+/* --- what this is ------------------------------------------------------ */
+
+blockquote {
+  margin: 0 0 22px;
+  padding-left: 18px;
+  border-left: 3px solid var(--ink);
+  max-width: 46ch;
+}
+
+blockquote p {
+  margin: 0 0 8px;
+  font: 400 clamp(19px, 2.2vw, 23px) / 1.35 var(--serif);
+  text-wrap: pretty;
+}
+
+blockquote cite {
+  font: 500 12px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-44);
+  font-style: normal;
+}
+
+.standing .lede + .lede {
+  margin-top: 14px;
+}
+
+/* Stacked, not side by side. Two panels sharing a row halve the drawing on a phone and take
+   the labels below reading size with them; stacked, each one gets the full column. Below the
+   width the labels need, the pair scrolls sideways the way the code blocks do. */
+.where {
+  margin: 30px 0 24px;
+}
+
+.where .pair {
+  display: grid;
+  gap: 26px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  padding: 22px;
+  overflow-x: auto;
+}
+
+.dia {
+  width: 100%;
+  min-width: 470px;
+  height: auto;
+}
+
+.dia .box {
+  fill: var(--ground);
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+
+.dia .box.hot {
+  fill: var(--surface-2);
+  stroke: var(--ink);
+}
+
+/* The page already says refused in lavender. The drawing says it the same way. */
+.dia .box.no {
+  fill: var(--lavender-tint);
+  stroke: var(--lavender);
+}
+
+.dia .lab {
+  font: 500 13px var(--sans);
+  fill: var(--ink);
+}
+
+.dia .sub,
+.dia .edge-lab {
+  font: 400 11px var(--mono);
+  fill: var(--ink-70);
+}
+
+.dia .head {
+  font: 500 10px var(--mono);
+  letter-spacing: 0.12em;
+  fill: var(--ink-44);
+}
+
+.dia .mid {
+  text-anchor: middle;
+}
+
+.dia .edge {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.4;
+}
+
+.dia .edge.cut {
+  stroke: var(--lavender);
+  stroke-dasharray: 4 4;
+}
+
+.dia .cross {
+  fill: none;
+  stroke: var(--coral);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.dia .tip {
+  fill: var(--ink);
+}
+
+.where figcaption {
+  margin-top: 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-44);
+  max-width: 68ch;
+}
+
 /* --- the package ------------------------------------------------------- */
 
 /* A shell command and a TypeScript block are two different things to copy, so they are two

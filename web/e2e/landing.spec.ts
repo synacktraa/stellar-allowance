@@ -41,9 +41,11 @@ test('the favicon and the link preview are served', async ({ request }) => {
   expect(og.headers()['content-type']).toContain('image/png');
 });
 
-test('the lede says who the page is for', async ({ page }) => {
+// Who wants this is the quote's job now. The lede's job is what goes wrong without it, because
+// a reader who has not been burned yet does not feel "keep the wallet" as a benefit.
+test('the lede names the failure before the fix', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.lede')).toContainText('agent that calls paid APIs');
+  await expect(page.locator('.lede').first()).toContainText('can spend all of it');
 });
 
 test('one filled yellow block, and it is the ask', async ({ page }) => {
@@ -95,4 +97,42 @@ test('the copy control holds still while the code scrolls under it', async ({ pa
   await code.evaluate((node) => node.scrollBy({ left: 400 }));
   expect(await code.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
   expect((await button.boundingBox())?.x).toBe(before?.x);
+});
+
+// The want is stated by people who build things, and stated loosely. The page carries one of
+// those statements and then answers it with something specific.
+test('the page carries the ask it answers, attributed', async ({ page }) => {
+  await page.goto('/');
+  const quote = page.locator('blockquote');
+  await expect(quote).toContainText('an allowance, and permission to just take care of stuff');
+  await expect(quote.locator('cite')).toContainText('DHH');
+});
+
+// A picture of where the money sits, because that is the whole difference and eight log rows
+// do not show it.
+test('the mechanism is drawn, and readable without seeing it', async ({ page }) => {
+  await page.goto('/');
+  const panels = page.locator('figure svg[role="img"]');
+  expect(await panels.count()).toBeGreaterThan(0);
+
+  // Every panel has to carry its own claim in words, because a drawing nobody can see is
+  // decoration.
+  for (const label of await panels.evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute('aria-label') ?? ''),
+  )) {
+    expect(label).toMatch(/money/i);
+  }
+  await expect(page.locator('figure figcaption')).not.toBeEmpty();
+});
+
+// Not a new payment protocol. The word that says so appears exactly where the proof starts.
+test('the run is introduced as x402, not as something new', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.standing')).toContainText('x402');
+});
+
+test('the page says who built it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('footer')).toContainText('synacktraa');
+  await expect(page.locator('footer')).toContainText('Apache 2.0');
 });

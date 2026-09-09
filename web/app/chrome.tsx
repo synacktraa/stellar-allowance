@@ -29,6 +29,18 @@ export function Footer() {
   return (
     <footer>
       <span className="tag">testnet · unaudited</span>
+      <span>
+        Built by{' '}
+        <a href="https://github.com/synacktraa" target="_blank" rel="noreferrer">
+          synacktraa
+        </a>
+        . Contract, SDK and site are Apache 2.0 on{' '}
+        <a href="https://github.com/synacktraa/stellar-allowance" target="_blank" rel="noreferrer">
+          GitHub
+        </a>
+        .
+      </span>
+      <span>It took a Trust in AI award at a summer school hackathon. The prize was an ice cream.</span>
       <span>Not (yet) affiliated with the Stellar Development Foundation.</span>
     </footer>
   );
