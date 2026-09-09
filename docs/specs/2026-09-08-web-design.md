@@ -1,6 +1,11 @@
 # Web design
 
-**Status:** design agreed 2026-09-08, not yet implemented.
+**Status:** implemented in [#16](https://github.com/synacktraa/stellar-allowance/pull/16),
+merged 2026-09-09. The demo, the design system, the responsive rules and the deployment shipped
+as described here. The create flow did not: `/create` was built as specified and rejected, and
+what replaced it is a dashboard at `/dashboard`. Listing, editing, withdrawing and pausing came
+with it, and the allowlist is entered as API URLs resolved through their own 402 rather than as
+addresses typed in.
 
 Directory `web/`, deployed to Vercel. It is where an allowance id comes from. The SDK's README
 assumes one exists, and until this interface does, nobody can obtain one.

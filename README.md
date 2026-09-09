@@ -42,10 +42,10 @@ back, and a URL that never asks for payment passes straight through.
 
 | | |
 |---|---|
-| [`contracts/allowance`](contracts/allowance) | the Soroban contract, and how it works |
+| [`contracts/allowance`](contracts/allowance) | the Soroban contract, and the design: `__check_auth`, the allowlist, the rolling window, storage and TTL |
 | [`sdk`](sdk) | [`@stellar-allowance/sdk`](https://www.npmjs.com/package/@stellar-allowance/sdk) |
 | [`web`](web) | the site and the dashboard |
 | [`demo/seller`](demo/seller) | a live x402 API for the demo to pay |
-| [`docs`](docs) | how each decision was made, dated |
+| [`docs`](docs) | why each decision was made, dated, including the ones that turned out wrong |
 
 Apache 2.0. Built by [synacktraa](https://github.com/synacktraa).

@@ -14,8 +14,8 @@ an **Outcome** section on the plans. `current` means it still describes the syst
 
 ### Concepts
 
-Drafts for the unwritten `architecture.md`, and the closest thing the contract has to a design
-document.
+One question per document. These and [the contract's own
+README](../contracts/allowance/README.md) are where the design is written down.
 
 | | |
 |---|---|
@@ -30,6 +30,7 @@ document.
 | [`specs/2026-09-06-factory-design.md`](specs/2026-09-06-factory-design.md) | a contract that deploys allowances at derived addresses. Superseded. |
 | [`specs/2026-09-06-no-factory.md`](specs/2026-09-06-no-factory.md) | why that contract was deleted the day it was built |
 | [`specs/2026-09-06-sdk-design.md`](specs/2026-09-06-sdk-design.md) | the client package, its credential pair and its refusals |
+| [`specs/2026-09-08-web-design.md`](specs/2026-09-08-web-design.md) | the interface. Its create flow was superseded. |
 
 ### Plans
 
@@ -40,6 +41,7 @@ Task by task, written before the work and frozen after it.
 | [`plans/2026-09-06-factory.md`](plans/2026-09-06-factory.md) | allowance 0.2.0, then the factory |
 | [`plans/2026-09-06-sdk.md`](plans/2026-09-06-sdk.md) | `@stellar-allowance/sdk`, in three phases |
 | [`plans/2026-09-07-live-payment.md`](plans/2026-09-07-live-payment.md) | one real payment, against a live seller and a facilitator we do not run |
+| [`plans/2026-09-08-web.md`](plans/2026-09-08-web.md) | the interface, in five phases |
 
 ---
 
@@ -91,11 +93,11 @@ the factory plan, because a factory pins one wasm hash and every allowance chang
 costs a new factory.
 
 ### 2026-09-06, the factory, built and deleted
+
 Designed in [`factory-design.md`](specs/2026-09-06-factory-design.md). I built it through
 Task 12 and deleted it the same day. [`no-factory.md`](specs/2026-09-06-no-factory.md)
 records what settled it: the interface should let an owner choose which allowance version to
 create, and a factory pins exactly one hash with no setter, so both cannot be true.
-factory pins exactly one hash with no setter, so both cannot be true.
 
 The address derivation survived it. `sha256(owner ‖ index)` as the salt, with the owner as the
 deployer instead of a contract, gives the same property the factory existed for: an allowance
@@ -146,11 +148,38 @@ an entry with `signature=scvVoid` and verifies nothing.
 Settling them took a replay script that printed what simulation returns at each step, rather
 than another reading of the types. Both corrections are in `3eed51e`.
 
+### 2026-09-08 to 09-09, the interface
+
+[`web-design.md`](specs/2026-09-08-web-design.md), then [the plan](plans/2026-09-08-web.md),
+merged as [#16](https://github.com/synacktraa/stellar-allowance/pull/16).
+
+The landing page and the live demo went as planned. The create page did not. It was built as
+specified, looked at once and thrown out, because a form asking an owner to find the next free
+index is the contract's arithmetic handed to the reader. What replaced it asks the chain for 60
+derived addresses in one call and lists what answers, which is a table, and the free index falls
+out of the same read rather than being a question.
+
+The allowlist changed with it. An owner adds an API URL, the interface fetches its 402 and takes
+the payout address out of the offer, so what gets typed is the thing being bought and the address
+is derived instead of transcribed.
+
+### 2026-09-09, on npm
+
+`@stellar-allowance/sdk` 0.1.0, then 0.1.1 with a corrected README, released as the tags
+`sdk-v0.1.0` and `sdk-v0.1.1` through
+[#17](https://github.com/synacktraa/stellar-allowance/pull/17) and
+[#18](https://github.com/synacktraa/stellar-allowance/pull/18).
+
+The release workflow refuses a tag naming a version npm has never heard of, so the publish comes
+first and the tag records it. Only the account holder can publish, and a release pointing at an
+install that fails is worse than no release.
+
 ---
 
 ## What is not here yet
 
-- **`architecture.md`.** The three concept docs above are drafts for it.
-- **The web interface.** It is what creates an allowance, which is why the SDK is not
-  published: without it nobody can obtain an allowance id to configure.
+- **`architecture.md`.** The concept docs above and the contract's README carry the design
+  between them. Whether a fourth document adds anything is undecided.
 - **The two upstream issues** in the SDK design's last section, still unfiled.
+- **Archival.** An allowance left idle for 120,960 ledgers stops answering the interface's read,
+  and nothing yet tells an owner that is what happened to it.
