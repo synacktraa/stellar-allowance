@@ -152,10 +152,13 @@ npm run e2e:setup
 npm run e2e
 ```
 
-Setup creates fixtures that belong to whoever runs it: no funded address is shared. It
-generates a facilitator key, an owner account funded by friendbot, a USDC balance swapped from
-XLM on the testnet DEX, an agent keypair, and an allowance deployed at the first free index.
-Every step checks whether it is already done, so an interrupted run resumes.
+Setup creates fixtures that belong to whoever runs it: no funded address is shared. It creates
+an owner account funded by friendbot, a USDC balance swapped from XLM on the testnet DEX, an
+agent keypair, and an allowance deployed at the first free index. Every step checks whether it
+is already done, so an interrupted run resumes.
+
+Nothing here configures a facilitator. That belongs to the seller, which is the side that calls
+it to verify and settle; a client only builds the payment and sends it in a header.
 
 It reads the seller's 402 to learn which address to allowlist and which asset to hold, rather
 than being told:
