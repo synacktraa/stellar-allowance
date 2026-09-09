@@ -23,7 +23,10 @@ test('nothing in the package imports a node builtin', async () => {
   const offenders = [];
   for (const file of await sources(DIST)) {
     const code = await readFile(file, 'utf8');
-    for (const [, specifier] of code.matchAll(/from ['"](node:[^'"]+)['"]/g)) {
+    // Every form a specifier can arrive in: `from 'node:x'`, a bare side-effect import,
+    // `import('node:x')` and `require('node:x')`. Backticked prose about node: is not one.
+    const specifiers = /(?:from|import|require)\s*\(?\s*['"](node:[^'"]+)['"]/g;
+    for (const [, specifier] of code.matchAll(specifiers)) {
       offenders.push(`${file.slice(DIST.length)} imports ${specifier}`);
     }
   }
