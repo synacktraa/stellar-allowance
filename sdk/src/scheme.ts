@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto';
-
 import {
   Address,
   Operation,
@@ -134,13 +132,17 @@ export class ExactAllowanceScheme implements SchemeNetworkClient {
  * An auth entry for `transfer` that nobody has signed yet.
  *
  * The nonce is random and single use: the host rejects a second entry carrying one it has
- * already seen, which is what stops a signature being replayed.
+ * already seen, which is what stops a signature being replayed. `crypto.getRandomValues` and
+ * not `node:crypto`, because one `node:` specifier makes this package unbuildable for a browser
+ * extension or a page whether or not the line ever runs there.
  */
 function unsignedEntry(
   from: string,
   token: string,
   args: xdr.ScVal[],
 ): xdr.SorobanAuthorizationEntry {
+  const nonce = new DataView(crypto.getRandomValues(new Uint8Array(8)).buffer).getBigInt64(0);
+
   return new xdr.SorobanAuthorizationEntry({
     rootInvocation: new xdr.SorobanAuthorizedInvocation({
       function: xdr.SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeContractFn(
@@ -155,7 +157,7 @@ function unsignedEntry(
     credentials: xdr.SorobanCredentials.sorobanCredentialsAddress(
       new xdr.SorobanAddressCredentials({
         address: new Address(from).toScAddress(),
-        nonce: new xdr.Int64(randomBytes(8).readBigInt64BE()),
+        nonce: new xdr.Int64(nonce),
         signatureExpirationLedger: 0,
         signature: xdr.ScVal.scvVec([]),
       }),
