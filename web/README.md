@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# web
 
-## Getting Started
+The interface: a landing page that runs the demo live, and a dashboard an owner creates and
+manages allowances from. Deployed at
+[stellar-allowance.vercel.app](https://stellar-allowance.vercel.app).
 
-First, run the development server:
+## Running it
+
+The SDK is linked from `../sdk`, so build it once before the first run.
 
 ```bash
+npm --prefix ../sdk install && npm --prefix ../sdk run build
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Nothing here holds a key. The demo generates every keypair it uses per run and discards it.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| | |
+|---|---|
+| `NEXT_PUBLIC_SITE_URL` | absolute base for the link preview. Defaults to `http://localhost:3000` |
+| `SELLER_URL` | the x402 API the demo pays |
+| `WASM_URL` | the contract release the demo deploys from |
+| `BAKE_URL` | which host `npm run bake` records a run against |
 
-## Learn More
+## Tests
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm test              # unit
+npx playwright test   # end to end, against a dev server it starts itself
+npm run bake          # re-record the run the landing page loads with
+```
