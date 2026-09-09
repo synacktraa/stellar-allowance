@@ -417,24 +417,17 @@ section {
 /* A shell command and a TypeScript block are two different things to copy, so they are two
    blocks. The command sits on the code it installs. */
 .install {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 11px 14px;
+  margin: 0;
+  padding: 11px 46px 11px 14px;
   background: var(--surface);
   border: 1px solid var(--line-strong);
   border-bottom: 0;
-}
-
-.install code {
-  font-size: 13px;
+  font: 13px/1.7 var(--mono);
   white-space: pre;
   overflow-x: auto;
 }
 
-.install code::before {
+.install::before {
   content: '$ ';
   color: var(--ink-44);
 }
@@ -645,23 +638,6 @@ footer a {
   font: 500 14px/1.5 var(--mono);
   letter-spacing: 0;
   overflow-wrap: anywhere;
-}
-
-.copy {
-  align-self: flex-start;
-  font: 500 11px/1 var(--mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  background: var(--ink);
-  color: var(--surface);
-  border: 0;
-  padding: 8px 10px;
-  cursor: pointer;
-}
-
-.copy:focus-visible {
-  outline: 3px solid var(--yellow);
-  outline-offset: 2px;
 }
 
 /* --- the dashboard ----------------------------------------------------- */
@@ -1155,10 +1131,49 @@ td .sub {
   margin: 0;
   background: var(--ink);
   color: #e6e3da;
-  padding: 12px 14px;
+  padding: 12px 46px 12px 14px;
   font: 12px/1.7 var(--mono);
   overflow-x: auto;
   white-space: pre;
+}
+
+/* The block scrolls sideways, so its copy control is anchored out here rather than inside it -
+   a control that travels with the text is a control that leaves the screen. It carries the
+   block's own ground so the line passing beneath it stays out of the way. */
+.block {
+  position: relative;
+  --copy-ink: #e6e3da;
+  --copy-ground: var(--ink);
+}
+
+.block.pale {
+  --copy-ink: var(--ink-70);
+  --copy-ground: var(--surface);
+}
+
+.copy {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: inline-flex;
+  padding: 6px;
+  border: 0;
+  line-height: 0;
+  color: var(--copy-ink);
+  background: var(--copy-ground);
+  opacity: 0.6;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.copy:hover,
+.copy:focus-visible {
+  opacity: 1;
+}
+
+.copy:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
 }
 
 .c1 {

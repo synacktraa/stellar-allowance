@@ -121,4 +121,11 @@ test('the two values scroll sideways rather than wrapping', async ({ page }) => 
     .locator('.code.env')
     .evaluate((node) => [getComputedStyle(node).whiteSpace, getComputedStyle(node).overflowX]);
   expect(style).toEqual(['pre', 'auto']);
+
+  // Read-only, so the secret is not on screen and the pair is not worth copying. The four lines
+  // are, and their control is an icon like every other.
+  const copies = page.locator('aside.panel button.copy');
+  await expect(copies).toHaveCount(1);
+  await expect(copies).toHaveAttribute('aria-label', /copy/i);
+  expect((await copies.allInnerTexts()).join('').trim()).toBe('');
 });

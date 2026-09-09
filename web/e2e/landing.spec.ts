@@ -69,3 +69,30 @@ test('each step announces its own state', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.run .state[aria-live="polite"]')).toHaveCount(8);
 });
+
+// A copy control is an icon on the block it copies. Two blocks, two controls, no labels: the
+// glyph says what it does, and a word beside every one of them is furniture.
+test('both blocks carry a copy control, and neither is narrated', async ({ page }) => {
+  await page.goto('/');
+  const copies = page.locator('button.copy');
+  await expect(copies).toHaveCount(2);
+
+  for (const text of await copies.allInnerTexts()) expect(text.trim()).toBe('');
+  await expect(copies.first()).toHaveAttribute('aria-label', /copy/i);
+  await expect(copies.last()).toHaveAttribute('aria-label', /copy/i);
+});
+
+// The control belongs to the block, not to the text inside it, so scrolling the code sideways
+// must not carry it off the edge.
+test('the copy control holds still while the code scrolls under it', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+
+  const code = page.locator('pre.code');
+  const button = page.locator('.block:not(.pale) button.copy');
+  const before = await button.boundingBox();
+
+  await code.evaluate((node) => node.scrollBy({ left: 400 }));
+  expect(await code.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+  expect((await button.boundingBox())?.x).toBe(before?.x);
+});

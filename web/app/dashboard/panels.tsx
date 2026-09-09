@@ -7,7 +7,7 @@ import { remaining } from '@/lib/dashboard/summary';
 import type { Row } from '@/lib/dashboard/read';
 import { createAllowance, saveAllowance, setEnabled, withdrawFrom, type Rules } from '@/lib/dashboard/write';
 import { freighterSigner, type Wallet } from '@/lib/dashboard/wallet';
-import { AGENT_CODE, AgentLines, Copy } from '../code';
+import { AgentLines, Block } from '../code';
 import { Allowlist, type Labels } from './allowlist';
 
 const WINDOWS = [
@@ -92,14 +92,15 @@ function AgentSetup({ id, secret }: { id: string; secret?: string }) {
       <div className="sec">
         <div className="sh">
           <span>Give this to the agent</span>
-          {secret && <Copy text={env} what=".env" />}
         </div>
-        <pre className="code env">
-          <span className="c1">STELLAR_ALLOWANCE_ID</span>={id}
-          {'\n'}
-          <span className="c1">STELLAR_ALLOWANCE_SECRET</span>=
-          {secret ?? <span className="dim">shown once, when this was created</span>}
-        </pre>
+        <Block copy={secret ? env : undefined} what="the .env">
+          <pre className="code env">
+            <span className="c1">STELLAR_ALLOWANCE_ID</span>={id}
+            {'\n'}
+            <span className="c1">STELLAR_ALLOWANCE_SECRET</span>=
+            {secret ?? <span className="dim">shown once, when this was created</span>}
+          </pre>
+        </Block>
         {secret ? (
           <p className="warn">
             This secret is shown now and never again. Nothing stores it, here or anywhere else. An
@@ -117,7 +118,6 @@ function AgentSetup({ id, secret }: { id: string; secret?: string }) {
       <div className="sec">
         <div className="sh">
           <span>Then the agent pays with it</span>
-          <Copy text={AGENT_CODE} what="code" />
         </div>
         <AgentLines />
         <p className="help">
