@@ -1,6 +1,6 @@
 {
   "name": "@stellar-allowance/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pay x402 APIs from a Stellar allowance, with the limits enforced on chain",
   "license": "Apache-2.0",
   "keywords": [

@@ -37,9 +37,6 @@ const RPC_URL = 'https://soroban-testnet.stellar.org';
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const FRIENDBOT = 'https://friendbot.stellar.org';
 
-const FACILITATOR_URL = 'https://channels.openzeppelin.com/x402/testnet';
-const FACILITATOR_KEYGEN = 'https://channels.openzeppelin.com/testnet/gen';
-
 // The one asset constant. Its contract address is computed rather than written down, and the
 // seller's 402 is checked against that, so a seller asking for something else fails clearly.
 const USDC = new Asset('USDC', 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
@@ -76,8 +73,6 @@ function readEnv() {
 
 function writeEnv(env) {
   const order = [
-    'FACILITATOR_URL',
-    'FACILITATOR_API_KEY',
     'E2E_PAID_URL',
     'E2E_OWNER_ADDRESS',
     'E2E_OWNER_SECRET',
@@ -190,21 +185,9 @@ async function pollUntilDone(hash) {
 
 async function main() {
   const env = readEnv();
-  env.FACILITATOR_URL = FACILITATOR_URL;
   env.E2E_PAID_URL = process.env.E2E_PAID_URL ?? env.E2E_PAID_URL ?? '';
 
-  step(1, 'Facilitator key');
-  if (env.FACILITATOR_API_KEY) {
-    skip(`${env.FACILITATOR_API_KEY.length} characters`);
-  } else {
-    const response = await fetch(FACILITATOR_KEYGEN);
-    if (!response.ok) throw new Error(`key generation returned ${response.status}`);
-    env.FACILITATOR_API_KEY = (await response.json()).apiKey;
-    done(`generated, ${env.FACILITATOR_API_KEY.length} characters`);
-  }
-  writeEnv(env);
-
-  step(2, 'Owner account');
+  step(1, 'Owner account');
   if (!env.E2E_OWNER_SECRET) {
     const owner = Keypair.random();
     env.E2E_OWNER_SECRET = owner.secret();
@@ -216,7 +199,7 @@ async function main() {
   writeEnv(env);
   const owner = Keypair.fromSecret(env.E2E_OWNER_SECRET);
 
-  step(3, 'Funding');
+  step(2, 'Funding');
   if (await accountOf(owner.publicKey())) {
     skip('the account exists');
   } else {
@@ -225,7 +208,7 @@ async function main() {
     done('funded by friendbot');
   }
 
-  step(4, 'USDC trustline');
+  step(3, 'USDC trustline');
   let account = await accountOf(owner.publicKey());
   if (balanceOf(account, USDC)) {
     skip('the trustline is there');
@@ -235,7 +218,7 @@ async function main() {
     done('added');
   }
 
-  step(5, 'USDC balance');
+  step(4, 'USDC balance');
   const held = balanceOf(account, USDC);
   if (Number(held.balance) > 0) {
     skip(`${held.balance} USDC`);
@@ -257,7 +240,7 @@ async function main() {
     done(`swapped ${SWAP_XLM / 10_000_000n} XLM for ${after.balance} USDC`);
   }
 
-  step(6, 'What the seller wants');
+  step(5, 'What the seller wants');
   if (!env.E2E_PAID_URL) {
     console.log('   no seller URL yet. Set E2E_PAID_URL and run this again to finish.');
     writeEnv(env);
@@ -281,7 +264,7 @@ async function main() {
   done(`pays ${wants.payTo}, ${wants.amount} of ${wants.asset}`);
   writeEnv(env);
 
-  step(7, 'Agent key');
+  step(6, 'Agent key');
   if (!env.STELLAR_ALLOWANCE_SECRET) {
     env.STELLAR_ALLOWANCE_SECRET = Keypair.random().secret();
     done('generated');
@@ -291,7 +274,7 @@ async function main() {
   writeEnv(env);
   const agent = Keypair.fromSecret(env.STELLAR_ALLOWANCE_SECRET);
 
-  step(8, 'Allowance');
+  step(7, 'Allowance');
   if (env.STELLAR_ALLOWANCE_ID) {
     skip(env.STELLAR_ALLOWANCE_ID);
     console.log('\nReady. Run: npm run e2e');
