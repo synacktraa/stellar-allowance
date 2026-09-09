@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { AllowanceRefused } from '@stellar-allowance/sdk';
 import type { DemoEvent } from '../lib/demo/events';
 import { runDemo, type Deps } from '../lib/demo/run';
@@ -78,4 +80,23 @@ test('a step that throws ends the run with a failed event and nothing after it',
   assert.equal(last.state, 'failed');
   assert.match(last.sub!, /429/);
   assert.ok(!events.some((e) => e.id === 'deploy'));
+});
+
+test('the baked run carries the same steps the generator emits, in the same order', async () => {
+  // The page opens on a recording, and a recording is a copy. This is what makes it a stale one:
+  // rename a step or change what it does and the file on disk still says the old thing, on the
+  // first screen, until someone re-bakes. Titles and order are compared because those are what a
+  // reader sees before pressing anything.
+  // From test-dist/test back to the source tree: the recording the page imports, not a copy.
+  const path = join(__dirname, '../../lib/demo/baked.json');
+  const baked = JSON.parse(readFileSync(path, 'utf8')) as { events: DemoEvent[] };
+
+  const events: DemoEvent[] = [];
+  for await (const e of runDemo(fakeDeps())) events.push(e);
+  const emitted = [...new Map(events.map((e) => [e.id, e])).values()];
+
+  assert.deepEqual(
+    baked.events.map((e) => `${e.id}:${e.title}`),
+    emitted.map((e) => `${e.id}:${e.title}`),
+  );
 });

@@ -6,11 +6,26 @@ import { Run } from './run';
 
 const run = baked as { at: string; events: DemoEvent[] };
 
-export default function Page() {
-  const settled = run.events.filter((e) => e.state === 'done' && e.id.startsWith('pay')).length;
-  const refused = run.events.filter((e) => e.state === 'refused').length;
-  const allowance = run.events.find((e) => e.id === 'deploy')?.hash ?? '';
+/**
+ * The hero's figures, which are an illustration rather than a reading.
+ *
+ * The run further down is deliberately small: it happens in a stranger's browser while they
+ * wait, so it finishes in a minute, and a minute's worth of payments is too few to show what a
+ * cap is for. These are the same shape at a size worth caring about — the agent holds nothing
+ * however often it asks, the allowance holds both the money and the rules, and only what the
+ * rules allow reaches a seller. They are not the run's numbers and nothing here says they are;
+ * the run states its own, with a hash on every row.
+ */
+const HERO = {
+  asked: 10,
+  paid: 8,
+  outcome: '8 paid · 1 off the list · 1 over the cap',
+  agent: '0.00',
+  allowance: '5.00',
+  seller: '0.08',
+};
 
+export default function Page() {
   return (
     <main className="wrap">
       <Header />
@@ -29,32 +44,28 @@ export default function Page() {
         <div className="side">
           <div className="stats">
             <div className="cell dark">
-              <div className="k">The agent&rsquo;s key holds</div>
+              <div className="k">The agent</div>
               <div className="v">
-                0.00<small>USDC</small>
+                {HERO.agent}
+                <small>USDC</small>
               </div>
-              <div className="c">it can ask; it cannot take</div>
+              <div className="c">asked {HERO.asked} times, holds nothing</div>
             </div>
-            <div className="cell">
-              <div className="k">My servers in the payment path</div>
-              <div className="v">0</div>
-              <div className="c">a public facilitator submits, the contract decides</div>
-            </div>
-            <div className="cell addr">
+            <div className="cell allowance">
               <div className="k">The allowance</div>
               <div className="v">
-                <a
-                  className="hash"
-                  href={`https://stellar.expert/explorer/testnet/contract/${allowance}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {allowance.slice(0, 6)}…{allowance.slice(-4)}
-                </a>
+                {HERO.allowance}
+                <small>USDC</small>
               </div>
-              <div className="c">
-                {settled} payments settled, {refused} refused
+              <div className="c">{HERO.outcome}</div>
+            </div>
+            <div className="cell">
+              <div className="k">The seller</div>
+              <div className="v">
+                {HERO.seller}
+                <small>USDC</small>
               </div>
+              <div className="c">was paid {HERO.paid} times</div>
             </div>
           </div>
         </div>
@@ -94,7 +105,7 @@ export default function Page() {
           than the call. The only change is which address pays.
         </p>
         <p className="lede">
-          The figures below are testnet-small on purpose. A cap is a number, and the same contract
+          The cap below is testnet-small on purpose. A cap is a number, and the same contract
           holds 500 USDC a day as readily as it holds 0.025.
         </p>
       </section>

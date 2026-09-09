@@ -76,7 +76,7 @@ export async function* runDemo(deps: Deps): AsyncGenerator<DemoEvent> {
       () => ({}),
     );
     yield* step(
-      { id: 'swap', party: 'owner', title: 'Swap 10 XLM for USDC', sub: 'testnet DEX, strict send' },
+      { id: 'swap', party: 'owner', title: 'Swap 100 XLM for USDC', sub: 'testnet DEX, strict send' },
       () => deps.swap(owner),
       (balance) => ({ amount: `${Number(balance).toFixed(4)} USDC` }),
     );
@@ -101,7 +101,7 @@ export async function* runDemo(deps: Deps): AsyncGenerator<DemoEvent> {
     const first = yield* step(
       { id: 'pay-1', party: 'agent', title: 'Pay the seller', amount: each },
       () => deps.pay(allowance, url),
-      (r) => ({ sub: 'settled by OpenZeppelin · the payer is the contract', hash: r.hash }),
+      (r) => ({ sub: 'settled by OpenZeppelin Â· the payer is the contract', hash: r.hash }),
     );
     if (!first) return;
 

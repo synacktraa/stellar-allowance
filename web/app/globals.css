@@ -9,7 +9,7 @@
   --line-strong: rgba(15, 15, 15, 0.3);
   --yellow: #fdda24;
   --lavender: #b7ace8;
-  --lavender-tint: #e9e5f7;
+  --lavender-tint: #ded7f4;
   --teal: #00a7b5;
   --teal-tint: #d9f0f2;
   --cream: #d6d3c4;
@@ -492,7 +492,9 @@ blockquote cite a:hover {
 
 .stats {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* The allowance carries the longest caption, the seller the shortest. Sized so neither wraps
+     and neither trails a hole after its last word. */
+  grid-template-columns: 1.45fr 1fr;
   gap: 1px;
   background: var(--line-strong);
   border: 1px solid var(--line-strong);
@@ -502,8 +504,11 @@ blockquote cite a:hover {
   grid-column: 1 / -1;
 }
 
-.run + .stats {
-  border-top: 0;
+/* The allowance's own colour. A refused row carries the same tint because the allowance is what
+   refused, and the link preview arrives on it, so a reader who clicked through sees the colour
+   they came from sitting on the party it belongs to. */
+.cell.allowance {
+  background: var(--lavender-tint);
 }
 
 .cell {

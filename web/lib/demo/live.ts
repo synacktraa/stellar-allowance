@@ -54,10 +54,13 @@ export function liveDeps(): Deps {
         owner,
         Operation.pathPaymentStrictSend({
           sendAsset: Asset.native(),
-          sendAmount: '10',
+          sendAmount: '100',
           destination: owner.publicKey(),
           destAsset: USDC,
-          destMin: '1',
+          // A floor rather than a formality: the deposit is 5 USDC, so a thin book has to fail
+          // here, where the row says the swap did not fill, and not two steps later on a deploy
+          // that looks like the contract's fault.
+          destMin: '10',
           path: [],
         }),
       );

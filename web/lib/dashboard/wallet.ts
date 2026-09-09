@@ -18,6 +18,28 @@ export interface Wallet {
   usdc?: string;
 }
 
+/** The cap a new allowance is offered, in USDC, and how many of those windows the deposit covers. */
+const OFFERED_CAP = 5;
+const WINDOWS_COVERED = 4;
+
+/** Seven decimals and never an exponent: these strings go into the field the amount parser reads. */
+const money = (amount: number): string => amount.toFixed(7).replace(/\.?0+$/, '');
+
+/**
+ * What the new-allowance form starts at, given what the wallet holds.
+ *
+ * A cap above the balance is a rule that can never bind, so a wallet holding less than the
+ * offered cap is offered its own balance instead. A wallet holding nothing is offered the plain
+ * numbers rather than zeros, because a form full of zeros reads as broken and the deploy is what
+ * says, in words, that there is no USDC to deposit.
+ */
+export function suggestDefaults(usdc?: string): { deposit: string; cap: string } {
+  const held = Number(usdc ?? 0);
+  const cap = held > 0 ? Math.min(OFFERED_CAP, held) : OFFERED_CAP;
+  const deposit = held > 0 ? Math.min(cap * WINDOWS_COVERED, held) : cap * WINDOWS_COVERED;
+  return { deposit: money(deposit), cap: money(cap) };
+}
+
 /** The calls this page makes on the extension, named so a test can stand in for it. */
 export interface Freighter {
   isConnected: typeof isConnected;
