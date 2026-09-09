@@ -36,10 +36,8 @@ export default function Page() {
               <div className="c">it can ask; it cannot take</div>
             </div>
             <div className="cell">
-              <div className="k">In the payment path</div>
-              <div className="v">
-                0<small>of ours</small>
-              </div>
+              <div className="k">My servers in the payment path</div>
+              <div className="v">0</div>
               <div className="c">a public facilitator submits, the contract decides</div>
             </div>
             <div className="cell addr">
@@ -85,11 +83,6 @@ export default function Page() {
         </blockquote>
 
         <p className="lede">
-          An agentic bank. An account. A wallet of its own. The nearest familiar object differs; the
-          want under it is one thing, which is an agent that can pay for something inside a boundary
-          that holds.
-        </p>
-        <p className="lede">
           This is a concrete version of it. Three rules, enforced by the chain rather than by the
           agent&rsquo;s own good behavior, so nothing routes around them: not the agent, not its
           dependencies, not me.
@@ -97,7 +90,12 @@ export default function Page() {
 
         <p className="lede">
           None of it is a new payment protocol. x402 defines the handshake and a public facilitator
-          settles it. The only change is which address pays.
+          settles it, which is what makes a one-cent API call payable at all: card fees cost more
+          than the call. The only change is which address pays.
+        </p>
+        <p className="lede">
+          The figures below are testnet-small on purpose. A cap is a number, and the same contract
+          holds 500 USDC a day as readily as it holds 0.025.
         </p>
       </section>
 

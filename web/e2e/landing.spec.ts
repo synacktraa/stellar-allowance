@@ -119,3 +119,34 @@ test('the page says who built it', async ({ page }) => {
   await expect(page.locator('footer')).toContainText('synacktraa');
   await expect(page.locator('footer')).toContainText('Apache 2.0');
 });
+
+// The disclosures live in the footer and the help lines: testnet, unaudited, what the award was
+// worth, what a secret cannot be. Setting the most honest text on the page in the least readable
+// type is the one place fading things out reads as hiding them.
+test('the small print clears the contrast floor it has to clear', async ({ page }) => {
+  await page.goto('/');
+
+  const ratios = await page.$$eval('footer, .help', (nodes) => {
+    const channel = (c: number) => {
+      const v = c / 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    const parse = (value: string) =>
+      (value.match(/[\d.]+/g) ?? []).slice(0, 4).map(Number);
+    const luminance = ([r, g, b]: number[]) =>
+      0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+
+    return nodes.map((node) => {
+      const style = getComputedStyle(node);
+      const [r, g, b, alpha = 1] = parse(style.color);
+      // The ground shows through a translucent color, so composite before measuring.
+      const ground = parse(getComputedStyle(document.body).backgroundColor);
+      const over = [r, g, b].map((c, i) => c * alpha + ground[i] * (1 - alpha));
+      const [lo, hi] = [luminance(over), luminance(ground)].sort((x, y) => x - y);
+      return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
+    });
+  });
+
+  expect(ratios.length).toBeGreaterThan(0);
+  for (const ratio of ratios) expect(ratio).toBeGreaterThanOrEqual(4.5);
+});

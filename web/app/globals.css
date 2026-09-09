@@ -452,6 +452,13 @@ blockquote cite a:hover {
   margin-top: 14px;
 }
 
+/* A kicker is as wide as the thing it names. The run's spans the table; this one spans the prose
+   column, so its right-hand label lands over text instead of over empty page. In rem rather than
+   ch because the two are set in different faces and ch would size them differently. */
+.standing .kicker {
+  max-width: 40rem;
+}
+
 /* --- the package ------------------------------------------------------- */
 
 /* A shell command and a TypeScript block are two different things to copy, so they are two
@@ -563,6 +570,8 @@ blockquote cite a:hover {
 
 /* --- footer ------------------------------------------------------------ */
 
+/* Quiet by size, not by fading. What sits here is testnet, unaudited and what the award was
+   worth, and small print nobody can read is small print that looks hidden. */
 footer {
   margin-top: clamp(56px, 9vw, 96px);
   display: flex;
@@ -570,7 +579,7 @@ footer {
   gap: 16px;
   flex-wrap: wrap;
   font: 12.5px var(--mono);
-  color: var(--ink-44);
+  color: var(--ink-70);
 }
 
 footer a {
@@ -1241,7 +1250,7 @@ td .sub {
 }
 
 .help {
-  color: var(--ink-44);
+  color: var(--ink-70);
 }
 
 .warn {
