@@ -47,7 +47,7 @@ export default async function OpengraphImage() {
           <div style={{ background: '#0f0f0f', color: '#f2f0e8', padding: '20px 28px', fontSize: 32, display: 'flex', alignItems: 'center' }}>
             agent holds 0.00 USDC
           </div>
-          <div style={{ background: '#e9e5f7', color: '#3a2f63', padding: '20px 28px', fontSize: 26, display: 'flex', alignItems: 'center' }}>
+          <div style={{ background: '#ded7f4', color: '#3a2f63', padding: '20px 28px', fontSize: 26, display: 'flex', alignItems: 'center' }}>
             allowance holds the funds and the rules
           </div>
         </div>
