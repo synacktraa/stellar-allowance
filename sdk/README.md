@@ -2,6 +2,10 @@
 
 Pay x402 APIs from an allowance, with the limits enforced on chain.
 
+```bash
+npm i @stellar-allowance/sdk
+```
+
 ```ts
 import { Allowance } from '@stellar-allowance/sdk';
 

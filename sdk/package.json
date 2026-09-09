@@ -3,6 +3,25 @@
   "version": "0.1.0",
   "description": "Pay x402 APIs from a Stellar allowance, with the limits enforced on chain",
   "license": "Apache-2.0",
+  "keywords": [
+    "stellar",
+    "soroban",
+    "x402",
+    "agent",
+    "payments",
+    "allowance",
+    "spending-limit",
+    "usdc"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/synacktraa/stellar-allowance.git",
+    "directory": "sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/synacktraa/stellar-allowance/issues"
+  },
+  "homepage": "https://stellar-allowance.vercel.app",
   "type": "module",
   "exports": {
     ".": {
@@ -13,6 +32,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=20"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -21,7 +43,8 @@
     "test": "npm run build && node --test test/*.test.mjs",
     "e2e:setup": "npm run build && node test/e2e/setup.mjs",
     "e2e": "npm run build && node --env-file=test/e2e/.env.local test/e2e/pay.mjs",
-    "e2e:refusals": "npm run build && node --env-file=test/e2e/.env.local test/e2e/refusals.mjs"
+    "e2e:refusals": "npm run build && node --env-file=test/e2e/.env.local test/e2e/refusals.mjs",
+    "prepublishOnly": "npm test"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.3.0",
