@@ -58,3 +58,21 @@ jobs:
       - run: npm ci
       # The route is dynamic, so nothing in it runs at build time and no secrets are needed.
       - run: npm run build
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      # The build installs and builds the linked SDK first, and the tests import its output.
+      - run: npm run build
+      - run: npm test

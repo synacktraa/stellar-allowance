@@ -44,4 +44,12 @@ if grep -q '^demo/seller/' <<<"$changed"; then
   }
 fi
 
+if grep -q '^web/' <<<"$changed"; then
+  echo "pre-push: web"
+  (cd web && npm test) || {
+    echo "pre-push: the web gate failed. CI would fail the same way." >&2
+    exit 1
+  }
+fi
+
 exit 0

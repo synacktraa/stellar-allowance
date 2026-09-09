@@ -29,3 +29,6 @@ Thumbs.db
 
 # Local dev-server config for the in-app browser preview
 .claude/
+
+# Vercel link and the env the CLI pulls
+.env*

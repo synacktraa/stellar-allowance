@@ -1,0 +1,1370 @@
+:root {
+  --ground: #ebe9e2;
+  --surface: #f9f9f9;
+  --surface-2: #f2f2f2;
+  --ink: #0f0f0f;
+  --ink-70: rgba(15, 15, 15, 0.7);
+  --ink-44: rgba(15, 15, 15, 0.44);
+  --line: rgba(15, 15, 15, 0.12);
+  --line-strong: rgba(15, 15, 15, 0.3);
+  --yellow: #fdda24;
+  --lavender: #b7ace8;
+  --lavender-tint: #e9e5f7;
+  --teal: #00a7b5;
+  --teal-tint: #d9f0f2;
+  --cream: #d6d3c4;
+  --coral: #ff3f00;
+  --serif: var(--font-serif), Georgia, 'Times New Roman', serif;
+  --sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --mono: var(--font-mono), ui-monospace, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--ground);
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+
+/* Screenprint grain on the ground. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+a {
+  color: inherit;
+}
+
+.wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: clamp(24px, 4vw, 40px) clamp(20px, 4vw, 32px) 72px;
+}
+
+.num,
+code,
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- header ------------------------------------------------------------ */
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: clamp(48px, 8vw, 84px);
+}
+
+.brand {
+  font: 500 13px/1 var(--mono);
+  letter-spacing: 0.16em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.brand span {
+  color: var(--ink-44);
+}
+
+/* A statement of fact, not something to click. Yellow belongs to the ask alone. */
+.tag {
+  font: 500 12px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-70);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  padding: 9px 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .tag {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 8px 10px;
+  }
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.nav a.gh {
+  display: block;
+  line-height: 0;
+  color: var(--ink);
+}
+
+.nav a:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* --- hero -------------------------------------------------------------- */
+
+.hero {
+  display: grid;
+  gap: 32px;
+  align-items: end;
+}
+
+@media (min-width: 1024px) {
+  .hero {
+    grid-template-columns: 1.15fr 1fr;
+    gap: 48px;
+  }
+}
+
+h1 {
+  font: 600 clamp(38px, 6vw, 58px) / 1.06 var(--serif);
+  letter-spacing: -0.012em;
+  margin: 0 0 22px;
+  max-width: 15ch;
+  text-wrap: balance;
+}
+
+.lede {
+  font-size: clamp(16px, 1.6vw, 18px);
+  line-height: 1.6;
+  color: var(--ink-70);
+  max-width: 56ch;
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.lede b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* --- the call to action ------------------------------------------------ */
+
+/* A button is as wide as its label. What it costs the reader goes beside it, not inside it. */
+.act {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 26px;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  background: var(--yellow);
+  color: var(--ink);
+  border: 0;
+  padding: 11px 15px;
+  font: 600 14px/1 var(--sans);
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.cta.quiet {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+/* Consequential, and reversible. It reads as neither Save nor Cancel. */
+.cta.danger {
+  background: transparent;
+  color: var(--coral);
+  box-shadow: inset 0 0 0 1px var(--coral);
+}
+
+.cta.danger:hover {
+  background: var(--coral);
+  color: var(--surface);
+}
+
+.note-inline {
+  font: 400 12.5px/1.5 var(--mono);
+  color: var(--ink-70);
+}
+
+.cta:hover {
+  background: #f5d21c;
+}
+
+.cta:active {
+  transform: scale(0.985);
+}
+
+.cta:disabled {
+  cursor: progress;
+  background: var(--cream);
+}
+
+.cta:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* --- the run ----------------------------------------------------------- */
+
+section {
+  margin-top: clamp(56px, 9vw, 96px);
+}
+
+.kicker {
+  font: 500 12px/1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-70);
+  margin: 0 0 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.run {
+  container-type: inline-size;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 62px 1fr auto auto;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px 14px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+  animation: rise 0.32s ease both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+.row:first-child {
+  border-top: 0;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.who {
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-44);
+}
+
+.what {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.what .sub {
+  font-size: 13px;
+  color: var(--ink-70);
+  overflow-wrap: anywhere;
+}
+
+.amt {
+  font-size: 14px;
+  color: var(--ink-70);
+  white-space: nowrap;
+}
+
+.state {
+  font-size: 13px;
+  color: var(--ink-70);
+  min-width: 8.5em;
+  text-align: right;
+}
+
+.state .ok::before {
+  content: '✓ ';
+  color: var(--ink);
+}
+
+.hash {
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: inset 0 -2px 0 var(--yellow);
+}
+
+.row.started .state::before {
+  content: '● ';
+  color: var(--ink-44);
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.row.refused {
+  background: var(--lavender-tint);
+  border-top-color: var(--lavender);
+  border-left: 4px solid var(--lavender);
+  padding-left: 12px;
+}
+
+.row.refused + .row {
+  border-top-color: var(--lavender);
+}
+
+.row.refused .who {
+  color: var(--ink);
+}
+
+.chip {
+  display: inline-block;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 7px 10px;
+  background: var(--ink);
+  color: var(--lavender);
+  white-space: nowrap;
+}
+
+.chip.refused {
+  animation: pulse 0.6s ease 1;
+}
+
+.chip.failed {
+  background: var(--coral);
+  color: var(--surface);
+}
+
+@keyframes pulse {
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+/* A row that has not resolved yet: the shape of the answer, not a spinner. */
+.row.pending .what > span:first-child,
+.row.pending .amt,
+.row.pending .state {
+  color: transparent;
+  background: linear-gradient(90deg, var(--surface-2) 0%, #e6e6e6 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: sheen 1.4s linear infinite;
+}
+
+@keyframes sheen {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@container (max-width: 600px) {
+  .row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'who who' 'what what' 'amt state';
+    gap: 6px 12px;
+    padding: 14px 16px;
+  }
+  .who {
+    grid-area: who;
+  }
+  .what {
+    grid-area: what;
+  }
+  .amt {
+    grid-area: amt;
+  }
+  .state {
+    grid-area: state;
+    min-width: 0;
+  }
+}
+
+/* --- what this is ------------------------------------------------------ */
+
+blockquote {
+  margin: 0 0 22px;
+  padding-left: 18px;
+  border-left: 3px solid var(--ink);
+  max-width: 46ch;
+}
+
+blockquote p {
+  margin: 0 0 8px;
+  font: 400 clamp(19px, 2.2vw, 23px) / 1.35 var(--serif);
+  text-wrap: pretty;
+}
+
+blockquote cite {
+  font: 500 12px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-44);
+  font-style: normal;
+}
+
+/* A citation, not a badge. It is here so the quote can be checked, which is what the rest of
+   the page asks of itself. */
+blockquote cite a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-strong);
+}
+
+blockquote cite a:hover {
+  color: var(--ink-70);
+}
+
+.standing .lede + .lede {
+  margin-top: 14px;
+}
+
+/* A kicker is as wide as the thing it names. The run's spans the table; this one spans the prose
+   column, so its right-hand label lands over text instead of over empty page. In rem rather than
+   ch because the two are set in different faces and ch would size them differently. */
+.standing .kicker {
+  max-width: 40rem;
+}
+
+/* --- the package ------------------------------------------------------- */
+
+/* A shell command and a TypeScript block are two different things to copy, so they are two
+   blocks. The command sits on the code it installs. */
+.install {
+  margin: 0;
+  padding: 11px 46px 11px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-bottom: 0;
+  font: 13px/1.7 var(--mono);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.install::before {
+  content: '$ ';
+  color: var(--ink-44);
+}
+
+.ship .help {
+  margin-top: 12px;
+  max-width: 62ch;
+}
+
+/* --- the stats --------------------------------------------------------- */
+
+.side {
+  container-type: inline-size;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line-strong);
+  border: 1px solid var(--line-strong);
+}
+
+.cell.dark {
+  grid-column: 1 / -1;
+}
+
+.run + .stats {
+  border-top: 0;
+}
+
+.cell {
+  background: var(--surface);
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cell .k {
+  font: 500 13px/1.3 var(--sans);
+  color: var(--ink);
+}
+
+.cell .v {
+  font: 400 clamp(36px, 4vw, 44px) / 1 var(--serif);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell .v small {
+  font: 400 13px/1 var(--mono);
+  color: var(--ink-70);
+  margin-left: 8px;
+}
+
+.cell .c {
+  font-size: 12.5px;
+  color: var(--ink-70);
+}
+
+.cell.dark {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.cell.dark .k {
+  color: var(--surface);
+}
+
+.cell.dark .v {
+  color: var(--cream);
+  font-size: clamp(44px, 5vw, 56px);
+}
+
+.cell.dark .v small,
+.cell.dark .c {
+  color: rgba(249, 249, 249, 0.7);
+}
+
+.cell.addr .v {
+  font: 500 17px/1.3 var(--mono);
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 420px) {
+  .stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- footer ------------------------------------------------------------ */
+
+/* Quiet by size, not by fading. What sits here is testnet, unaudited and what the award was
+   worth, and small print nobody can read is small print that looks hidden. */
+footer {
+  margin-top: clamp(56px, 9vw, 96px);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font: 12.5px var(--mono);
+  color: var(--ink-70);
+}
+
+footer a {
+  color: var(--ink-70);
+  text-decoration: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .chip.refused,
+  .row.pending .what > span:first-child,
+  .row.pending .amt,
+  .row.pending .state,
+  .row.started .state::before {
+    animation: none;
+  }
+  .cta {
+    transition: none;
+  }
+}
+
+/* --- the note under the run ------------------------------------------- */
+
+.note {
+  max-width: 56ch;
+  margin: 28px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-70);
+  text-wrap: pretty;
+}
+
+/* --- the create form --------------------------------------------------- */
+
+.row.failed {
+  border-left: 4px solid var(--coral);
+  padding-left: 12px;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+  padding: 20px 18px 22px;
+  border-top: 1px solid var(--line);
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-70);
+}
+
+.form .wide,
+.form .hint {
+  grid-column: 1 / -1;
+}
+
+.form input,
+.form textarea {
+  font: 400 15px/1.4 var(--sans);
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  min-width: 0;
+  border-radius: 0;
+}
+
+.form textarea {
+  font: 400 13px/1.5 var(--mono);
+  min-height: 84px;
+  resize: vertical;
+}
+
+.form input:focus-visible,
+.form textarea:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 1px;
+}
+
+.form .hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-70);
+}
+
+@container (max-width: 600px) {
+  .form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- the reveal -------------------------------------------------------- */
+
+.reveal {
+  margin-top: 24px;
+}
+
+.reveal .cell .v {
+  font: 500 14px/1.5 var(--mono);
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+/* --- the dashboard ----------------------------------------------------- */
+
+.top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 13px clamp(16px, 3vw, 28px);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.top .left,
+.top .right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.chip-wallet {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  font-size: 12.5px;
+  color: var(--ink-70);
+}
+
+.chip-wallet .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--teal);
+}
+
+.chip-wallet b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.chip-wallet .sep {
+  color: var(--line-strong);
+}
+
+.board {
+  position: relative;
+  z-index: 1;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 30px) clamp(16px, 3vw, 28px) 72px;
+}
+
+.board .head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 14px;
+}
+
+.board h1 {
+  font: 600 21px/1.2 var(--sans);
+  text-wrap: balance;
+  letter-spacing: -0.01em;
+  margin: 0;
+  max-width: none;
+}
+
+.connect {
+  position: relative;
+  z-index: 1;
+  max-width: 46ch;
+  margin: clamp(60px, 12vh, 120px) auto 0;
+}
+
+.connect h1 {
+  font: 600 clamp(26px, 4vw, 34px) / 1.15 var(--sans);
+  text-wrap: balance;
+  letter-spacing: -0.015em;
+  margin: 0 0 12px;
+  max-width: none;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  overflow: hidden;
+}
+
+.card.empty {
+  padding: 34px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  color: var(--ink-70);
+}
+
+.card.empty p {
+  margin: 0;
+  max-width: 52ch;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+thead th {
+  text-align: left;
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-44);
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+
+tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* The shape of the answer while the chain is read, at the height the real lines will have. */
+tr.skeleton td {
+  height: 45px;
+}
+
+tr.skeleton span {
+  display: block;
+  height: 11px;
+  max-width: 130px;
+  background: linear-gradient(90deg, var(--surface-2) 0%, #e6e6e6 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: sheen 1.4s linear infinite;
+}
+
+/* Movement only, and no fade: a hidden tab pauses an animation on its first frame, and these
+   rows mount whenever the read happens to land. */
+tr.line {
+  animation: settle 0.3s ease both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+@keyframes settle {
+  from {
+    transform: translateY(5px);
+  }
+}
+
+tr.line:hover td,
+tr.line:focus-visible td {
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+tr.line:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+td .name {
+  font-weight: 600;
+  display: block;
+}
+
+td .sub {
+  display: block;
+  color: var(--ink-44);
+  font-size: 11.5px;
+  margin-top: 2px;
+}
+
+.apis {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.api {
+  font: 12px/1 var(--mono);
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.api.more,
+.api.none {
+  color: var(--ink-44);
+  border-style: dashed;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  font: 500 11.5px/1.4 var(--sans);
+  white-space: nowrap;
+}
+
+.pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.pill.on {
+  background: var(--teal-tint);
+  color: #046a72;
+}
+
+.pill.on::before {
+  background: var(--teal);
+}
+
+.pill.off {
+  background: var(--lavender-tint);
+  color: #4b3f8c;
+}
+
+.pill.off::before {
+  background: var(--lavender);
+}
+
+.card .foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  font-size: 12.5px;
+  color: var(--ink-70);
+  background: var(--surface-2);
+  border-top: 1px solid var(--line);
+}
+
+.pages {
+  display: flex;
+  gap: 4px;
+}
+
+.pages button {
+  min-width: 27px;
+  height: 27px;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 12.5px var(--mono);
+  cursor: pointer;
+}
+
+.pages button.cur {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+}
+
+.pages button:disabled {
+  color: var(--ink-44);
+  cursor: default;
+}
+
+.banner {
+  margin: 0 0 16px;
+}
+
+/* --- the side panel ---------------------------------------------------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: rgba(15, 15, 15, 0.28);
+}
+
+.panel {
+  position: fixed;
+  z-index: 6;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(600px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line-strong);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.12);
+  /* Movement only, and no fade. A paused animation holds its first frame, and a browser pauses
+     animations in a hidden tab, so a panel that fades in from nothing can open invisible. */
+  animation: slide 0.22s ease;
+}
+
+/* Focus lands here when the panel opens, so the keyboard follows it and Escape reaches it. That
+   is a handoff rather than a control, and it takes no ring of its own. */
+.panel:focus,
+.panel:focus-visible {
+  outline: none;
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(24px);
+  }
+}
+
+.ph {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 17px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ph h2 {
+  margin: 0 0 6px;
+  font: 600 16px/1.2 var(--sans);
+}
+
+.x {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink-70);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pb {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 22px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pf {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.stat3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.stat3 > div {
+  background: var(--surface);
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.stat3 .k {
+  font-size: 11.5px;
+  color: var(--ink-44);
+}
+
+.stat3 .v {
+  font: 600 19px/1 var(--sans);
+}
+
+.stat3 .u {
+  font: 11.5px var(--mono);
+  color: var(--ink-44);
+}
+
+.sec {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sh {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font: 500 12px/1 var(--sans);
+  color: var(--ink-70);
+}
+
+.cta.sm {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.addrow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.addrow input {
+  flex: 1 1 12ch;
+  min-width: 0;
+}
+
+.res {
+  border: 1px solid var(--line);
+}
+
+.res > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.res > div:first-child {
+  border-top: 0;
+}
+
+.res .host {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.res small {
+  display: block;
+  color: var(--ink-44);
+  font-size: 11.5px;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.drop {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--ink-44);
+  font: 500 11.5px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.drop:hover {
+  color: var(--coral);
+}
+
+/* Never wrapped. A contract address broken across three lines cannot be read back against what
+   it was copied from, and no line break is part of the value, so long lines scroll. */
+.code {
+  margin: 0;
+  background: var(--ink);
+  color: #e6e3da;
+  padding: 12px 46px 12px 14px;
+  font: 12px/1.7 var(--mono);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* The block scrolls sideways, so its copy control is anchored out here rather than inside it -
+   a control that travels with the text is a control that leaves the screen. It carries the
+   block's own ground so the line passing beneath it stays out of the way. */
+.block {
+  position: relative;
+  --copy-ink: #e6e3da;
+  --copy-ground: var(--ink);
+}
+
+.block.pale {
+  --copy-ink: var(--ink-70);
+  --copy-ground: var(--surface);
+}
+
+.copy {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: inline-flex;
+  padding: 6px;
+  border: 0;
+  line-height: 0;
+  color: var(--copy-ink);
+  background: var(--copy-ground);
+  opacity: 0.6;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.copy:hover,
+.copy:focus-visible {
+  opacity: 1;
+}
+
+.copy:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+.c1 {
+  color: var(--yellow);
+}
+
+.c2 {
+  color: var(--lavender);
+}
+
+.c3 {
+  color: #7fd8df;
+}
+
+.dim {
+  color: rgba(230, 227, 218, 0.45);
+}
+
+.help,
+.warn,
+.bad {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.help {
+  color: var(--ink-70);
+}
+
+.warn {
+  color: var(--ink);
+  background: var(--lavender-tint);
+  border-left: 3px solid var(--lavender);
+  padding: 10px 12px;
+}
+
+.bad {
+  color: #b32d00;
+  background: #ffe9e1;
+  border-left: 3px solid var(--coral);
+  padding: 10px 12px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: 500 12px/1 var(--sans);
+  color: var(--ink-70);
+  min-width: 0;
+}
+
+input,
+select {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font: 14px/1.4 var(--sans);
+  min-width: 0;
+}
+
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 1px;
+}
+
+input:disabled {
+  color: var(--ink-44);
+}
+
+@media (max-width: 620px) {
+  .top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .top .left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .chip-wallet {
+    width: 100%;
+    gap: 12px;
+  }
+
+  .chip-wallet .sep {
+    display: none;
+  }
+
+  .top .right {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 760px) {
+  thead {
+    display: none;
+  }
+
+  tbody tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  tbody td {
+    padding: 0;
+    border: 0;
+  }
+
+  tbody td:nth-child(3) {
+    grid-column: 1 / -1;
+    margin: 4px 0;
+  }
+
+  .panel {
+    border-left: 0;
+  }
+
+  .two {
+    grid-template-columns: 1fr;
+  }
+
+  .stat3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  tr.line,
+  tr.skeleton span {
+    animation: none;
+  }
+}
