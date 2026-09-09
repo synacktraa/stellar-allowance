@@ -46,8 +46,8 @@ change a rule, pay anyone off the list, or take money out.
 
 ![A map in two lanes, both ending at one contract. Creating and managing: the owner signs with
 Freighter through the interface in web/, which deploys the allowance and sets its rules. Paying:
-the agent uses the SDK to pay an x402 seller through a facilitator, and the allowance checks that
-payment before it moves.](assets/system.svg)
+the agent uses the SDK to pay an x402 seller, a facilitator submits that payment, and the
+allowance checks it before it moves.](assets/system.svg)
 
 | | |
 |---|---|

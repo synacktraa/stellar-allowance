@@ -1,6 +1,7 @@
 # Rent and revival
 
-**Status:** current. Working notes for the unwritten `architecture.md`.
+**Status:** current. Working notes on what storage costs; [the contract's
+README](../contracts/allowance/README.md) carries the rest of the design.
 
 Every number here was measured against Stellar testnet on 2026-09-04, not read from
 documentation. They are testnet settings and carry no mainnet claim. Two measurements are

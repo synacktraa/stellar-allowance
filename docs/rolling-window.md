@@ -1,6 +1,7 @@
 # How the rolling window works
 
-**Status:** current. Draft for the unwritten `architecture.md`.
+**Status:** current. One question of the design; [the contract's
+README](../contracts/allowance/README.md) carries the rest.
 
 Written for someone reading the contract for the first time.
 

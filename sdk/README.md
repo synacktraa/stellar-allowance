@@ -20,6 +20,10 @@ STELLAR_ALLOWANCE_ID=C...        which allowance pays
 STELLAR_ALLOWANCE_SECRET=S...    proof it may ask
 ```
 
+Both come from creating an allowance at
+[stellar-allowance.vercel.app/dashboard](https://stellar-allowance.vercel.app/dashboard), which
+needs Freighter on testnet. The secret is shown once there and stored nowhere.
+
 `fetch` is the ordinary fetch with a 402 handled in the middle. Same arguments, same `Response`
 back, any method, and a URL that never asks for payment passes straight through. A request that
 is paid for is sent twice, once to receive the 402 and once with the payment, and the body is

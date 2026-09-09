@@ -33,6 +33,9 @@ deploy became a step inside `setup.mjs`. The failure table in Task 6 names a fir
 second simulation; there is one, for the reason recorded on
 [the SDK plan](2026-09-06-sdk.md#outcome).
 
+Task 1 also creates `sdk/test/e2e/README.md`, and it was never written. What it was to hold, the
+owner and seller addresses and the transaction hash, is above and in `sdk/README.md`.
+
 ---
 
 ## What is already established

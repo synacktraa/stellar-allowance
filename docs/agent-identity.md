@@ -1,6 +1,7 @@
 # Agent identity: the key, not the account
 
-**Status:** current. Draft for the unwritten `architecture.md`.
+**Status:** current. One question of the design; [the contract's
+README](../contracts/allowance/README.md) carries the rest.
 
 Explains why the contract stores a raw public key rather than an address, and why the web app
 is nonetheless allowed to turn that key back into one.

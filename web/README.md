@@ -10,12 +10,12 @@ The owner signs once. The agent's keypair is generated in the browser during tha
 its secret is shown one time; nothing stores it. The rest is the interface reading the chain and
 submitting what was signed.
 
-![Sequence diagram. In the browser: the owner gives a name, a cap, a window and the URLs the
-agent may pay; the interface resolves each URL to the address it wants paying, asks a Soroban
-RPC for the instance entries of sixty derived addresses, and hands the deploy transaction to Freighter, which the owner
-approves once. The network: the signed envelope is submitted, the allowance runs its
-constructor, and the interface returns the contract id and the agent secret,
-once.](assets/create-flow.svg)
+![Sequence diagram in two groups. In the browser: the owner gives a name, a deposit, a cap, a
+window and the URLs the agent may pay; the interface fetches each URL and reads its payout
+address, asks a Soroban RPC for the instance entries of sixty derived addresses to find the
+first free index, and hands the deploy transaction to Freighter, which the owner approves once.
+The network: the signed envelope is submitted, the allowance runs its constructor, and the
+interface returns the contract id and the agent secret, shown once.](assets/create-flow.svg)
 
 Fetching those URLs happens in `/api/offer`, not on the page. Sellers send no cross-origin
 headers, so a browser cannot read a 402 for itself. That route holds no keys, signs nothing, and
