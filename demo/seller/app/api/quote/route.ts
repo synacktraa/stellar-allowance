@@ -66,7 +66,7 @@ const handler = async (_request: NextRequest): Promise<NextResponse<Quote | Unav
 
 // withX402 rather than paymentProxy: it settles only after the handler returns under 400, so
 // the 503 above costs the caller nothing.
-export const GET = withX402(
+const paid = withX402(
   handler,
   {
     '/api/quote': {
@@ -76,3 +76,40 @@ export const GET = withX402(
   },
   server,
 );
+
+/**
+ * What a browser has to be told before it will let a page read this.
+ *
+ * x402 carries everything that matters in headers, and a browser hides those from script
+ * unless they are named here: the terms arrive on the 402 and the receipt on the paid 200, so
+ * a page without `Expose-Headers` gets a response it can see and terms it cannot read. The
+ * request carries a custom header too, which makes it preflighted rather than simple.
+ *
+ * Any origin, because the terms are public. Anyone can already read them with curl, and an
+ * x402 seller exists to be found and paid.
+ */
+const EXPOSED = 'PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-PAYMENT-RESPONSE';
+
+function allow(request: NextRequest): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    // Echoed rather than listed: the payment header names belong to x402 and change with it,
+    // and a preflight that names them is a preflight that goes stale.
+    'Access-Control-Allow-Headers':
+      request.headers.get('access-control-request-headers') ??
+      'content-type, PAYMENT-SIGNATURE, X-PAYMENT',
+    'Access-Control-Expose-Headers': EXPOSED,
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+export async function GET(request: NextRequest): Promise<Response> {
+  const response = await paid(request);
+  for (const [name, value] of Object.entries(allow(request))) response.headers.set(name, value);
+  return response;
+}
+
+export function OPTIONS(request: NextRequest): Response {
+  return new Response(null, { status: 204, headers: allow(request) });
+}

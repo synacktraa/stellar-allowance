@@ -21,7 +21,7 @@ const VERB: Record<string, string> = {
   deploy: 'deployed',
 };
 
-type Live = 'idle' | 'running' | 'busy' | 'done';
+type Live = 'idle' | 'running' | 'done' | 'stopped';
 
 const explorer = (event: DemoEvent) =>
   `https://stellar.expert/explorer/testnet/${event.id === 'deploy' ? 'contract' : 'tx'}/${event.hash}`;
@@ -31,23 +31,27 @@ export function Run({ baked, at }: { baked: DemoEvent[]; at: string }) {
   const [live, setLive] = useState<Live>('idle');
   const [startedAt, setStartedAt] = useState(at);
 
-  function start() {
-    const source = new EventSource('/api/demo/run');
+  // The run happens here, in this browser, against the public network. There is nothing of ours
+  // between the button and the chain: no route, no queue, and no shared address for friendbot to
+  // rate limit, because the requests come from whoever pressed it.
+  async function start() {
     setRows(new Map());
     setLive('running');
     setStartedAt(new Date().toISOString());
-    source.onmessage = (message) => {
-      const event = JSON.parse(message.data) as DemoEvent;
-      setRows((current) => new Map(current).set(event.id, event));
-    };
-    source.addEventListener('end', () => {
-      source.close();
+    try {
+      // Loaded on the press rather than with the page. Most of this weight is stellar-sdk, and
+      // a reader who never runs it should not pay for it.
+      const [{ runDemo }, { liveDeps }] = await Promise.all([
+        import('@/lib/demo/run'),
+        import('@/lib/demo/live'),
+      ]);
+      for await (const event of runDemo(liveDeps())) {
+        setRows((current) => new Map(current).set(event.id, event));
+      }
       setLive('done');
-    });
-    source.onerror = () => {
-      source.close();
-      setLive((state) => (state === 'running' ? 'busy' : state));
-    };
+    } catch {
+      setLive('stopped');
+    }
   }
 
   return (
@@ -94,12 +98,12 @@ export function Run({ baked, at }: { baked: DemoEvent[]; at: string }) {
       </div>
 
       <div className="act">
-        <button className="cta" onClick={start} disabled={live === 'running'}>
-          {live === 'running' ? 'Running on testnet' : 'Run it live'}
+        <button className="cta" onClick={() => void start()} disabled={live === 'running'}>
+          {live === 'running' ? 'Running on testnet' : live === 'idle' ? 'Run it live' : 'Run it again'}
         </button>
         <span className="note-inline">
-          {live === 'busy'
-            ? 'another run is in progress, try again in a minute'
+          {live === 'stopped'
+            ? 'the run stopped early. the rows above say where'
             : 'testnet · about a minute · no wallet'}
         </span>
       </div>

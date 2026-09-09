@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   Asset,
   BASE_FEE,
@@ -15,7 +14,7 @@ import { decodePaymentRequiredHeader, decodePaymentResponseHeader } from '@x402/
 import type { PaymentRequirements } from '@x402/core/types';
 import { Allowance, AllowanceRefused, generateAllowanceSalt } from '@stellar-allowance/sdk';
 import { firstFreeIndex } from '../allowance/index';
-import { DEPOSIT, WINDOW_CAP, WINDOW_LEDGERS } from './params';
+import { DEPOSIT, SELLER_URL, WASM_HASH, WINDOW_CAP, WINDOW_LEDGERS } from './params';
 import type { Deps, Wants } from './run';
 
 const NETWORK = Networks.TESTNET;
@@ -23,11 +22,6 @@ const RPC_URL = 'https://soroban-testnet.stellar.org';
 const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 const FRIENDBOT = 'https://friendbot.stellar.org';
 const USDC = new Asset('USDC', 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
-const SELLER_URL = process.env.SELLER_URL ?? 'https://xlm-quote-api.vercel.app/api/quote';
-const WASM_URL =
-  process.env.WASM_URL ??
-  'https://github.com/synacktraa/stellar-allowance/releases/download/allowance-contract-v0.2.0/allowance.wasm';
-
 const server = new rpc.Server(RPC_URL);
 const horizon = new Horizon.Server(HORIZON_URL);
 
@@ -42,38 +36,6 @@ async function submitClassic(keypair: Keypair, ...operations: xdr.Operation[]) {
     .build();
   tx.sign(keypair);
   return horizon.submitTransaction(tx);
-}
-
-async function pollUntilDone(hash: string) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const result = await server.getTransaction(hash);
-    if (result.status === 'SUCCESS') return result;
-    if (result.status === 'FAILED') throw new Error(`transaction ${hash} failed`);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  throw new Error(`transaction ${hash} did not settle`);
-}
-
-// Uploads the release wasm unless the network already holds it, and returns its hash either way.
-async function ensureWasm(owner: Keypair): Promise<string> {
-  const wasm = Buffer.from(await (await fetch(WASM_URL)).arrayBuffer());
-  const hash = createHash('sha256').update(wasm).digest('hex');
-  const key = xdr.LedgerKey.contractCode(
-    new xdr.LedgerKeyContractCode({ hash: Buffer.from(hash, 'hex') }),
-  );
-  if ((await server.getLedgerEntries(key)).entries.length > 0) return hash;
-
-  const account = await server.getAccount(owner.publicKey());
-  const tx = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: NETWORK })
-    .addOperation(Operation.uploadContractWasm({ wasm }))
-    .setTimeout(60)
-    .build();
-  const prepared = await server.prepareTransaction(tx);
-  prepared.sign(owner);
-  const sent = await server.sendTransaction(prepared);
-  if (sent.status === 'ERROR') throw new Error('the wasm upload was rejected');
-  await pollUntilDone(sent.hash);
-  return hash;
 }
 
 export function liveDeps(): Deps {
@@ -116,19 +78,18 @@ export function liveDeps(): Deps {
 
     async deploy(owner, agent, wants) {
       const { index } = await firstFreeIndex(server, owner.publicKey());
-      const wasmHash = await ensureWasm(owner);
       const deployment = await contract.Client.deploy(
         {
           setup: {
             owner: owner.publicKey(),
-            agent_key: Buffer.from(agent.rawPublicKey()),
+            agent_key: agent.rawPublicKey(),
             name: 'Demo agent',
             spending: { token: wants.asset, initial_deposit: DEPOSIT },
             rules: { window_ledgers: WINDOW_LEDGERS, window_cap: WINDOW_CAP, allowlist: [wants.payTo] },
           },
         },
         {
-          wasmHash,
+          wasmHash: WASM_HASH,
           salt: generateAllowanceSalt(owner.publicKey(), index),
           networkPassphrase: NETWORK,
           rpcUrl: RPC_URL,
