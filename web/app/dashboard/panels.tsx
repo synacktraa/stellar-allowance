@@ -6,7 +6,7 @@ import { labelsFor } from '@/lib/dashboard/labels';
 import { remaining } from '@/lib/dashboard/summary';
 import type { Row } from '@/lib/dashboard/read';
 import { createAllowance, saveAllowance, setEnabled, withdrawFrom, type Rules } from '@/lib/dashboard/write';
-import { freighterSigner, type Wallet } from '@/lib/dashboard/wallet';
+import { freighterSigner, suggestDefaults, type Wallet } from '@/lib/dashboard/wallet';
 import { AgentLines, Block } from '../code';
 import { Allowlist, type Labels } from './allowlist';
 
@@ -139,9 +139,14 @@ export function CreatePanel({
   onClose: () => void;
   onDone: () => void;
 }) {
+  // Only the first render's values are kept, which is what this panel wants: the reader opened
+  // it with a balance in front of them, and numbers that moved while they typed would be worse
+  // than numbers that went stale.
+  const suggested = suggestDefaults(wallet.usdc);
+
   const [name, setName] = useState('My agent');
-  const [deposit, setDeposit] = useState('1');
-  const [cap, setCap] = useState('0.25');
+  const [deposit, setDeposit] = useState(suggested.deposit);
+  const [cap, setCap] = useState(suggested.cap);
   const [hours, setHours] = useState(24);
   const [addresses, setAddresses] = useState<string[]>([]);
   const [labels, setLabels] = useState<Labels>({});
