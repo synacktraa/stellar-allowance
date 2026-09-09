@@ -81,16 +81,16 @@ generated XDR conversion for its five fields.
 
 | Entry | Belongs to | Kept alive by | XLM / year | Times / year |
 |---|---|---|---|---|
-| **Factory instance** | **the project** | **a scheduled job** | ~0.4 | 2 |
-| **Factory code** | **the project** | **a scheduled job** | ~46 per 13KB † | 2 |
 | **Allowance code**, one per released version | **the project** | **a scheduled job** | ~52 (14,793 B) | 2 |
-| **Splitter code**, one per released version | **the project** | **a scheduled job** | ~46 per 13KB † | 2 |
 | Allowance instance | the owner | the payment path | ~0.4 | continuous |
 | Window entry (25 slots, 548 B) | the owner | the payment path | ~1.9 | continuous |
-| Splitter instance | the seller | `flush()` | ~0.4 | on each payout |
 | Balance entries, per token per holder | nobody | the SAC, free | 0 | - |
 
-† Neither is written yet. Their 13KB is a placeholder, not a measurement.
+One row belongs to the project. A factory and a payment splitter had rows here when these
+numbers were taken, and neither exists: the factory was deleted the day it was built, in
+[`no-factory.md`](specs/2026-09-06-no-factory.md), and the splitter went with the rest of the
+scope cut on [2026-09-04](README.md). Their sizes were placeholders rather than measurements,
+which is the other reason they are gone.
 
 **Twice a year, not weekly.** Rent costs the same whether you add 180 days once or 7 days
 twenty-six times - it is priced per ledger-byte, not per operation. Frequent extension
