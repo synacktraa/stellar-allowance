@@ -1,4 +1,11 @@
-import { getNetwork, isConnected, requestAccess, signTransaction } from '@stellar/freighter-api';
+import {
+  getAddress,
+  getNetwork,
+  isAllowed,
+  isConnected,
+  requestAccess,
+  signTransaction,
+} from '@stellar/freighter-api';
 import { Horizon, Networks } from '@stellar/stellar-sdk';
 import { USDC_ISSUER } from '../demo/params';
 
@@ -11,21 +18,54 @@ export interface Wallet {
   usdc?: string;
 }
 
-// Freighter answers with an error field rather than throwing, so every call is checked the same
-// way. The wallet has to be on testnet: the contract, the USDC and the sellers all are.
-export async function connect(): Promise<string> {
-  const presence = await isConnected();
-  if (presence.error || !presence.isConnected) {
-    throw new Error('Freighter is not installed. Get it at freighter.app, then reload.');
-  }
-  const access = await requestAccess();
-  if (access.error) throw new Error(access.error.message);
-  const net = await getNetwork();
+/** The calls this page makes on the extension, named so a test can stand in for it. */
+export interface Freighter {
+  isConnected: typeof isConnected;
+  isAllowed: typeof isAllowed;
+  getAddress: typeof getAddress;
+  getNetwork: typeof getNetwork;
+  requestAccess: typeof requestAccess;
+}
+
+const extension: Freighter = { isConnected, isAllowed, getAddress, getNetwork, requestAccess };
+
+// The wallet has to be on testnet: the contract, the USDC and the sellers all are.
+async function requireTestnet(api: Freighter): Promise<void> {
+  const net = await api.getNetwork();
   if (net.error) throw new Error(net.error.message);
   if (net.networkPassphrase !== Networks.TESTNET) {
     throw new Error(`Freighter is on ${net.network}. Switch it to testnet.`);
   }
+}
+
+// Freighter answers with an error field rather than throwing, so every call is checked the same
+// way.
+export async function connect(api: Freighter = extension): Promise<string> {
+  const presence = await api.isConnected();
+  if (presence.error || !presence.isConnected) {
+    throw new Error('Freighter is not installed. Get it at freighter.app, then reload.');
+  }
+  const access = await api.requestAccess();
+  if (access.error) throw new Error(access.error.message);
+  await requireTestnet(api);
   return access.address;
+}
+
+/**
+ * The address this browser has already been given, or null when it has none.
+ *
+ * Freighter remembers an approval and does not prompt a second time, so a page that asks on every
+ * load gets no prompt and no address, and sits there asking for a wallet it could already read.
+ */
+export async function resume(api: Freighter = extension): Promise<string | null> {
+  const presence = await api.isConnected();
+  if (presence.error || !presence.isConnected) return null;
+  const allowed = await api.isAllowed();
+  if (allowed.error || !allowed.isAllowed) return null;
+  const address = await api.getAddress();
+  if (address.error || !address.address) return null;
+  await requireTestnet(api);
+  return address.address;
 }
 
 /**
@@ -45,5 +85,19 @@ export async function readWallet(address: string): Promise<Wallet> {
   return { address, xlm, usdc: usdc?.balance };
 }
 
-/** The same shape stellar-sdk wants from a signer, so it is handed over as it is. */
-export const freighterSigner = signTransaction;
+/**
+ * Freighter's signer, with its error field raised rather than returned.
+ *
+ * Declining a prompt answers with an empty envelope and an error beside it, and an empty envelope
+ * reaches the SDK as an XDR parse failure - which is what the owner would otherwise be shown for
+ * having pressed Reject. The wallet's own wording says what happened, so that is what is raised.
+ */
+export const signWith =
+  (sign: typeof signTransaction) =>
+  async (xdr: string, opts?: Parameters<typeof signTransaction>[1]) => {
+    const signed = await sign(xdr, opts);
+    if (signed.error) throw new Error(signed.error.message);
+    return signed;
+  };
+
+export const freighterSigner = signWith(signTransaction);
