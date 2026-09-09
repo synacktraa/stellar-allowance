@@ -2,7 +2,7 @@ name: release
 
 on:
   push:
-    tags: ["allowance-contract-v*"]
+    tags: ["allowance-contract-v*", "sdk-v*"]
 
 permissions:
   contents: write
@@ -12,6 +12,7 @@ permissions:
 jobs:
   allowance:
     name: allowance contract
+    if: startsWith(github.ref_name, 'allowance-contract-v')
     runs-on: ubuntu-latest
     steps:
       # Full history: the previous tag is what bounds the generated release notes.
@@ -126,4 +127,112 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" dist/allowance.wasm --clobber
           else
             gh release create "$GITHUB_REF_NAME" dist/allowance.wasm --notes-file notes.md
+          fi
+
+  sdk:
+    name: sdk
+    if: startsWith(github.ref_name, 'sdk-v')
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: the previous tag is what bounds the generated release notes.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sdk/package-lock.json
+
+      - run: npm ci
+        working-directory: sdk
+
+      # The tag names a version and so does package.json. When they disagree the release
+      # carries a label contradicting the package it was built from, so refuse instead.
+      - name: Version
+        id: version
+        working-directory: sdk
+        run: |
+          manifest=$(node -p "require('./package.json').version")
+          tag=${GITHUB_REF_NAME#sdk-v}
+          if [ "$manifest" != "$tag" ]; then
+            echo "package.json says $manifest, the tag says $tag" >&2
+            exit 1
+          fi
+          echo "$manifest"
+          echo "version=$manifest" >> "$GITHUB_OUTPUT"
+          echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
+
+      # Taken here rather than on trust from whoever ran the publish.
+      - run: npm test
+        working-directory: sdk
+
+      # Only the account holder can publish to npm, so the tag follows the publish rather
+      # than causing it. A release naming a version the registry has never heard of would
+      # send readers to an install that fails, so refuse that too.
+      - name: Published
+        id: published
+        env:
+          NAME: ${{ steps.version.outputs.name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if ! npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION is not on npm. Publish it, then push this tag." >&2
+            exit 1
+          fi
+          echo "integrity=$(npm view "$NAME@$VERSION" dist.integrity)" >> "$GITHUB_OUTPUT"
+          echo "shasum=$(npm view "$NAME@$VERSION" dist.shasum)" >> "$GITHUB_OUTPUT"
+
+      # Same bounding problem as the contract release: GitHub generates notes from the pull
+      # requests in a range but does not work the range out itself.
+      - name: Notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous=$(git tag --list 'sdk-v*' --sort=-v:refname \
+            | grep -vx "$GITHUB_REF_NAME" | head -1)
+          # The first release has no earlier one to bound against, so it bounds against the
+          # commit the package's history starts from.
+          previous=${previous:-$(git tag --list sdk-base)}
+          echo "previous tag: ${previous:-none}"
+          if [ -n "$previous" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+              -f tag_name="$GITHUB_REF_NAME" \
+              -f previous_tag_name="$previous" \
+              -q .body > changes.md
+          else
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+              -f tag_name="$GITHUB_REF_NAME" \
+              -q .body > changes.md
+          fi
+          cat changes.md
+
+      # Re-runnable, the same way the contract release is.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.version.outputs.name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          INTEGRITY: ${{ steps.published.outputs.integrity }}
+          SHASUM: ${{ steps.published.outputs.shasum }}
+        run: |
+          cat > notes.md <<EOF
+          \`$NAME@$VERSION\`, built from \`$GITHUB_SHA\`.
+
+              npm i $NAME@$VERSION
+
+          Nothing is attached. npm is where this installs from, and a second copy here would
+          only invite installing the wrong one. What the registry served is recorded instead,
+          so a download can be checked against it.
+
+              shasum    $SHASUM
+              integrity $INTEGRITY
+          EOF
+          echo >> notes.md
+          cat changes.md >> notes.md
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --notes-file notes.md
           fi
