@@ -504,10 +504,11 @@ blockquote cite a:hover {
   grid-column: 1 / -1;
 }
 
-/* The last cell in the row, and the shortest. Centred so it does not sit against a divider
-   with a hole behind it. */
-.run + .stats {
-  border-top: 0;
+/* The allowance's own colour. A refused row carries the same tint because the allowance is what
+   refused, and the link preview arrives on it, so a reader who clicked through sees the colour
+   they came from sitting on the party it belongs to. */
+.cell.allowance {
+  background: var(--lavender-tint);
 }
 
 .cell {

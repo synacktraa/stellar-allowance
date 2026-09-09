@@ -58,7 +58,7 @@ export default function Page() {
               </div>
               <div className="c">asked {paid.length + refusedBy('allowlist') + refusedBy('window')} times, holds nothing</div>
             </div>
-            <div className="cell">
+            <div className="cell allowance">
               <div className="k">The allowance</div>
               <div className="v">
                 {deposited}
