@@ -2,14 +2,37 @@ import type { DemoEvent } from '@/lib/demo/events';
 import baked from '@/lib/demo/baked.json';
 import { Footer, Header } from './chrome';
 import { AgentLines, Install } from './code';
+import { DEPOSIT } from '@/lib/demo/params';
 import { Run } from './run';
 
 const run = baked as { at: string; events: DemoEvent[] };
 
 export default function Page() {
-  const settled = run.events.filter((e) => e.state === 'done' && e.id.startsWith('pay')).length;
-  const refused = run.events.filter((e) => e.state === 'refused').length;
   const allowance = run.events.find((e) => e.id === 'deploy')?.hash ?? '';
+  const paid = run.events.filter((e) => e.state === 'done' && e.id.startsWith('pay'));
+  const refusedBy = (rule: string) =>
+    run.events.filter((e) => e.state === 'refused' && e.rule === rule).length;
+
+  // Named rather than totalled: which rule stopped a payment is the part worth reading, and two
+  // refusals are not one fact. A clause with nothing in it is left out rather than shown as zero.
+  const outcome = [
+    `${paid.length} paid`,
+    refusedBy('allowlist') && `${refusedBy('allowlist')} off the list`,
+    refusedBy('window') && `${refusedBy('window')} over the cap`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  // Trailing zeros carry no information at this size. Two decimals is the floor, so a round
+  // figure still reads as money.
+  const money = (amount: number): string => {
+    const trimmed = amount.toFixed(3).replace(/0+$/, '');
+    const decimals = trimmed.split('.')[1] ?? '';
+    return decimals.length < 2 ? amount.toFixed(2) : trimmed;
+  };
+
+  const received = money(paid.reduce((total, e) => total + parseFloat(e.amount ?? '0'), 0));
+  const deposited = money(Number(DEPOSIT) / 10 ** 7);
 
   return (
     <main className="wrap">
@@ -29,32 +52,27 @@ export default function Page() {
         <div className="side">
           <div className="stats">
             <div className="cell dark">
-              <div className="k">The agent&rsquo;s key holds</div>
+              <div className="k">The agent</div>
               <div className="v">
                 0.00<small>USDC</small>
               </div>
-              <div className="c">it can ask; it cannot take</div>
+              <div className="c">asked {paid.length + refusedBy('allowlist') + refusedBy('window')} times, holds nothing</div>
             </div>
             <div className="cell">
-              <div className="k">My servers in the payment path</div>
-              <div className="v">0</div>
-              <div className="c">a public facilitator submits, the contract decides</div>
-            </div>
-            <div className="cell addr">
               <div className="k">The allowance</div>
               <div className="v">
-                <a
-                  className="hash"
-                  href={`https://stellar.expert/explorer/testnet/contract/${allowance}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {allowance.slice(0, 6)}…{allowance.slice(-4)}
-                </a>
+                {deposited}
+                <small>USDC</small>
               </div>
-              <div className="c">
-                {settled} payments settled, {refused} refused
+              <div className="c">{outcome}</div>
+            </div>
+            <div className="cell">
+              <div className="k">The seller</div>
+              <div className="v">
+                {received}
+                <small>USDC</small>
               </div>
+              <div className="c">what actually moved</div>
             </div>
           </div>
         </div>
@@ -94,8 +112,8 @@ export default function Page() {
           than the call. The only change is which address pays.
         </p>
         <p className="lede">
-          The figures below are testnet-small on purpose. A cap is a number, and the same contract
-          holds 500 USDC a day as readily as it holds 0.025.
+          The cap below is testnet-small on purpose. A cap is a number, and the same contract
+          holds 500 USDC a day as readily as it holds 0.085.
         </p>
       </section>
 

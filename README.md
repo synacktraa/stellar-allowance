@@ -11,7 +11,7 @@ tokens move.
 ## See it work
 
 [stellar-allowance.vercel.app](https://stellar-allowance.vercel.app) runs a full payment on
-testnet in about a minute and needs no wallet. It funds an owner, deploys an allowance, pays a
+testnet in about two minutes and needs no wallet. It funds an owner, deploys an allowance, pays a
 live x402 API, and shows two payments refused on chain.
 
 ## Give an agent an allowance

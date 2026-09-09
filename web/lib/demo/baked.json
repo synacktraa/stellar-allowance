@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-09T18:41:31.592Z",
+  "at": "2026-09-09T20:35:29.524Z",
   "events": [
     {
       "id": "fund",
@@ -18,19 +18,19 @@
     {
       "id": "swap",
       "party": "owner",
-      "title": "Swap 10 XLM for USDC",
+      "title": "Swap 100 XLM for USDC",
       "sub": "testnet DEX, strict send",
       "state": "done",
-      "amount": "17.0899 USDC"
+      "amount": "170.8835 USDC"
     },
     {
       "id": "deploy",
       "party": "owner",
       "title": "Deploy the allowance",
-      "sub": "allowlist: the seller · cap 0.025 USDC per 24h · the agent's key GD4E…S2P6 holds 0.000",
+      "sub": "allowlist: the seller · cap 0.085 USDC per 24h · the agent's key GAHM…ZDVI holds 0.000",
       "state": "done",
-      "amount": "0.050 USDC in",
-      "hash": "CAUKREBY6F2CAPFSSNAIJWYN2XSOGQ6J5GXZ4BLQ3HIV4NTK7L6FTYNZ"
+      "amount": "5.000 USDC in",
+      "hash": "CBQK7LU7OYRQ2YH277K27M3VAOW2I5SURN6DTZ63J3YJYRXXUTJORQTZ"
     },
     {
       "id": "pay-1",
@@ -39,7 +39,7 @@
       "amount": "0.010 USDC",
       "state": "done",
       "sub": "settled by OpenZeppelin · the payer is the contract",
-      "hash": "bc9edba68669f8df8ebcbe6d77b3506c39202e7702db9b8e8d415714a03f7840"
+      "hash": "22d912db0f17d34c98d15acede785f43b7e5b68f0b95335e4925e7c75f534b95"
     },
     {
       "id": "stranger",
@@ -53,20 +53,74 @@
     {
       "id": "pay-2",
       "party": "agent",
-      "title": "Pay the seller again",
+      "title": "Pay the seller",
       "amount": "0.010 USDC",
       "state": "done",
       "sub": "0.020 now in the window",
-      "hash": "db5b753df58929ab27f4634c8207f86c3c464541be5a4438c4ad20bffdecdfed"
+      "hash": "c0725b5810c0929ac4aeb6bae19809ad15a48aea24d26a48ef4af67767cd547e"
     },
     {
       "id": "pay-3",
       "party": "agent",
-      "title": "Pay the seller a third time",
+      "title": "Pay the seller",
+      "amount": "0.010 USDC",
+      "state": "done",
+      "sub": "0.030 now in the window",
+      "hash": "1377e31169f7362ceb0a75f5049921731449ad13e42067f6c7d4337fbbbade5b"
+    },
+    {
+      "id": "pay-4",
+      "party": "agent",
+      "title": "Pay the seller",
+      "amount": "0.010 USDC",
+      "state": "done",
+      "sub": "0.040 now in the window",
+      "hash": "1cf9e59b47a39233f5a5ab3f6716f4b614492007c752f621763369b1df229db2"
+    },
+    {
+      "id": "pay-5",
+      "party": "agent",
+      "title": "Pay the seller",
+      "amount": "0.010 USDC",
+      "state": "done",
+      "sub": "0.050 now in the window",
+      "hash": "24a0418e16f2280bca54fbd520943cd69a381a3b38a4b2f8e17173b219053189"
+    },
+    {
+      "id": "pay-6",
+      "party": "agent",
+      "title": "Pay the seller",
+      "amount": "0.010 USDC",
+      "state": "done",
+      "sub": "0.060 now in the window",
+      "hash": "dc979e6389d6c70913972820012c271e53a489a2fa7022c19fa568148ae1308c"
+    },
+    {
+      "id": "pay-7",
+      "party": "agent",
+      "title": "Pay the seller",
+      "amount": "0.010 USDC",
+      "state": "done",
+      "sub": "0.070 now in the window",
+      "hash": "cba5281626ee51679b25d7e0ed25dd9a5dadb12da45093e47c365c00fe11c9a9"
+    },
+    {
+      "id": "pay-8",
+      "party": "agent",
+      "title": "Pay the seller",
+      "amount": "0.010 USDC",
+      "state": "done",
+      "sub": "0.080 now in the window",
+      "hash": "38ad5bbe15fda15e56b3c9533a6c52cbd88724d0e01456f55e3c54472874ea39"
+    },
+    {
+      "id": "pay-9",
+      "party": "agent",
+      "title": "Pay the seller",
       "amount": "0.010 USDC",
       "state": "refused",
       "rule": "window",
-      "sub": "0.030 would exceed the 0.025 cap. Refused; nothing left the contract."
+      "sub": "0.090 would exceed the 0.085 cap. Refused; nothing left the contract."
     }
   ]
 }
