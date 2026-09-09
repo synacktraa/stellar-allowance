@@ -17,6 +17,10 @@ approves once. The network: the signed envelope is submitted, the allowance runs
 constructor, and the interface returns the contract id and the agent secret,
 once.](assets/create-flow.svg)
 
+Fetching those URLs happens in `/api/offer`, not on the page. Sellers send no cross-origin
+headers, so a browser cannot read a 402 for itself. That route holds no keys, signs nothing, and
+makes the same unpaid GET anyone can make.
+
 Nobody is asked which index to use. Sixty addresses are derived from the owner, their contract
 instance entries are fetched in one `getLedgerEntries` call, and the first address that answers
 with nothing is where the next allowance goes.
