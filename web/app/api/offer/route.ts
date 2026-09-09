@@ -15,7 +15,7 @@ export async function POST(request: Request): Promise<Response> {
     ({ url } = (await request.json()) as { url: string });
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-      throw new Error('only http and https');
+      throw new Error('that is not an http or https URL');
     }
   } catch {
     return answer({ ok: false, reason: 'that is not a URL' });

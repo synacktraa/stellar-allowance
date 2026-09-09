@@ -1,11 +1,13 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { LEDGERS_PER_HOUR, toBase, usdc } from '@/lib/demo/params';
 import { labelsFor } from '@/lib/dashboard/labels';
+import { remaining } from '@/lib/dashboard/summary';
 import type { Row } from '@/lib/dashboard/read';
 import { createAllowance, saveAllowance, setEnabled, withdrawFrom, type Rules } from '@/lib/dashboard/write';
 import { freighterSigner, type Wallet } from '@/lib/dashboard/wallet';
+import { AGENT_CODE, AgentLines, Copy } from '../code';
 import { Allowlist, type Labels } from './allowlist';
 
 const WINDOWS = [
@@ -32,10 +34,39 @@ function Panel({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const frame = useRef<HTMLElement>(null);
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+
+  // A panel that covers the list has to take the keyboard with it and give it back. Escape is
+  // how a reader leaves a dialog, and a panel that closes without returning focus leaves it on
+  // an element that no longer exists.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    frame.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close.current();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      opener?.focus();
+    };
+  }, []);
+
   return (
     <>
       <div className="scrim" onClick={onClose} role="presentation" />
-      <aside className="panel" aria-label={title}>
+      <aside
+        className="panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        ref={frame}
+      >
         <div className="ph">
           <div>
             <h2>{title}</h2>
@@ -52,33 +83,9 @@ function Panel({
   );
 }
 
-function Copy({ text, what }: { text: string; what: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      className="cta quiet sm"
-      type="button"
-      onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        setDone(true);
-        setTimeout(() => setDone(false), 1500);
-      }}
-    >
-      {done ? 'Copied' : `Copy ${what}`}
-    </button>
-  );
-}
-
-/**
- * What the agent needs, and the reason it is only two values.
- *
- * The four lines never change, which is the point rather than an oversight: the library reads
- * the pair out of the environment, so an agent moved from one allowance to another is a change
- * of configuration and not of code.
- */
+/** What the agent needs, and the reason it is only two values. */
 function AgentSetup({ id, secret }: { id: string; secret?: string }) {
   const env = `STELLAR_ALLOWANCE_ID=${id}\nSTELLAR_ALLOWANCE_SECRET=${secret ?? ''}`;
-  const code = `import { Allowance } from '@stellar-allowance/sdk';\n\nconst { fetch } = new Allowance();\nconst response = await fetch('https://api.example.com/paid');`;
 
   return (
     <>
@@ -110,16 +117,9 @@ function AgentSetup({ id, secret }: { id: string; secret?: string }) {
       <div className="sec">
         <div className="sh">
           <span>Then the agent pays with it</span>
-          <Copy text={code} what="code" />
+          <Copy text={AGENT_CODE} what="code" />
         </div>
-        <pre className="code">
-          <span className="c2">import</span> {'{ Allowance }'} <span className="c2">from</span>{' '}
-          <span className="c3">&apos;@stellar-allowance/sdk&apos;</span>;{'\n\n'}
-          <span className="c2">const</span> {'{ fetch }'} = <span className="c2">new</span> Allowance();
-          {'\n'}
-          <span className="c2">const</span> response = <span className="c2">await</span> fetch(
-          <span className="c3">&apos;https://api.example.com/paid&apos;</span>);
-        </pre>
+        <AgentLines />
         <p className="help">
           The same four lines for every allowance. Only the two values above change.
         </p>
@@ -343,7 +343,7 @@ export function DetailPanel({
         <div>
           <span className="k">Spent in window</span>
           <span className="v num">{usdc(row.spent)}</span>
-          <span className="u">{usdc(row.cap - row.spent)} left</span>
+          <span className="u">{usdc(remaining(row.cap, row.spent))} left</span>
         </div>
       </div>
 
@@ -425,7 +425,7 @@ export function DetailPanel({
         {row.enabled && confirmPause ? (
           <div className="addrow">
             <button
-              className="cta"
+              className="cta danger"
               type="button"
               disabled={locked}
               onClick={() => run('pause', () => setEnabled(row.id, signingWith(wallet), false))}

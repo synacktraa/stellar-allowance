@@ -79,7 +79,6 @@ export function Allowlist({
     <div className="sec">
       <div className="sh">
         <span>APIs the agent may pay</span>
-        <span className="count">{addresses.length}</span>
       </div>
 
       <div className="addrow">
@@ -128,7 +127,7 @@ export function Allowlist({
                   <small>
                     {label
                       ? `${label.path} · ${usdc(label.amount)} USDC per call · pays ${short(address)}`
-                      : 'added from another browser, so only the address is known here'}
+                      : 'allowed, but this browser has no note of which API it is'}
                   </small>
                 </div>
                 <button className="drop" type="button" disabled={busy} onClick={() => drop(address)}>

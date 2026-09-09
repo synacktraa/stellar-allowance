@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { filledYellow } from './palette';
 
 // An owner from a real testnet run. Reads are public, so the board renders without a wallet.
 // These allowances archive seven days after their last payment, so the assertions below are
@@ -59,4 +60,65 @@ test('a row opens a panel carrying the two values and the four lines', async ({ 
   await expect(panel).toContainText('Connect this wallet to change anything');
 
   await page.screenshot({ path: 'e2e/shots/dash-panel.png' });
+});
+
+test('the connect screen wears one filled yellow block', async ({ page }) => {
+  await page.goto('/dashboard');
+  await expect(page.getByRole('button', { name: 'Connect Freighter' })).toBeVisible();
+  expect(await filledYellow(page)).toEqual(['Connect Freighter']);
+});
+
+// A table that appears out of an empty card moves everything under it. Lines of the right
+// height stand in until the two reads land, so nothing jumps when they do.
+test('placeholder lines hold the table while the chain is read', async ({ page }) => {
+  await page.route('**/soroban-testnet.stellar.org/**', async (route) => {
+    await new Promise((settle) => setTimeout(settle, 4000));
+    await route.continue();
+  });
+
+  await page.goto(`/dashboard?owner=${OWNER}`);
+  await expect(page.locator('tbody tr.skeleton')).toHaveCount(5);
+  // Not "0 of 60": nothing is known about the count until the read lands.
+  await expect(page.locator('.board .cap')).toHaveCount(0);
+  await page.screenshot({ path: 'e2e/shots/dash-waiting.png', animations: 'disabled' });
+
+  await expect(page.locator('tbody tr.line').first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('tbody tr.skeleton')).toHaveCount(0);
+});
+
+// Sixty is how far the index probe reaches, not a budget the owner was given. It belongs where
+// it binds - the button that can no longer be pressed - and nowhere else.
+test('the count is what the owner has, not a ceiling', async ({ page }) => {
+  await page.goto(`/dashboard?owner=${OWNER}`);
+  const rows = page.locator('tbody tr.line');
+  await expect(rows.first()).toBeVisible({ timeout: 30_000 });
+
+  // The table is the count, and the foot reports totals once there is more than one page.
+  await expect(page.locator('.board .head')).toHaveText('Allowances');
+});
+
+test('the panel is a dialog, and Escape closes it', async ({ page }) => {
+  await page.goto(`/dashboard?owner=${OWNER}`);
+  const first = page.locator('tbody tr.line').first();
+  await expect(first).toBeVisible({ timeout: 30_000 });
+  await first.click();
+
+  const panel = page.getByRole('dialog');
+  await expect(panel).toBeVisible();
+  await expect(panel).toBeFocused();
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(first).toBeFocused();
+});
+
+test('the two values scroll sideways rather than wrapping', async ({ page }) => {
+  await page.goto(`/dashboard?owner=${OWNER}`);
+  await expect(page.locator('tbody tr.line').first()).toBeVisible({ timeout: 30_000 });
+  await page.locator('tbody tr.line').first().click();
+
+  const style = await page
+    .locator('.code.env')
+    .evaluate((node) => [getComputedStyle(node).whiteSpace, getComputedStyle(node).overflowX]);
+  expect(style).toEqual(['pre', 'auto']);
 });

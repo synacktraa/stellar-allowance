@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { filledYellow } from './palette';
 
 // The four sizes the page has to hold at. Each gets a full-page capture in e2e/shots/.
 const sizes = {
@@ -38,4 +39,33 @@ test('the favicon and the link preview are served', async ({ request }) => {
   const og = await request.get('/opengraph-image');
   expect(og.status()).toBe(200);
   expect(og.headers()['content-type']).toContain('image/png');
+});
+
+test('the lede says who the page is for', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.lede')).toContainText('agent that calls paid APIs');
+});
+
+test('one filled yellow block, and it is the ask', async ({ page }) => {
+  await page.goto('/');
+  expect(await filledYellow(page)).toEqual(['Run it live']);
+});
+
+test('the package is on the page, install line and all', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.install')).toContainText('npm i @stellar-allowance/sdk');
+  await expect(page.locator('pre.code')).toContainText('new Allowance()');
+});
+
+test('code blocks scroll sideways rather than wrapping', async ({ page }) => {
+  await page.goto('/');
+  const style = await page
+    .locator('pre.code')
+    .evaluate((node) => [getComputedStyle(node).whiteSpace, getComputedStyle(node).overflowX]);
+  expect(style).toEqual(['pre', 'auto']);
+});
+
+test('each step announces its own state', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.run .state[aria-live="polite"]')).toHaveCount(8);
 });

@@ -37,6 +37,9 @@ export function summarize(id: string, index: number, storage: Record<string, unk
   };
 }
 
+/** What is left of the cap. A cap lowered under what is already spent leaves nothing. */
+export const remaining = (cap: bigint, spent: bigint) => (cap > spent ? cap - spent : 0n);
+
 export const PAGE_SIZE = 15;
 
 export const pageCount = (total: number) => Math.max(1, Math.ceil(total / PAGE_SIZE));

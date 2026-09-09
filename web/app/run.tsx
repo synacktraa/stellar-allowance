@@ -81,7 +81,7 @@ export function Run({ baked, at }: { baked: DemoEvent[]; at: string }) {
                 )}
               </div>
               <span className="amt num">{event?.amount ?? ''}</span>
-              <span className="state">
+              <span className="state" aria-live="polite">
                 {state === 'done' && <span className="ok">{VERB[step.id] ?? 'settled'}</span>}
                 {state === 'refused' && <span className="chip refused">refused · {event?.rule}</span>}
                 {state === 'failed' && <span className="chip failed">failed</span>}

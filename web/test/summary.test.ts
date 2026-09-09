@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarize, page, PAGE_SIZE } from '../lib/dashboard/summary';
+import { summarize, page, remaining, PAGE_SIZE } from '../lib/dashboard/summary';
 
 const ID = 'CD5DYH7TXU6PXD7EOLKRNOX2J3SQT3H5BKJG7QGUBW3LXWEX7IEPKXGZ';
 const OWNER = 'GBFL6ZCLIKZDWO2QNWJX4MPE3GHFRHVN6LXZG2DELS2JQQM4NYD4IXFO';
@@ -48,4 +48,10 @@ test('pages are fifteen rows, and the last one is short', () => {
 
 test('a page beyond the end is empty rather than an error', () => {
   assert.deepEqual(page([1, 2, 3], 9), []);
+});
+
+test('a cap lowered under what is already spent leaves nothing, not less than nothing', () => {
+  assert.equal(remaining(400_000n, 250_000n), 150_000n);
+  assert.equal(remaining(250_000n, 250_000n), 0n);
+  assert.equal(remaining(100_000n, 250_000n), 0n);
 });

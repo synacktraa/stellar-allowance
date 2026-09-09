@@ -1,14 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { rpc } from '@stellar/stellar-sdk';
 import { MAX_ALLOWANCES, usdc } from '@/lib/demo/params';
 import { labelsFor } from '@/lib/dashboard/labels';
 import { readAllowances, RPC_URL, type Listing, type Row } from '@/lib/dashboard/read';
-import { connect, readWallet, type Wallet } from '@/lib/dashboard/wallet';
+import { connect, readWallet, resume, type Wallet } from '@/lib/dashboard/wallet';
 import { PAGE_SIZE, page, pageCount } from '@/lib/dashboard/summary';
 import { Footer, Header } from '../chrome';
 import { CreatePanel, DetailPanel } from './panels';
+
+/** Placeholder lines held while the two reads are in flight. */
+const WAITING = 5;
 
 const short = (address: string) => `${address.slice(0, 4)}…${address.slice(-4)}`;
 const say = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -23,14 +26,20 @@ export default function Dashboard() {
   const [open, setOpen] = useState<Open>(null);
   const [at, setAt] = useState(1);
   const [signedIn, setSignedIn] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   // Occupancy is the one thing a stale answer gets wrong in a way the owner pays for, so every
   // load asks the chain rather than trusting anything this browser remembers.
+  //
+  // The wallet is one Horizon call and the listing is sixty ledger entries, so each is shown as
+  // it lands: the board arrives with the wallet and placeholder lines, and the lines fill in.
   const refresh = useCallback(async (address: string) => {
     const server = new rpc.Server(RPC_URL);
-    const [next, purse] = await Promise.all([readAllowances(server, address), readWallet(address)]);
-    setListing(next);
-    setWallet(purse);
+    setListing(null);
+    await Promise.all([
+      readWallet(address).then(setWallet),
+      readAllowances(server, address).then(setListing),
+    ]);
   }, []);
 
   async function onConnect() {
@@ -50,11 +59,23 @@ export default function Dashboard() {
   // An allowance is public: its rules and its spending are readable by anyone, which is what
   // makes the claim that one named wallet controls this money checkable rather than asserted.
   // So an owner address in the URL opens the same board without a wallet, and without the
-  // buttons that would need one.
+  // buttons that would need one. Otherwise the approval this browser already holds is what
+  // decides, because Freighter will not prompt twice for it.
   useEffect(() => {
     const asked = new URLSearchParams(window.location.search).get('owner');
-    if (!asked || !/^G[A-Z2-7]{55}$/.test(asked)) return;
-    void refresh(asked).catch((error) => setProblem(say(error)));
+    if (asked && /^G[A-Z2-7]{55}$/.test(asked)) {
+      setChecking(false);
+      void refresh(asked).catch((error) => setProblem(say(error)));
+      return;
+    }
+    void resume()
+      .then(async (address) => {
+        if (!address) return;
+        setSignedIn(true);
+        await refresh(address);
+      })
+      .catch((error) => setProblem(say(error)))
+      .finally(() => setChecking(false));
   }, [refresh]);
 
   useEffect(() => {
@@ -77,8 +98,13 @@ export default function Dashboard() {
             a rule or take money back out.
           </p>
           <div className="act">
-            <button className="cta" type="button" disabled={busy} onClick={() => void onConnect()}>
-              {busy ? 'Asking Freighter' : 'Connect Freighter'}
+            <button
+              className="cta"
+              type="button"
+              disabled={busy || checking}
+              onClick={() => void onConnect()}
+            >
+              {checking ? 'Checking Freighter' : busy ? 'Asking Freighter' : 'Connect Freighter'}
             </button>
             <span className="note-inline">testnet · nothing is signed by connecting</span>
           </div>
@@ -119,7 +145,7 @@ export default function Dashboard() {
             className="cta"
             type="button"
             disabled={readOnly || noTrustline || full}
-            title={full ? `An owner can hold ${MAX_ALLOWANCES}` : undefined}
+            title={full ? `This wallet already holds all ${MAX_ALLOWANCES} it can` : undefined}
             onClick={() => setOpen({ kind: 'create' })}
           >
             New allowance
@@ -145,21 +171,16 @@ export default function Dashboard() {
 
         <div className="head">
           <h1>Allowances</h1>
-          <span className="cap num">
-            {rows.length} of {MAX_ALLOWANCES}
-          </span>
         </div>
 
-        {!listing ? (
-          <div className="card empty">Reading the chain…</div>
-        ) : rows.length === 0 ? (
+        {listing && rows.length === 0 ? (
           <div className="card empty">
             <p>
               Nothing here yet. An allowance is a contract that holds your USDC and pays only the
               APIs you allow, only up to a cap you set.
             </p>
             <button
-              className="cta"
+              className="cta quiet"
               type="button"
               disabled={readOnly || noTrustline}
               onClick={() => setOpen({ kind: 'create' })}
@@ -181,12 +202,19 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {showing.map((row) => (
-                  <Line key={row.id} row={row} onOpen={() => setOpen({ kind: 'row', id: row.id })} />
-                ))}
+                {listing
+                  ? showing.map((row, nth) => (
+                      <Line
+                        key={row.id}
+                        row={row}
+                        nth={nth}
+                        onOpen={() => setOpen({ kind: 'row', id: row.id })}
+                      />
+                    ))
+                  : Array.from({ length: WAITING }, (_, nth) => <Waiting key={nth} />)}
               </tbody>
             </table>
-            {pages > 1 && (
+            {listing && pages > 1 && (
               <div className="foot">
                 <span>
                   Showing {(at - 1) * PAGE_SIZE + 1} to {(at - 1) * PAGE_SIZE + showing.length} of {rows.length}
@@ -236,11 +264,35 @@ export default function Dashboard() {
   );
 }
 
-function Line({ row, onOpen }: { row: Row; onOpen: () => void }) {
+/**
+ * A line the table holds while the chain is read.
+ *
+ * The header and the row height are already right, so nothing under the table moves when the
+ * real lines replace these. It carries no text, so a screen reader is told nothing yet.
+ */
+function Waiting() {
+  return (
+    <tr className="skeleton" aria-hidden="true">
+      {Array.from({ length: 6 }, (_, cell) => (
+        <td key={cell}>
+          <span />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+function Line({ row, nth, onOpen }: { row: Row; nth: number; onOpen: () => void }) {
   const labels = labelsFor(row.allowlist);
   const named = row.allowlist.map((address) => labels[address]?.host ?? short(address));
   return (
-    <tr className="line" onClick={onOpen} tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && onOpen()}>
+    <tr
+      className="line"
+      style={{ '--i': nth } as CSSProperties}
+      onClick={onOpen}
+      tabIndex={0}
+      onKeyDown={(event) => event.key === 'Enter' && onOpen()}
+    >
       <td>
         <span className="name">{row.name || short(row.id)}</span>
         <span className="sub num">{short(row.id)}</span>

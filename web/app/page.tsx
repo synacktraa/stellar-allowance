@@ -1,6 +1,7 @@
 import type { DemoEvent } from '@/lib/demo/events';
 import baked from '@/lib/demo/baked.json';
 import { Footer, Header } from './chrome';
+import { AgentLines, Install } from './code';
 import { Run } from './run';
 
 const run = baked as { at: string; events: DemoEvent[] };
@@ -18,10 +19,10 @@ export default function Page() {
         <div>
           <h1>Give the agent an allowance. Keep the wallet.</h1>
           <p className="lede">
-            You want an agent that pays for things without holding your wallet. So the money sits in a
-            contract on Stellar, and the agent holds a key that can <b>ask</b> to pay. The contract decides:
-            only addresses you allowed, only up to a cap per rolling window. Anything else is refused on chain,
-            before it moves.
+            You are building an agent that calls paid APIs, and you want it paying without holding
+            your wallet. So the money sits in a contract on Stellar, and the agent holds a key that
+            can <b>ask</b> to pay. The contract decides: only addresses you allowed, only up to a cap
+            per rolling window. Anything else is refused on chain, before it moves.
           </p>
         </div>
 
@@ -63,8 +64,22 @@ export default function Page() {
 
       <Run baked={run.events} at={run.at} />
 
+      <section className="ship">
+        <p className="kicker">
+          <span>Then, in the agent</span>
+          <span className="num">two values, four lines</span>
+        </p>
+        <Install />
+        <AgentLines />
+        <p className="help">
+          The two values are the allowance&rsquo;s address and the agent&rsquo;s key, and creating one
+          hands you both. There is no account to open and no service to point at: the library reads
+          the pair out of the environment and pays through the contract.
+        </p>
+      </section>
+
       <div className="act">
-        <a className="cta" href="/dashboard">
+        <a className="cta quiet" href="/dashboard">
           Open the dashboard
         </a>
         <span className="note-inline">Freighter on testnet · you set the rules</span>
