@@ -2,38 +2,29 @@ import type { DemoEvent } from '@/lib/demo/events';
 import baked from '@/lib/demo/baked.json';
 import { Footer, Header } from './chrome';
 import { AgentLines, Install } from './code';
-import { DEPOSIT } from '@/lib/demo/params';
 import { Run } from './run';
 
 const run = baked as { at: string; events: DemoEvent[] };
 
+/**
+ * The hero's figures, which are an illustration rather than a reading.
+ *
+ * The run further down is deliberately small: it happens in a stranger's browser while they
+ * wait, so it finishes in a minute, and a minute's worth of payments is too few to show what a
+ * cap is for. These are the same shape at a size worth caring about — the agent holds nothing
+ * however often it asks, the allowance holds both the money and the rules, and only what the
+ * rules allow reaches a seller. They are not the run's numbers and nothing here says they are;
+ * the run states its own, with a hash on every row.
+ */
+const HERO = {
+  asked: 10,
+  outcome: '8 paid · 1 off the list · 1 over the cap',
+  agent: '0.00',
+  allowance: '5.00',
+  seller: '0.08',
+};
+
 export default function Page() {
-  const allowance = run.events.find((e) => e.id === 'deploy')?.hash ?? '';
-  const paid = run.events.filter((e) => e.state === 'done' && e.id.startsWith('pay'));
-  const refusedBy = (rule: string) =>
-    run.events.filter((e) => e.state === 'refused' && e.rule === rule).length;
-
-  // Named rather than totalled: which rule stopped a payment is the part worth reading, and two
-  // refusals are not one fact. A clause with nothing in it is left out rather than shown as zero.
-  const outcome = [
-    `${paid.length} paid`,
-    refusedBy('allowlist') && `${refusedBy('allowlist')} off the list`,
-    refusedBy('window') && `${refusedBy('window')} over the cap`,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-
-  // Trailing zeros carry no information at this size. Two decimals is the floor, so a round
-  // figure still reads as money.
-  const money = (amount: number): string => {
-    const trimmed = amount.toFixed(3).replace(/0+$/, '');
-    const decimals = trimmed.split('.')[1] ?? '';
-    return decimals.length < 2 ? amount.toFixed(2) : trimmed;
-  };
-
-  const received = money(paid.reduce((total, e) => total + parseFloat(e.amount ?? '0'), 0));
-  const deposited = money(Number(DEPOSIT) / 10 ** 7);
-
   return (
     <main className="wrap">
       <Header />
@@ -54,25 +45,26 @@ export default function Page() {
             <div className="cell dark">
               <div className="k">The agent</div>
               <div className="v">
-                0.00<small>USDC</small>
+                {HERO.agent}
+                <small>USDC</small>
               </div>
-              <div className="c">asked {paid.length + refusedBy('allowlist') + refusedBy('window')} times, holds nothing</div>
+              <div className="c">asked {HERO.asked} times, holds nothing</div>
             </div>
             <div className="cell allowance">
               <div className="k">The allowance</div>
               <div className="v">
-                {deposited}
+                {HERO.allowance}
                 <small>USDC</small>
               </div>
-              <div className="c">{outcome}</div>
+              <div className="c">{HERO.outcome}</div>
             </div>
             <div className="cell">
               <div className="k">The seller</div>
               <div className="v">
-                {received}
+                {HERO.seller}
                 <small>USDC</small>
               </div>
-              <div className="c">what actually moved</div>
+              <div className="c">all the rules allow</div>
             </div>
           </div>
         </div>

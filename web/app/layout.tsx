@@ -9,7 +9,9 @@ const mono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['400', '500'], variabl
 
 export const metadata: Metadata = {
   title: 'Stellar Allowance',
-  description: 'Give the agent an allowance. Keep the wallet.',
+  // Not the headline. The card renders that in type a reader cannot miss, and a description
+  // that repeats it spends the only line under the image saying nothing new.
+  description: 'On-chain spending limits for AI agents that pay for API calls.',
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
 };
 
