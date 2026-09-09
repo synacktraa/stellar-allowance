@@ -112,19 +112,10 @@ header {
   gap: 22px;
 }
 
-.nav a {
-  font: 500 13px/1 var(--mono);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink);
-  text-decoration: none;
-  box-shadow: inset 0 -2px 0 var(--yellow);
-}
-
 .nav a.gh {
-  box-shadow: none;
   display: block;
   line-height: 0;
+  color: var(--ink);
 }
 
 .nav a:focus-visible {
@@ -171,30 +162,39 @@ h1 {
 
 /* --- the call to action ------------------------------------------------ */
 
+/* A button is as wide as its label. What it costs the reader goes beside it, not inside it. */
+.act {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 26px;
+}
+
 .cta {
   display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px 14px;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  white-space: nowrap;
   background: var(--yellow);
   color: var(--ink);
   border: 0;
-  padding: 15px 20px;
-  font: 600 15px/1 var(--sans);
+  padding: 11px 15px;
+  font: 600 14px/1 var(--sans);
+  text-decoration: none;
   cursor: pointer;
   transition: transform 0.12s ease, background 0.12s ease;
 }
 
-.cta small {
-  font: 400 12px/1 var(--mono);
-  color: var(--ink-70);
+.cta.quiet {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 
-.cta::after {
-  content: '→';
-  font-family: var(--serif);
-  font-size: 18px;
-  margin-left: 4px;
+.note-inline {
+  font: 400 12.5px/1.5 var(--mono);
+  color: var(--ink-70);
 }
 
 .cta:hover {

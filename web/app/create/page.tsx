@@ -215,23 +215,23 @@ export default function Create() {
               <p className="hint">
                 Only these addresses can be paid. Anything else is refused before it leaves the contract.
               </p>
-              <p className="hint">
+              <div className="act hint">
                 <button className="cta" type="submit" disabled={busy}>
                   {busy ? 'Waiting for Freighter' : 'Deploy'}
-                  <small>Freighter asks once · the deposit moves, nothing else</small>
                 </button>
-              </p>
+                <span className="note-inline">Freighter asks once · the deposit moves, nothing else</span>
+              </div>
             </form>
           )}
         </div>
 
         {!connected && (
-          <p style={{ marginTop: 24 }}>
+          <div className="act">
             <button className="cta" onClick={onConnect} disabled={busy}>
               {busy ? 'Asking Freighter' : 'Connect Freighter'}
-              <small>testnet · nothing is signed yet</small>
             </button>
-          </p>
+            <span className="note-inline">testnet · nothing is signed yet</span>
+          </div>
         )}
 
         {pair && (

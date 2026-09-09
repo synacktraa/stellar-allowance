@@ -7,7 +7,11 @@ export function Header({ create = true }: { create?: boolean }) {
         STELLAR<span>//</span>ALLOWANCE
       </a>
       <nav className="nav">
-        {create && <a href="/create">Create one</a>}
+        {create && (
+          <a className="cta quiet" href="/create">
+            Create an allowance
+          </a>
+        )}
         <a className="gh" href="https://github.com/synacktraa/stellar-allowance" aria-label="GitHub">
           <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true">
             <path

@@ -63,12 +63,12 @@ export default function Page() {
 
       <Run baked={run.events} at={run.at} />
 
-      <p style={{ marginTop: 28 }}>
+      <div className="act">
         <a className="cta" href="/create">
-          Create one for your agent
-          <small>Freighter on testnet · you set the rules · the agent gets a key</small>
+          Create an allowance
         </a>
-      </p>
+        <span className="note-inline">Freighter on testnet · you set the rules</span>
+      </div>
 
       <Footer />
     </main>

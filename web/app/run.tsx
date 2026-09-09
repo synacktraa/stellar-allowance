@@ -93,16 +93,16 @@ export function Run({ baked, at }: { baked: DemoEvent[]; at: string }) {
         })}
       </div>
 
-      <p style={{ marginTop: 24 }}>
+      <div className="act">
         <button className="cta" onClick={start} disabled={live === 'running'}>
           {live === 'running' ? 'Running on testnet' : 'Run it live'}
-          <small>
-            {live === 'busy'
-              ? 'another run is in progress, try again in a minute'
-              : 'testnet · about a minute · no wallet'}
-          </small>
         </button>
-      </p>
+        <span className="note-inline">
+          {live === 'busy'
+            ? 'another run is in progress, try again in a minute'
+            : 'testnet · about a minute · no wallet'}
+        </span>
+      </div>
     </section>
   );
 }
