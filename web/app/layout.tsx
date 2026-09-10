@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { IBM_Plex_Mono, Inter, Lora } from 'next/font/google';
+import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
 const lora = Lora({ subsets: ['latin'], weight: ['400', '600'], variable: '--font-serif' });
@@ -18,7 +19,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${lora.variable} ${inter.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Page views only, and cookieless. The payment path is still ours-free: this runs on the
+            page, not between the button and the chain. */}
+        <Analytics />
+      </body>
     </html>
   );
 }
